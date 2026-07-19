@@ -52,8 +52,9 @@ deterministic gap feedback ("day 3 is 400 kcal short; these library items close 
 grocery list + per-day food pack plan.
 **Milestone 2 (pre-trip if time allows):** gear checklist seeded from Lawrence's Montana
 hunt gear sheet (link pending), adjusted for Alaska weather; combined readiness checklist.
-**Non-goals:** accounts/backend, LLM-driven suggestions, multi-hunter parties, offline
-service worker, weather/mapping integrations.
+**Non-goals:** accounts/backend, LLM calls (far-future nice-to-have — v1+v2 intelligence
+is deterministic: Favorites, Staple detection, gap-closing suggestions), multi-hunter
+parties, offline service worker, weather/mapping integrations.
 **Open bets:** anyone beyond Lawrence wants this (demo publish tests it); deterministic
 gap-closing is "intelligent enough"; localStorage survives real-trip usage patterns.
 
