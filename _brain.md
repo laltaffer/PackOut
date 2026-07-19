@@ -39,8 +39,27 @@ or mapping integrations, multi-hunter parties.
 - Food logic is a port of the Valley to Peak (v2pnutrition.com) calculator sheet,
   kept as a pure data + calc module so the UI stays dumb.
 
+## Product Brief (DEFINE, 2026-07-19)
+**Problem:** Planning backcountry hunt food in a spreadsheet means re-entering the same
+foods every day and every trip, squinting at totals to see if a day is under-fueled, and
+no memory of what you actually like eating on the trail.
+**Named user:** Lawrence — solo backcountry hunter; next trip Alaska 2026-08-01. The
+consequence of failure is concrete: under-fueled or over-packed on a physically serious hunt.
+**Wedge (Milestone 1 — food planner, usable by ~2026-07-25):** trip setup (days, body
+weight, per-day intensity) → V2P daily kcal/macro targets → assemble each day from a
+persistent personal food library (macros + weight, entered once, remembered forever) →
+deterministic gap feedback ("day 3 is 400 kcal short; these library items close it") →
+grocery list + per-day food pack plan.
+**Milestone 2 (pre-trip if time allows):** gear checklist seeded from Lawrence's Montana
+hunt gear sheet (link pending), adjusted for Alaska weather; combined readiness checklist.
+**Non-goals:** accounts/backend, LLM-driven suggestions, multi-hunter parties, offline
+service worker, weather/mapping integrations.
+**Open bets:** anyone beyond Lawrence wants this (demo publish tests it); deterministic
+gap-closing is "intelligent enough"; localStorage survives real-trip usage patterns.
+
 ## Status
-Created 2026-07-19. Scaffolded; sheet export captured in reference/. No app code yet.
+Created 2026-07-19. Scaffolded; sheet export captured in reference/. DEFINE complete —
+wedge = food planner first. No app code yet.
 
 ## Open
 - Port nutrition math + sheet food items into a JSON food library and calc module.
