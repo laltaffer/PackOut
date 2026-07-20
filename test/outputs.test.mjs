@@ -44,7 +44,7 @@ test('day pack list merges duplicate foods within the day and keeps quantities',
 test('readiness rolls up verdicts and packed state with named blockers', () => {
   const d0 = dayWith({ dinner: [{ foodId: 'meal', qty: 5 }, { foodId: 'bar', qty: 2 }] }) // 4800 kcal, 224P → fueled/heavy zone
   const d1 = dayWith({ snacks: [[{ foodId: 'bar', qty: 1 }]] }) // short
-  d0.packed = { meal: true, bar: false }
+  d0.packed = { meal: 5, bar: 1 } // bar was packed at qty 1, plan now wants 2 → stale
   const trip = { weightLbs: 200, days: [d0, d1] }
   const r = readiness(trip, LIB)
   assert.equal(r.ready, false)
@@ -59,9 +59,19 @@ test('readiness rolls up verdicts and packed state with named blockers', () => {
 
 test('a trip with every day fueled and everything packed is ready', () => {
   const d = dayWith({ dinner: [{ foodId: 'meal', qty: 4 }, { foodId: 'bar', qty: 1 }] }) // 3600 kcal ≥ 90%×3700, 172P
-  d.packed = { meal: true, bar: true }
+  d.packed = { meal: 4, bar: 1 }
   const trip = { weightLbs: 200, days: [d] }
   const r = readiness(trip, LIB)
   assert.equal(r.ready, true)
   assert.equal(r.packedItems, r.totalItems)
+})
+
+test('bumping a quantity after packing invalidates the checkmark (no false READY)', () => {
+  const d = dayWith({ dinner: [{ foodId: 'meal', qty: 4 }, { foodId: 'bar', qty: 1 }] })
+  d.packed = { meal: 4, bar: 1 }
+  assert.equal(readiness({ weightLbs: 200, days: [d] }, LIB).ready, true)
+  d.meals.dinner[1].qty = 2 // packed one more bar in the plan, not in the bag
+  const r = readiness({ weightLbs: 200, days: [d] }, LIB)
+  assert.equal(r.ready, false)
+  assert.deepEqual(r.unpacked, [{ day: 0, foodId: 'bar', name: 'Bar', qty: 2 }])
 })

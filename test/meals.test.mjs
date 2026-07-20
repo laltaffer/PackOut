@@ -28,11 +28,16 @@ test('sumEntries totals macros with quantities; null macros count as zero', () =
   assert.equal(t.proteinG, 41 + 24)
 })
 
-test('weight sums only known weights and reports missing count; cals/oz uses known weight', () => {
-  const t = sumEntries([{ foodId: 'strog', qty: 1 }, { foodId: 'probar', qty: 1 }], LIB)
+test('weight sums only known weights; missing weights are counted per unit and make cals/oz honest (null)', () => {
+  const t = sumEntries([{ foodId: 'strog', qty: 2 }, { foodId: 'probar', qty: 1 }], LIB)
   assert.equal(t.weightOz, 3.0)
-  assert.equal(t.missingWeightCount, 1)
-  assert.equal(t.calsPerOz, Math.round((810 + 390) / 3.0))
+  assert.equal(t.missingWeightCount, 2) // per unit, not per line
+  assert.equal(t.calsPerOz, null) // overstating pack efficiency is worse than admitting ignorance
+})
+
+test('cals/oz is computed when every item has a weight', () => {
+  const t = sumEntries([{ foodId: 'probar', qty: 2 }, { foodId: 'gel', qty: 1 }], LIB)
+  assert.equal(t.calsPerOz, Math.round((780 + 100) / 7.1))
 })
 
 test('entries pointing at deleted foods are ignored, not fatal', () => {

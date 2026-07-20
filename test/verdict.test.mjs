@@ -47,6 +47,22 @@ test('day heavy above 115% kcal with protein met', () => {
   assert.ok(v.kcalOver > 0)
 })
 
+test('verdict thresholds compare raw values — a sub-kcal deficit is still Short, reported as 1', () => {
+  // 164 lb medium → target 3034, 90% floor = 2730.6. Plan 2730 kcal.
+  const lib = [{ id: 'x', name: 'X', kcal: 2730, carbsG: 0, fatG: 0, proteinG: 120, weightOz: 1, favorite: false }]
+  const v = dayVerdict(dayWith([{ foodId: 'x', qty: 1 }]), 164, lib)
+  assert.equal(v.status, 'short')
+  assert.equal(v.kcalShort, 1) // ceil of 0.6, never rounded down to zero
+})
+
+test('protein floor comparison keeps its decimals — 121 g misses a 121.2 g floor', () => {
+  // 202 lb → raw floor 121.2 g
+  const lib = [{ id: 'x', name: 'X', kcal: 4000, carbsG: 0, fatG: 0, proteinG: 121, weightOz: 1, favorite: false }]
+  const v = dayVerdict(dayWith([{ foodId: 'x', qty: 1 }]), 202, lib)
+  assert.equal(v.status, 'short')
+  assert.equal(v.proteinShortG, 1)
+})
+
 test('trip verdict counts short days; heavy is not short', () => {
   const trip = {
     weightLbs: WEIGHT,

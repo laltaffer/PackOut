@@ -16,6 +16,28 @@ function ensureLibrary(state) {
   return state
 }
 
+// Packed marks are quantity-stamped numbers; drop anything else (e.g. booleans
+// written by earlier builds) so stale marks read as unpacked, never as packed.
+function sanitizePacked(state) {
+  for (const trip of state.trips) {
+    for (const day of trip.days ?? []) {
+      if (!day.packed) continue
+      for (const [k, v] of Object.entries(day.packed)) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) delete day.packed[k]
+      }
+    }
+  }
+  return state
+}
+
+let corrupt = null
+
+// Non-null after load() had to fall back because stored state was unreadable:
+// { key, raw } of the preserved copy, for a UI recovery banner.
+export function corruptInfo() {
+  return corrupt
+}
+
 export function load() {
   let raw
   try {
@@ -27,16 +49,26 @@ export function load() {
   try {
     const state = JSON.parse(raw)
     if (!state || state.schemaVersion !== 1 || !Array.isArray(state.trips)) throw new Error('bad shape')
-    return ensureLibrary(state)
+    return sanitizePacked(ensureLibrary(state))
   } catch {
-    // Never crash the shell on corrupt state; keep the corpse for manual rescue.
-    try { localStorage.setItem(KEY + '/corrupt', raw) } catch { /* full or blocked */ }
+    // Never crash the shell on corrupt state; keep a timestamped copy and
+    // expose it via corruptInfo() so the UI can offer recovery.
+    const key = `${KEY}/corrupt-${Date.now()}`
+    try { localStorage.setItem(key, raw) } catch { /* full or blocked */ }
+    corrupt = { key, raw }
     return ensureLibrary(structuredClone(DEFAULT_STATE))
   }
 }
 
+// Returns true when the state actually reached disk. Quota/security failures
+// return false so callers can warn instead of silently losing edits.
 export function save(state) {
-  localStorage.setItem(KEY, JSON.stringify(state))
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state))
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function newId() {

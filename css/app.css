@@ -442,6 +442,13 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .unpacked { list-style: none; padding: 0.3rem 0 0; font-size: 0.72rem; display: grid; gap: 0.25rem; }
 
+.corrupt-banner {
+  border: 2px solid var(--v-short); border-left-width: 8px;
+  padding: 0.7rem 0.9rem; margin-bottom: 1rem;
+}
+
+.corrupt-banner .btn-quiet { padding: 0; color: var(--v-short); }
+
 /* ---------- backup ---------- */
 
 .backup { border-top: 3px solid var(--ink); margin-top: 1.5rem; padding-top: 0.8rem; }

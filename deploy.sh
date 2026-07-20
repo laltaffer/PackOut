@@ -12,4 +12,4 @@ mkdir -p "$DEPLOY_DIR"
 cp index.html "$DEPLOY_DIR/"
 cp -R css js "$DEPLOY_DIR/"
 
-npx --yes wrangler pages deploy "$DEPLOY_DIR" --project-name=packout --commit-dirty=true
+npx --yes wrangler@4.112.0 pages deploy "$DEPLOY_DIR" --project-name=packout --commit-dirty=true

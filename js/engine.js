@@ -58,11 +58,12 @@ export function sumEntries(entries, library) {
     t.carbsG += (f.carbsG ?? 0) * qty
     t.fatG += (f.fatG ?? 0) * qty
     t.proteinG += (f.proteinG ?? 0) * qty
-    if (f.weightOz === null) t.missingWeightCount += 1
+    if (f.weightOz === null) t.missingWeightCount += qty
     else t.weightOz += f.weightOz * qty
   }
   t.weightOz = Math.round(t.weightOz * 100) / 100
-  t.calsPerOz = t.weightOz > 0 ? Math.round(t.kcal / t.weightOz) : null
+  // Any unweighed unit would overstate pack efficiency — admit ignorance instead.
+  t.calsPerOz = t.weightOz > 0 && t.missingWeightCount === 0 ? Math.round(t.kcal / t.weightOz) : null
   return t
 }
 
@@ -78,11 +79,16 @@ const HEAVY_KCAL_PCT = 1.15
 export function dayVerdict(day, weightLbs, library) {
   const targets = dailyTargets(weightLbs, day.intensity)
   const totals = dayTotals(day, library)
-  const kcalFloor = FUELED_KCAL_PCT * targets.kcal.target
-  const kcalCeil = HEAVY_KCAL_PCT * targets.kcal.target
-  const kcalShort = Math.max(0, Math.round(kcalFloor - totals.kcal))
-  const proteinShortG = Math.max(0, Math.round(targets.proteinG.floor - totals.proteinG))
-  const kcalOver = Math.max(0, Math.round(totals.kcal - kcalCeil))
+  // Status compares RAW values (a 0.4 kcal deficit is still a deficit); only
+  // the reported gap is rounded, and always up — a real shortfall never
+  // displays as zero.
+  const EPS = 1e-9
+  const rawKcalShort = FUELED_KCAL_PCT * targets.kcal.target - totals.kcal
+  const rawProteinShort = weightLbs * PROTEIN_FLOOR_G_PER_LB - totals.proteinG
+  const rawKcalOver = totals.kcal - HEAVY_KCAL_PCT * targets.kcal.target
+  const kcalShort = rawKcalShort > EPS ? Math.ceil(rawKcalShort) : 0
+  const proteinShortG = rawProteinShort > EPS ? Math.ceil(rawProteinShort) : 0
+  const kcalOver = rawKcalOver > EPS ? Math.ceil(rawKcalOver) : 0
   const status = (kcalShort > 0 || proteinShortG > 0) ? 'short' : (kcalOver > 0 ? 'heavy' : 'fueled')
   return { status, kcalShort, proteinShortG, kcalOver, totals, targets }
 }
@@ -164,7 +170,9 @@ export function readiness(trip, library) {
   trip.days.forEach((day, i) => {
     for (const item of dayPackList(day, library)) {
       totalItems += 1
-      if (day.packed?.[item.foodId]) packedItems += 1
+      // Packed marks are quantity-stamped: a mark made at qty 1 goes stale
+      // when the plan grows to qty 2 — no false READY.
+      if (day.packed?.[item.foodId] === item.qty) packedItems += 1
       else unpacked.push({ day: i, ...item })
     }
   })
@@ -179,21 +187,61 @@ export function readiness(trip, library) {
   }
 }
 
-// Backup import validation. Returns {ok:true} or {ok:false, error} — never throws.
+// Backup import validation. Returns {ok:true} or {ok:false, error} — never
+// throws. Deep on purpose: an accepted import replaces the whole state, so
+// anything that could crash a render or reach the DOM as a non-number is
+// rejected here, and the state is never assigned.
+const INTENSITIES = ['easy', 'medium', 'hard']
+const MEAL_KEYS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']
+
+function num(v) { return typeof v === 'number' && Number.isFinite(v) }
+function numOrNull(v) { return v === null || num(v) }
+
+function validEntries(entries) {
+  return Array.isArray(entries) && entries.every(e =>
+    e && typeof e.foodId === 'string' && num(e.qty) && e.qty >= 1)
+}
+
+function validDay(day) {
+  if (!day || !INTENSITIES.includes(day.intensity)) return false
+  if (day.meals !== undefined) {
+    const m = day.meals
+    if (!m || typeof m !== 'object') return false
+    if (!MEAL_KEYS.every(k => k in m)) return false
+    if (!['electrolytes', 'breakfast', 'lunch', 'dinner'].every(k => validEntries(m[k]))) return false
+    if (!Array.isArray(m.snacks) || !m.snacks.every(s => s && validEntries(s.items))) return false
+  }
+  if (day.packed !== undefined) {
+    if (!day.packed || typeof day.packed !== 'object') return false
+    if (!Object.values(day.packed).every(num)) return false
+  }
+  return true
+}
+
 export function validateImport(data) {
   if (!data || typeof data !== 'object') return { ok: false, error: 'Not a PackOut backup file.' }
   if (data.schemaVersion !== 1) return { ok: false, error: `Unsupported schema version: ${data.schemaVersion}.` }
   if (!Array.isArray(data.trips) || !Array.isArray(data.library)) {
     return { ok: false, error: 'Backup is missing trips or library.' }
   }
+  const tripIds = new Set()
   for (const t of data.trips) {
-    if (!t?.id || !t?.name || !Array.isArray(t.days) || typeof t.weightLbs !== 'number' || !t.startDate) {
-      return { ok: false, error: `Trip "${t?.name ?? '?'}" is malformed.` }
+    if (!t?.id || typeof t.id !== 'string' || tripIds.has(t.id)) return { ok: false, error: 'Trip ids must be unique strings.' }
+    tripIds.add(t.id)
+    if (!t.name || !Array.isArray(t.days) || t.days.length === 0 || !num(t.weightLbs) || t.weightLbs <= 0 || !t.startDate) {
+      return { ok: false, error: `Trip "${t.name ?? '?'}" is malformed.` }
+    }
+    for (const [i, day] of t.days.entries()) {
+      if (!validDay(day)) return { ok: false, error: `Trip "${t.name}", day ${i + 1} is malformed.` }
     }
   }
+  const foodIds = new Set()
   for (const f of data.library) {
-    if (!f?.id || !f?.name?.trim?.() || typeof f.kcal !== 'number') {
-      return { ok: false, error: `Food "${f?.name ?? '?'}" is malformed.` }
+    if (!f?.id || typeof f.id !== 'string' || foodIds.has(f.id)) return { ok: false, error: 'Food ids must be unique strings.' }
+    foodIds.add(f.id)
+    if (!f.name?.trim?.() || !num(f.kcal) || f.kcal <= 0) return { ok: false, error: `Food "${f.name ?? '?'}" is malformed.` }
+    if (![f.carbsG, f.fatG, f.proteinG, f.weightOz].every(numOrNull)) {
+      return { ok: false, error: `Food "${f.name}" has non-numeric macros.` }
     }
   }
   return { ok: true }

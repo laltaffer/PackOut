@@ -34,3 +34,44 @@ test('rejects foods and trips that lack required fields', () => {
   const badTrip = { ...GOOD, trips: [{ id: 't', name: 'No days' }] }
   assert.equal(validateImport(badTrip).ok, false)
 })
+
+function withDay(day) {
+  return JSON.parse(JSON.stringify({ ...GOOD, trips: [{ ...GOOD.trips[0], days: [day] }] }))
+}
+
+test('rejects partial meals objects that would crash totals', () => {
+  const r = validateImport(withDay({ intensity: 'medium', meals: { dinner: [] } }))
+  assert.equal(r.ok, false)
+})
+
+test('rejects malformed entries, quantities, intensities, and packed maps', () => {
+  assert.equal(validateImport(withDay({ intensity: 'brutal' })).ok, false)
+  const badQty = { intensity: 'medium', meals: { electrolytes: [], breakfast: [], lunch: [], dinner: [{ foodId: 'f1', qty: 0 }], snacks: [] } }
+  assert.equal(validateImport(withDay(badQty)).ok, false)
+  const badSnack = { intensity: 'medium', meals: { electrolytes: [], breakfast: [], lunch: [], dinner: [], snacks: [{ nope: true }] } }
+  assert.equal(validateImport(withDay(badSnack)).ok, false)
+  assert.equal(validateImport(withDay({ intensity: 'easy', packed: { f1: 'yes' } })).ok, false)
+})
+
+test('rejects non-numeric macros (markup cannot reach the DOM through numbers)', () => {
+  const evil = { ...GOOD, library: [{ ...GOOD.library[0], kcal: '<img onerror=1>' }] }
+  assert.equal(validateImport(evil).ok, false)
+  const evilMacro = { ...GOOD, library: [{ ...GOOD.library[0], carbsG: '44<b>' }] }
+  assert.equal(validateImport(evilMacro).ok, false)
+})
+
+test('rejects duplicate ids and zero-day trips', () => {
+  const dup = { ...GOOD, library: [GOOD.library[0], { ...GOOD.library[0] }] }
+  assert.equal(validateImport(dup).ok, false)
+  const zeroDays = { ...GOOD, trips: [{ ...GOOD.trips[0], days: [] }] }
+  assert.equal(validateImport(zeroDays).ok, false)
+})
+
+test('accepts a valid full day plan with packed quantities', () => {
+  const good = withDay({
+    intensity: 'medium',
+    meals: { electrolytes: [], breakfast: [{ foodId: 'f1', qty: 2 }], lunch: [], dinner: [], snacks: [{ items: [{ foodId: 'f1', qty: 1 }] }] },
+    packed: { f1: 2 },
+  })
+  assert.equal(validateImport(good).ok, true)
+})

@@ -1,7 +1,7 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport } from './engine.js'
-import { load, save, newId } from './store.js'
+import { load, save, newId, corruptInfo } from './store.js'
 
 const app = document.getElementById('app')
 let state = load()
@@ -51,8 +51,19 @@ window.addEventListener('hashchange', route)
 
 // ---------- helpers ----------
 
+let warnedSaveFailure = false
+
+function persist() {
+  if (save(state)) return true
+  if (!warnedSaveFailure) {
+    warnedSaveFailure = true
+    alert('Saving failed — browser storage is full or blocked. Your latest change may not survive a reload. Export a backup from the Trips screen now.')
+  }
+  return false
+}
+
 function commit() {
-  save(state)
+  persist()
   route()
 }
 
@@ -89,8 +100,15 @@ function renderDashboard() {
   const upcoming = state.trips.filter(t => t.startDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))
   const past = state.trips.filter(t => t.startDate < today).sort((a, b) => b.startDate.localeCompare(a.startDate))
   const trips = [...upcoming, ...past]
+  const corrupt = corruptInfo()
   app.replaceChildren(el(`
     <section class="dashboard">
+      ${corrupt ? `
+      <div class="corrupt-banner" role="alert">
+        <strong>Stored data couldn't be read</strong> — PackOut started fresh, but a copy of the
+        unreadable data was kept. <button class="btn-quiet" id="corrupt-download">Download it</button>
+        in case it can be rescued.
+      </div>` : ''}
       <div class="dashboard-head">
         <h1>Trips</h1>
         <a class="btn btn-primary" href="#/new">New Trip</a>
@@ -128,6 +146,15 @@ function renderDashboard() {
       commit()
     }
   }))
+  const corruptBtn = document.getElementById('corrupt-download')
+  if (corruptBtn) corruptBtn.addEventListener('click', () => {
+    const blob = new Blob([corruptInfo().raw], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'packout-corrupt-recovery.json'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  })
   document.getElementById('export').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -155,8 +182,13 @@ function renderDashboard() {
       `Replace current data (${state.trips.length} trips, ${state.library.length} foods) ` +
       `with this backup (${data.trips.length} trips, ${data.library.length} foods)?`)
     if (!ok) return
+    // Write-through: the backup must reach disk before it becomes the live
+    // state, so a quota failure can't strand memory and disk out of sync.
+    if (!save(data)) {
+      alert('Import failed to save — browser storage is full or blocked. Nothing was changed.')
+      return
+    }
     state = data
-    save(state)
     route()
   })
 }
@@ -203,7 +235,7 @@ function renderNewTrip() {
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
     state.trips.push(trip)
-    save(state)
+    persist()
     location.hash = `#/trip/${trip.id}`
   })
 }
@@ -428,7 +460,8 @@ function renderDay(trip, i) {
     const j = Number(document.getElementById('copy-target').value)
     if (confirm(`Replace Day ${j + 1}'s plan with Day ${i + 1}'s?`)) {
       trip.days[j].meals = structuredClone(day.meals)
-      save(state)
+      delete trip.days[j].packed // new plan, stale marks would lie
+      persist()
       location.hash = `#/trip/${trip.id}/day/${j}`
     }
   })
@@ -503,7 +536,7 @@ function renderPicker(trip, i, slotKey) {
     const existing = entries.find(e => e.foodId === btn.dataset.pick)
     if (existing) existing.qty += 1
     else entries.push({ foodId: btn.dataset.pick, qty: 1 })
-    save(state)
+    persist()
     pickerSearch = ''
     location.hash = `#/trip/${trip.id}/day/${i}`
   }))
@@ -526,8 +559,8 @@ function renderGrocery(trip) {
         ${rows.map(r => `
           <li>
             <label class="check-row">
-              <input type="checkbox" data-check="${r.foodId}" ${trip.groceryChecked[r.foodId] ? 'checked' : ''}>
-              <span class="check-name ${trip.groceryChecked[r.foodId] ? 'is-done' : ''}">${esc(r.name)}</span>
+              <input type="checkbox" data-check="${r.foodId}" data-count="${r.count}" ${trip.groceryChecked[r.foodId] === r.count ? 'checked' : ''}>
+              <span class="check-name ${trip.groceryChecked[r.foodId] === r.count ? 'is-done' : ''}">${esc(r.name)}</span>
               <span class="check-qty mono">×${r.count}</span>
             </label>
           </li>`).join('')}
@@ -536,7 +569,9 @@ function renderGrocery(trip) {
   `))
   wirePrint()
   app.querySelectorAll('[data-check]').forEach(cb => cb.addEventListener('change', () => {
-    trip.groceryChecked[cb.dataset.check] = cb.checked
+    // Stamp the count so the mark goes stale if the plan grows.
+    if (cb.checked) trip.groceryChecked[cb.dataset.check] = Number(cb.dataset.count)
+    else delete trip.groceryChecked[cb.dataset.check]
     commit()
   }))
 }
@@ -559,8 +594,8 @@ function renderPack(trip) {
             ${items.map(it => `
               <li>
                 <label class="check-row">
-                  <input type="checkbox" data-pack="${i}:${it.foodId}" ${day.packed?.[it.foodId] ? 'checked' : ''}>
-                  <span class="check-name ${day.packed?.[it.foodId] ? 'is-done' : ''}">${esc(it.name)}</span>
+                  <input type="checkbox" data-pack="${i}:${it.foodId}" data-qty="${it.qty}" ${day.packed?.[it.foodId] === it.qty ? 'checked' : ''}>
+                  <span class="check-name ${day.packed?.[it.foodId] === it.qty ? 'is-done' : ''}">${esc(it.name)}</span>
                   <span class="check-qty mono">×${it.qty}</span>
                 </label>
               </li>`).join('')}
@@ -574,7 +609,8 @@ function renderPack(trip) {
     const [i, foodId] = cb.dataset.pack.split(':')
     const day = trip.days[Number(i)]
     day.packed ??= {}
-    day.packed[foodId] = cb.checked
+    if (cb.checked) day.packed[foodId] = Number(cb.dataset.qty)
+    else delete day.packed[foodId]
     commit()
   }))
 }
@@ -667,7 +703,7 @@ function renderLibrary() {
   app.querySelectorAll('[data-fav]').forEach(btn => btn.addEventListener('click', () => {
     const food = state.library.find(f => f.id === btn.dataset.fav)
     food.favorite = !food.favorite
-    save(state)
+    persist()
     renderLibrary()
   }))
 }
@@ -729,16 +765,46 @@ function renderFoodForm(food) {
     } else {
       Object.assign(food, values)
     }
-    save(state)
+    persist()
     location.hash = '#/library'
   })
   if (!isNew) {
     document.getElementById('food-delete').addEventListener('click', () => {
-      if (confirm(`Delete "${food.name}" from the library?`)) {
-        state.library = state.library.filter(x => x.id !== food.id)
-        save(state)
-        location.hash = '#/library'
+      // Impact-aware cascade: never leave ghost entries that silently drop
+      // calories out of existing plans.
+      let refs = 0
+      const tripsHit = new Set()
+      for (const trip of state.trips) {
+        for (const day of trip.days) {
+          if (!day.meals) continue
+          for (const key of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+            if (day.meals[key].some(e => e.foodId === food.id)) { refs++; tripsHit.add(trip.name) }
+          }
+          for (const s of day.meals.snacks) {
+            if (s.items.some(e => e.foodId === food.id)) { refs++; tripsHit.add(trip.name) }
+          }
+        }
       }
+      const warning = refs > 0
+        ? `Delete "${food.name}"? It is planned in ${refs} place${refs > 1 ? 's' : ''} (${[...tripsHit].join(', ')}) — it will be removed from those plans too, and their totals will drop.`
+        : `Delete "${food.name}" from the library?`
+      if (!confirm(warning)) return
+      state.library = state.library.filter(x => x.id !== food.id)
+      for (const trip of state.trips) {
+        delete trip.groceryChecked?.[food.id]
+        for (const day of trip.days) {
+          delete day.packed?.[food.id]
+          if (!day.meals) continue
+          for (const key of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+            day.meals[key] = day.meals[key].filter(e => e.foodId !== food.id)
+          }
+          for (const s of day.meals.snacks) {
+            s.items = s.items.filter(e => e.foodId !== food.id)
+          }
+        }
+      }
+      persist()
+      location.hash = '#/library'
     })
   }
 }
