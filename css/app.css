@@ -524,6 +524,8 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .backup-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
+.build-stamp { color: var(--ink-soft); font-size: 0.7rem; margin-top: 1.2rem; }
+
 .btn-file { position: relative; overflow: hidden; }
 
 .btn-file input[type="file"] {

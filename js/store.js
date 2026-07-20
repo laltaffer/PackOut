@@ -10,7 +10,8 @@ const DEFAULT_STATE = { schemaVersion: 1, trips: [] }
 // library existed) without ever clobbering user edits to seeded foods.
 function ensureLibrary(state) {
   if (!Array.isArray(state.library)) {
-    state.library = SEED.foods.map(f => ({ ...f, favorite: false }))
+    // favorite defaults false but the seed's own stars (core meals) win.
+    state.library = SEED.foods.map(f => ({ favorite: false, ...f }))
     state.seedVersion = SEED.version
   }
   if (!Array.isArray(state.gearLibrary)) {

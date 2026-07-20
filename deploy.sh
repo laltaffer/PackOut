@@ -9,7 +9,7 @@ node --test test/*.test.mjs
 DEPLOY_DIR=.scratch/deploy
 rm -rf "$DEPLOY_DIR"
 mkdir -p "$DEPLOY_DIR"
-cp index.html "$DEPLOY_DIR/"
+cp index.html _headers "$DEPLOY_DIR/"
 cp -R css js "$DEPLOY_DIR/"
 
 # Cache-bust the whole module chain: browsers hold ES modules in memory/disk

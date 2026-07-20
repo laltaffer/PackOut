@@ -1,9 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { draftDay, draftEmptyDays, dailyTargets, dayTotals, dayVerdict, emptyMeals } from '../js/engine.js'
+import { SEED } from '../js/seed.js'
 
 // 200 lb medium → target 3700 kcal, protein floor 120 g.
 const WEIGHT = 200
+const TOL = 50 // Lawrence 2026-07-20: "stay with +/- 50cal"
 
 const LIB = [
   { id: 'granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: 4.6, favorite: true, slotHint: 'breakfast' },
@@ -21,49 +23,44 @@ const LIB = [
 
 const STAPLES = new Set(['granola', 'liquid-iv'])
 
-function mkTrip(days = 1) {
-  return { id: 't', name: 'T', weightLbs: WEIGHT, startDate: '2026-08-01', days: Array.from({ length: days }, () => ({ intensity: 'medium' })) }
+function mkTrip(days = 1, weightLbs = WEIGHT) {
+  return { id: 't', name: 'T', weightLbs, startDate: '2026-08-01', days: Array.from({ length: days }, () => ({ intensity: 'medium' })) }
 }
 
-test('usual draft replays staples and favorites into their hinted slots', () => {
-  const meals = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
+function slotKcal(entries, lib) {
+  return entries.reduce((s, e) => s + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
+}
+
+test('usual draft replays habits — but never past a slot window (no double-granola breakfast)', () => {
+  // Live repro 2026-07-20: two starred granolas produced a 1,100 kcal
+  // breakfast against a 200–400 goal. Habit replay obeys the window.
+  const lib = LIB.map(f => f.id === 'granola' ? { ...f } : f)
+  const meals = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
   const ids = slot => meals[slot].map(e => e.foodId)
-  assert.ok(ids('breakfast').includes('granola'), 'staple+favorite breakfast replayed')
-  assert.ok(ids('breakfast').includes('pb'), 'favorite breakfast replayed')
+  assert.ok(!ids('breakfast').includes('granola'), '530 kcal pouch cannot fit a 200–400 breakfast')
   assert.ok(ids('electrolytes').includes('liquid-iv'), 'staple electrolyte replayed')
   assert.equal(meals.dinner.length, 1, 'exactly one dinner main')
   assert.equal(meals.dinner[0].foodId, 'curry', 'favorite main drafts first')
+  const bk = slotKcal(meals.breakfast, lib)
+  assert.ok(bk >= 200 && bk <= 400, `breakfast inside its window: ${bk}`)
 })
 
-test('usual draft lands the day Fueled without crossing the 115% line', () => {
-  const trip = mkTrip()
-  const meals = draftDay(trip, 0, LIB, STAPLES, 'usual')
-  const day = { intensity: 'medium', meals }
-  const t = dayTotals(day, LIB)
+test('a drafted day lands within ±50 kcal of the target', () => {
+  const meals = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
+  const t = dayTotals({ intensity: 'medium', meals }, LIB)
   const target = dailyTargets(WEIGHT, 'medium').kcal.target
-  assert.ok(t.kcal >= 0.9 * target, `at least Fueled: ${t.kcal}`)
-  assert.ok(t.kcal <= 1.15 * target, `stayed under heavy line: ${t.kcal}`)
-  assert.equal(dayVerdict(day, WEIGHT, LIB).status, 'fueled')
+  assert.ok(Math.abs(t.kcal - target) <= TOL, `|${t.kcal} - ${target}| <= ${TOL}`)
+  assert.equal(dayVerdict({ intensity: 'medium', meals }, WEIGHT, LIB).status, 'fueled')
 })
 
-test('meals carry the day — lunch and breakfast grow toward their share, at most 3 snacks suggested', () => {
-  // Lawrence 2026-07-20 (his sheet's Day One: ~740 breakfast, 4-item ~1150
-  // lunch, snacks as options): bigger breakfast/lunch, ~3 snacks soft.
+test('meals carry the day: real lunch, windowed breakfast, at most 3 snack bundles', () => {
   const meals = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
   const target = dailyTargets(WEIGHT, 'medium').kcal.target
-  const slotKcal = entries => entries.reduce((s, e) => s + LIB.find(f => f.id === e.foodId).kcal * e.qty, 0)
-  assert.ok(slotKcal(meals.breakfast) >= 0.15 * target, `breakfast is a real meal: ${slotKcal(meals.breakfast)}`)
-  assert.ok(slotKcal(meals.lunch) >= 0.22 * target, `lunch is a real meal: ${slotKcal(meals.lunch)}`)
+  const bk = slotKcal(meals.breakfast, LIB)
+  assert.ok(bk >= 200 && bk <= 400, `breakfast in window: ${bk}`)
+  assert.ok(slotKcal(meals.lunch, LIB) >= 0.22 * target, `lunch is a real meal: ${slotKcal(meals.lunch, LIB)}`)
   assert.ok(meals.lunch.length > 1, 'lunch groups multiple items, like the sheet')
-  // Soft rule, stated precisely: more than 3 snacks is allowed ONLY when 3
-  // would leave the day below the Fueled line (or the protein floor).
-  if (meals.snacks.length > 3) {
-    const trimmed = structuredClone(meals)
-    trimmed.snacks = trimmed.snacks.slice(0, 3)
-    const t3 = dayTotals({ intensity: 'medium', meals: trimmed }, LIB)
-    assert.ok(t3.kcal < 0.9 * target || t3.proteinG < 0.6 * WEIGHT,
-      `extra snacks only when 3 would miss Fueled (3-snack day was ${t3.kcal} kcal)`)
-  }
+  assert.ok(meals.snacks.length <= 3, `snacks stay in at most 3 bundles: ${meals.snacks.length}`)
 })
 
 test('drafting is deterministic: same inputs, identical output', () => {
@@ -92,15 +89,13 @@ test('single-day draft avoids the adjacent day’s dinner when an alternative ex
   assert.notEqual(meals.dinner[0].foodId, 'curry')
 })
 
-test('optimized draft meets the protein floor and prefers weight-efficient candidates', () => {
+test('optimized draft also honors the ±50 window and meets the protein floor', () => {
   const meals = draftDay(mkTrip(), 0, LIB, new Set(), 'optimized')
   const day = { intensity: 'medium', meals }
   const t = dayTotals(day, LIB)
-  assert.ok(t.proteinG >= 120, `protein floor met: ${t.proteinG}`)
   const target = dailyTargets(WEIGHT, 'medium').kcal.target
-  assert.ok(t.kcal >= target && t.kcal <= 1.15 * target)
-  const flat = [...meals.snacks.flatMap(s => s.items)]
-  assert.ok(!flat.some(e => e.foodId === 'strog'), 'weightless items lose ties in optimized top-up')
+  assert.ok(t.proteinG >= 120, `protein floor met: ${t.proteinG}`)
+  assert.ok(Math.abs(t.kcal - target) <= TOL, `|${t.kcal} - ${target}| <= ${TOL}`)
 })
 
 test('thin and empty libraries degrade gracefully', () => {
@@ -112,38 +107,30 @@ test('thin and empty libraries degrade gracefully', () => {
   assert.deepEqual(none, emptyMeals())
 })
 
-test('usual draft meets the protein floor with the real v2 seed snack pool (205 lb, floor 123)', () => {
-  // Live repro (Alaska day 4): protein-per-oz ranking zeroed out null-weight
-  // high-protein snacks and forced one-of-each rotation, so the draft capped
-  // out at 120 g protein against a 123 g floor. Protein-phase fills must rank
-  // by absolute protein and may repeat snacks.
+test('protein-phase snacks rank by absolute protein and repeat — but never spend past the window', () => {
+  // Successor to the Alaska day-4 repro: null-weight high-protein snacks must
+  // not sink, repeats are allowed, and the floor is closed with kcal the ±50
+  // window can afford.
   const lib = [
     { id: 'granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: null, favorite: false, slotHint: 'breakfast' },
     { id: 'lyte', name: 'Liquid IV Energy', kcal: 45, carbsG: 10, fatG: 0, proteinG: 0, weightOz: null, favorite: false, slotHint: 'electrolytes' },
-    { id: 'cheez', name: 'Cheez-It (1 pack)', kcal: 140, carbsG: 16, fatG: 7, proteinG: 3, weightOz: 1.0, favorite: false, slotHint: 'lunch' },
     { id: 'marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, favorite: false, slotHint: 'dinner' },
-    { id: 'bolt', name: 'ProBar Bolt Chews', kcal: 90, carbsG: 23, fatG: null, proteinG: null, weightOz: null, favorite: false, slotHint: 'snack' },
+    { id: 'jerky', name: 'Landjaeger sticks', kcal: 300, carbsG: 6, fatG: 18, proteinG: 30, weightOz: null, favorite: false, slotHint: 'snack' },
     { id: 'probar-pb', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: null, favorite: false, slotHint: 'snack' },
-    { id: 'muffin', name: 'ProBar Blueberry Muffin', kcal: 400, carbsG: 44, fatG: null, proteinG: 10, weightOz: null, favorite: false, slotHint: 'snack' },
     { id: 'gu', name: 'GU Energy Gel', kcal: 100, carbsG: 22, fatG: null, proteinG: 0, weightOz: null, favorite: false, slotHint: 'snack' },
-    { id: 'waffle', name: 'Honey Stinger Waffle', kcal: 150, carbsG: 19, fatG: null, proteinG: 1, weightOz: null, favorite: false, slotHint: 'snack' },
-    { id: 'packaroon', name: 'Packaroon', kcal: 160, carbsG: 12, fatG: 12, proteinG: 2, weightOz: null, favorite: false, slotHint: 'snack' },
-    { id: 'belvita', name: 'Belvita', kcal: 220, carbsG: 36, fatG: 8, proteinG: 3, weightOz: 1.9, favorite: false, slotHint: 'snack' },
-    { id: 'austin', name: 'Austin Peanut Butter Crackers', kcal: 200, carbsG: 27, fatG: 10, proteinG: 3, weightOz: 1.3, favorite: false, slotHint: 'snack' },
-    { id: 'powerbar', name: 'PowerBar', kcal: 230, carbsG: 44, fatG: 4, proteinG: 10, weightOz: 2.2, favorite: false, slotHint: 'snack' },
-    { id: 'fritos', name: 'Fritos (2 svg)', kcal: 320, carbsG: 32, fatG: 20, proteinG: 4, weightOz: 2.0, favorite: false, slotHint: 'snack' },
+    { id: 'bears', name: 'Haribo Goldbears (per oz)', kcal: 95, carbsG: 22, fatG: 0, proteinG: 2, weightOz: 1, favorite: false, slotHint: 'snack' },
   ]
   const trip = { id: 't', name: 'T', weightLbs: 205, startDate: '2026-08-01', days: [{ intensity: 'medium' }] }
   const meals = draftDay(trip, 0, lib, new Set(), 'usual')
   const day = { intensity: 'medium', meals }
   const v = dayVerdict(day, 205, lib)
+  const target = dailyTargets(205, 'medium').kcal.target
   assert.equal(v.proteinShortG, 0, `protein floor met (totals ${JSON.stringify(dayTotals(day, lib))})`)
+  assert.ok(Math.abs(v.totals.kcal - target) <= TOL, `|${v.totals.kcal} - ${target}| <= ${TOL}`)
   assert.equal(v.status, 'fueled')
 })
 
 test('low-kcal dinner add-ons are never drafted as the main while real mains exist', () => {
-  // Alpine Spiced Apple Cider (60 kcal) is dinner-hinted as an add-on; the
-  // rotation must cycle substantial mains only, not propose cider for dinner.
   const lib = [
     ...LIB,
     { id: 'cider', name: 'Alpine Spiced Apple Cider', kcal: 60, carbsG: 15, fatG: 0, proteinG: 0, weightOz: 0.5, favorite: false, slotHint: 'dinner' },
@@ -153,57 +140,31 @@ test('low-kcal dinner add-ons are never drafted as the main while real mains exi
   for (const d of drafts) {
     assert.notEqual(d.meals.dinner[0]?.foodId, 'cider', `day ${d.dayIndex} drafted cider as the main`)
   }
-  const single = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
-  assert.notEqual(single.dinner[0]?.foodId, 'cider')
 })
 
 test('meal slots stack to at least 300 kcal — a lone cracker pack is never lunch', () => {
-  // Lawrence 2026-07-20: "cheese should never be suggested as a lunch or a
-  // meal… anything over 300 calories can be suggested as a meal. Or meals
-  // should have multiple things that add up."
   const lib = [
     ...LIB.filter(f => f.id !== 'toastchee'),
     { id: 'crackers', name: 'Cracker Pack', kcal: 140, carbsG: 16, fatG: 7, proteinG: 3, weightOz: 1.0, favorite: false, slotHint: 'lunch' },
   ]
   const meals = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
-  const lunchKcal = meals.lunch.reduce((sum, e) => sum + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
+  const lunchKcal = slotKcal(meals.lunch, lib)
   assert.ok(lunchKcal >= 300, `lunch stacked to a real meal: ${lunchKcal} kcal`)
   assert.ok(meals.lunch.length > 1, 'sub-300 base means multiple items add up')
 })
 
-test('a ≥300 kcal lunch base leads the slot, then grows toward its share', () => {
+test('a meal-sized lunch item joins the slot as it grows toward its share', () => {
   const lib = [
     ...LIB.filter(f => f.id !== 'toastchee'),
     { id: 'big-wrap', name: 'ProBar Meal Wrap', kcal: 390, carbsG: 40, fatG: 12, proteinG: 15, weightOz: 3, favorite: false, slotHint: 'lunch' },
   ]
   const meals = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
-  assert.equal(meals.lunch[0].foodId, 'big-wrap')
-  const lunchKcal = meals.lunch.reduce((s, e) => s + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
+  assert.ok(meals.lunch.some(e => e.foodId === 'big-wrap'), 'hinted meal item drafts into lunch')
+  const lunchKcal = slotKcal(meals.lunch, lib)
   assert.ok(lunchKcal >= 0.22 * dailyTargets(WEIGHT, 'medium').kcal.target, `grew toward share: ${lunchKcal}`)
 })
 
-test('slot growth prefers right-sized items — no 1,300-kcal breakfast to close a 470-kcal gap', () => {
-  // Cold start (no favorites/staples): protein-first growth must not grab a
-  // huge item when a right-sized protein source fits the slot's share.
-  const lib = [
-    { id: 'pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: 1.15, favorite: false, slotHint: 'breakfast' },
-    { id: 'biscuits', name: 'Peak Refuel Biscuits & Sausage Gravy', kcal: 1100, carbsG: 51, fatG: 85, proteinG: 34, weightOz: 6.77, favorite: false, slotHint: 'breakfast' },
-    { id: 'skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, favorite: false, slotHint: 'breakfast' },
-    { id: 'main', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, favorite: false, slotHint: 'dinner' },
-    { id: 'lunchy', name: 'Lance ToastChee', kcal: 220, carbsG: 25, fatG: 10, proteinG: 5, weightOz: 1.4, favorite: false, slotHint: 'lunch' },
-    { id: 'bar', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'snack' },
-    { id: 'bears', name: 'Haribo Goldbears (per oz)', kcal: 95, carbsG: 22, fatG: 0, proteinG: 2, weightOz: 1, favorite: false, slotHint: 'snack' },
-  ]
-  const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
-  const target = dailyTargets(WEIGHT, 'medium').kcal.target
-  const bKcal = meals.breakfast.reduce((s, e) => s + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
-  assert.ok(bKcal <= 0.18 * target * 1.5, `breakfast stays near its share: ${bKcal}`)
-  assert.ok(bKcal >= 200, 'still a real breakfast')
-})
-
 test('usual rotation cycles within favorite mains — the catalog never displaces owned core meals', () => {
-  // Lawrence 2026-07-20: core meals come from his Peak Refuel order. With 2+
-  // favorite mains, a week's dinners rotate through the favorites tier only.
   const favs = ['strog', 'curry', 'homestyle'].map((id, j) => (
     { id, name: `Peak Refuel Fav ${j}`, kcal: 800 + j * 10, carbsG: 50, fatG: 20, proteinG: 41, weightOz: 5, favorite: true, slotHint: 'dinner' }))
   const catalog = ['alfredo', 'mashers', 'goulash'].map((id, j) => (
@@ -218,29 +179,81 @@ test('usual rotation cycles within favorite mains — the catalog never displace
 })
 
 test('breakfast drafts bias hard toward ready-to-eat — no boiling water at 4am', () => {
-  // Lawrence 2026-07-20: mornings are mobile; hot-water breakfasts only when
-  // nothing ready-to-eat can fill the slot.
+  // Window-sized fixture so the 200–400 cap alone can't decide it: the cook
+  // item fits the window and still loses to ready foods.
   const lib = [
-    { id: 'skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, favorite: false, slotHint: 'breakfast', prep: 'cook' },
-    { id: 'granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: 4.6, favorite: false, slotHint: 'breakfast' },
-    { id: 'pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: 1.15, favorite: false, slotHint: 'breakfast' },
+    { id: 'oatmeal', name: 'Peak Refuel Hot Oatmeal', kcal: 350, carbsG: 60, fatG: 6, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'granola-bar', name: 'Bear Valley Granola Bar', kcal: 330, carbsG: 50, fatG: 10, proteinG: 10, weightOz: 3, favorite: false, slotHint: 'breakfast' },
     { id: 'main', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner', prep: 'cook' },
     { id: 'bar', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'snack' },
   ]
   const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
-  assert.ok(!meals.breakfast.some(e => e.foodId === 'skillet'), 'cook breakfast skipped while ready foods can fill the slot')
-  assert.ok(meals.breakfast.some(e => e.foodId === 'granola'), 'ready breakfast leads')
+  assert.ok(meals.breakfast.length >= 1, 'breakfast drafted')
+  assert.ok(!meals.breakfast.some(e => e.foodId === 'oatmeal'), 'cook breakfast skipped while ready foods can fill the slot')
+  for (const e of meals.breakfast) {
+    assert.notEqual(lib.find(f => f.id === e.foodId).prep, 'cook', 'every drafted breakfast item is ready-to-eat')
+  }
   assert.equal(meals.dinner[0].foodId, 'main', 'dinner mains unaffected by prep bias')
 })
 
-test('a cook breakfast still drafts when it is the only breakfast there is', () => {
+test('a cook breakfast still drafts when nothing ready can fill the slot', () => {
   const lib = [
-    { id: 'skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, favorite: false, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'oatmeal', name: 'Peak Refuel Hot Oatmeal', kcal: 350, carbsG: 60, fatG: 6, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'breakfast', prep: 'cook' },
     { id: 'main', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner', prep: 'cook' },
-    { id: 'bar', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'snack' },
   ]
   const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
-  assert.ok(meals.breakfast.some(e => e.foodId === 'skillet'), 'graceful when nothing ready exists')
+  assert.ok(meals.breakfast.some(e => e.foodId === 'oatmeal'), 'graceful when nothing ready exists')
+})
+
+test('with the real seed, breakfast is bars and no-prep food — never a Peak Refuel pouch', () => {
+  // Lawrence 2026-07-20: "Breakfast should be biased against using Peak Refuel
+  // meals in favor of bars and no-prep foods." The 200–400 window plus the
+  // prep bias must exclude every Peak pouch in the actual catalog.
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  const trip = mkTrip(7, 205)
+  const drafts = draftEmptyDays(trip, lib, new Set(), 'usual')
+  assert.equal(drafts.length, 7)
+  for (const d of drafts) {
+    const bk = slotKcal(d.meals.breakfast, lib)
+    assert.ok(bk >= 200 && bk <= 400, `day ${d.dayIndex} breakfast in window: ${bk}`)
+    for (const e of d.meals.breakfast) {
+      const f = lib.find(x => x.id === e.foodId)
+      assert.ok(!f.name.startsWith('Peak Refuel'), `day ${d.dayIndex} drafted ${f.name} for breakfast`)
+    }
+  }
+})
+
+test('real-seed week: dinners rotate through the ordered core meals, every day within ±50 kcal', () => {
+  // The seed pre-stars the Guidefitter order; a fresh state must draft a week
+  // of core-meal dinners with day totals tight to target.
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  const ordered = new Set(lib.filter(f => f.favorite && f.slotHint === 'dinner').map(f => f.id))
+  assert.equal(ordered.size, 5, 'five ordered dinner mains pre-starred')
+  const trip = mkTrip(7, 205)
+  const target = dailyTargets(205, 'medium').kcal.target
+  const drafts = draftEmptyDays(trip, lib, new Set(), 'usual')
+  for (const d of drafts) {
+    assert.ok(ordered.has(d.meals.dinner[0].foodId), `day ${d.dayIndex} main is an ordered meal`)
+    const t = dayTotals({ intensity: 'medium', meals: d.meals }, lib)
+    assert.ok(Math.abs(t.kcal - target) <= TOL, `day ${d.dayIndex}: |${t.kcal} - ${target}| <= ${TOL}`)
+    assert.ok(d.meals.snacks.length <= 3, `day ${d.dayIndex} snack bundles: ${d.meals.snacks.length}`)
+  }
+  const mains = drafts.map(d => d.meals.dinner[0].foodId)
+  for (let i = 1; i < mains.length; i++) assert.notEqual(mains[i], mains[i - 1], 'no consecutive dinner repeats')
+})
+
+test('±50 holds across weights and efforts with the real seed', () => {
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  for (const weightLbs of [150, 205, 240]) {
+    for (const intensity of ['easy', 'medium', 'hard']) {
+      const trip = { id: 't', name: 'T', weightLbs, startDate: '2026-08-01', days: [{ intensity }] }
+      const meals = draftDay(trip, 0, lib, new Set(), 'usual')
+      const t = dayTotals({ intensity, meals }, lib)
+      const target = dailyTargets(weightLbs, intensity).kcal.target
+      assert.ok(Math.abs(t.kcal - target) <= TOL,
+        `${weightLbs} lb ${intensity}: |${t.kcal} - ${target}| <= ${TOL}`)
+    }
+  }
 })
 
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {

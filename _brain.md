@@ -75,6 +75,19 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
 - Dinners rotate across drafted days; all other food repeats. Mains need ≥400 kcal
   (add-ons like cider never propose as the big meal).
 - P1 (issue #17): swap-in-place, "never suggest" flag.
+- **±50 kcal window (2026-07-20, "the plans are a suck" round):** a draft lands
+  within ±50 kcal of the day target — overshoot to 115% was rebuilt out. Breakfast
+  obeys 200–400 hard (that window + prep bias excludes every Peak Refuel pouch =
+  his "bias breakfast against Peak Refuel toward bars/no-prep"). Snacks: ≤3 bundles,
+  repeats stack qty (Goldbears per-oz is the ±50 fine-tuner). Protein is maximized
+  inside the window, never bought past it — a residual gap shows as Short (protein).
+  Library gap: no protein-dense snack (jerky) seeded, so some days run a few g short.
+- **Seed v9 = one-time full wipe (2026-07-20, his explicit ask):** library rebuilt
+  from seed exactly (user foods dropped, past deletions resurrected, ToastChee
+  retired), all planned meals + food packed marks cleared on every device. The six
+  Guidefitter-order meals ship pre-starred so fresh states draft his core meals.
+- **Stale-JS fix:** `_headers` serves HTML with Cache-Control: no-store (module
+  chain stays cached via ?v=<sha> stamps); dashboard footer shows the build sha.
 
 ## Key Decisions (UI/UX round 1, 2026-07-20)
 - **Desktop-first for PackOut** — Lawrence's directive, overrides the global

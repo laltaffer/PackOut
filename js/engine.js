@@ -227,22 +227,24 @@ export function readiness(trip, library, gearLibrary = []) {
 
 // ---------- Draft assistant (spec issue #14) ----------
 // Deterministic proposals. 'usual' replays Staples/Favorites into their hinted
-// slots then tops up toward the kcal target; 'optimized' solves for targets
-// with weight-efficient foods, habits as tie-breakers. Never crosses the 115%
-// Heavy line; remaining gaps are the Verdict's job to flag.
+// slots; 'optimized' prefers weight-efficient foods, habits as tie-breakers.
+// A draft lands the day inside ±50 kcal of the target (Lawrence 2026-07-20:
+// "stay within +/- 50cal") — the granular snacks (Goldbears per oz) are what
+// make that window always reachable. Protein is maximized inside the window
+// but never buys grams with kcal the window can't afford.
 
-const DRAFT_SNACK_CAP = 10
+const DAY_KCAL_TOL = 50
 // A dinner "main" needs substance; lighter dinner-hinted items (cider, cocoa)
 // are add-ons and never proposed as the day's one big meal.
 const MAIN_MIN_KCAL = 400
-// A meal is ≥300 kcal (breakfast keeps V2P's 200 floor) — either one
-// substantial item or several that add up. A lone cracker pack is not lunch.
-const SLOT_MIN_KCAL = { breakfast: 200, lunch: 300 }
-// Meals carry the day (Lawrence's sheet: ~740 breakfast, ~1150 lunch): drafts
-// grow breakfast/lunch toward these day-kcal shares before leaning on snacks,
-// and suggest at most 3 snacks unless Fueled or the protein floor demands more.
-const MEAL_SHARE = { breakfast: 0.18, lunch: 0.27 }
-const SNACK_SOFT_CAP = 3
+// Breakfast obeys the V2P slot window (200–400 kcal) hard — that window plus
+// the prep bias is what keeps 500+ kcal pouches out of a grab-and-go morning.
+// Lunch is a real meal that grows toward its day-kcal share; bars + snacks
+// stacking into one is legitimate ("a ProBar plus gummy bears").
+const LUNCH_MIN_KCAL = 300
+const LUNCH_SHARE = 0.27
+// Snacks appear as at most 3 bundles; repeats grow qty inside a bundle.
+const SNACK_BUNDLES = 3
 
 function dinnerMains(library, staples = new Set(), habitTier = false) {
   const hinted = library.filter(f => f.slotHint === 'dinner')
@@ -296,12 +298,24 @@ function adjacentMains(trip, dayIndex) {
   return avoid
 }
 
+// Slot ranking for 'usual': habits first, then foods that live in this slot,
+// then name — so a starred bar beats an unstarred hinted item, but hinted
+// items beat pool fillers among equals.
+function rankSlot(pool, staples, slotBase) {
+  return [...pool].sort((a, b) =>
+    ((b.favorite === true) - (a.favorite === true)) ||
+    (staples.has(b.id) - staples.has(a.id)) ||
+    ((b.slotHint === slotBase) - (a.slotHint === slotBase)) ||
+    a.name.localeCompare(b.name))
+}
+
 function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, mainsOverride = null) {
   const meals = emptyMeals()
   if (library.length === 0) return meals
   const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium')
   const target = targets.kcal.target
-  const ceiling = HEAVY_KCAL_PCT * target
+  const dayCeil = target + DAY_KCAL_TOL
+  const bf = slotTargets(targets).breakfast
   const proteinFloor = trip.weightLbs * PROTEIN_FLOOR_G_PER_LB
   const hinted = slot => library.filter(f => f.slotHint === slot)
   let kcal = 0
@@ -315,85 +329,87 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     slotKcal[slot] += food.kcal
   }
 
-  // Base slots. Usual: replay every Favorite/Staple in its slot (that IS the
-  // habit), else the top-ranked candidate. Optimized: one efficient pick each.
-  for (const slot of ['electrolytes', 'breakfast', 'lunch']) {
-    const pool = hinted(slot)
-    if (pool.length === 0) continue
-    if (strategy === 'usual') {
-      let habits = rankHabit(pool.filter(f => f.favorite || staples.has(f.id)), staples)
-      if (slot === 'breakfast' && habits.some(f => f.prep !== 'cook')) {
-        habits = habits.filter(f => f.prep !== 'cook')
-      }
-      for (const f of habits.length ? habits : [prepRank(rankHabit(pool, staples), slot)[0]]) add(slot, f)
-    } else {
-      add(slot, prepRank(rankByDensity(pool, staples, 'kcal'), slot)[0])
+  // Electrolytes: replay every habit (usual), else one ranked pick.
+  {
+    const pool = hinted('electrolytes')
+    if (pool.length) {
+      const habits = strategy === 'usual'
+        ? rankHabit(pool.filter(f => f.favorite || staples.has(f.id)), staples)
+        : []
+      const picks = habits.length ? habits
+        : [(strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal'))[0]]
+      for (const f of picks) add('electrolytes', f)
     }
   }
+
+  // Dinner: the one big meal. Rotation/avoidance is the caller's job.
   const mains = mainsOverride ?? (strategy === 'usual'
     ? rankHabit(dinnerMains(library, staples, true), staples)
     : rankByDensity(dinnerMains(library), staples, 'kcal'))
   const main = pickMain(mains, avoidMains)
   if (main) add('dinner', main)
 
-  // Meal-growing pass: lunch then breakfast stack toward their day-kcal share
-  // (never below the meal floors) with slot-hinted then snack-pool items —
-  // "a ProBar plus gummy bears" is a legitimate lunch. Protein gaps steer the
-  // picks while the floor is unmet.
-  for (const slot of ['lunch', 'breakfast']) {
-    const grow = Math.max(SLOT_MIN_KCAL[slot], MEAL_SHARE[slot] * target)
-    const used = new Set(meals[slot].map(e => e.foodId))
-    if (used.size === 0 && slot === 'breakfast') continue // no breakfast candidates at all
-    const pool = [...hinted(slot), ...hinted('snack')].filter(f => !used.has(f.id))
-    // A slot may run a little over its share, but never balloon: an item only
-    // qualifies while it keeps the slot within 1.5× its share (fallback: the
-    // best-ranked item that fits the day ceiling, so growth never stalls).
-    const slotCeil = grow * 1.5
-    while (slotKcal[slot] < grow) {
+  // Breakfast fills its hard 200–400 window; lunch grows toward its day
+  // share (capped at 1.5×). Both stack slot-hinted + snack-pool items, stop
+  // when nothing fits, and never spend past the day's +50 ceiling. Protein
+  // steers the picks while the floor is unmet.
+  const lunchGrow = Math.max(LUNCH_MIN_KCAL, LUNCH_SHARE * target)
+  const windows = {
+    breakfast: { goal: bf.kcalMax, max: bf.kcalMax },
+    lunch: { goal: lunchGrow, max: lunchGrow * 1.5 },
+  }
+  for (const slot of ['breakfast', 'lunch']) {
+    const w = windows[slot]
+    const pool = [...hinted(slot), ...hinted('snack')]
+    const used = new Set()
+    while (slotKcal[slot] < w.goal) {
       const ranked = prepRank(protein < proteinFloor
         ? [...pool].sort((a, b) => ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
-        : (strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal')), slot)
-      const fits = x => !used.has(x.id) && kcal + x.kcal <= ceiling
-      const f = ranked.find(x => fits(x) && slotKcal[slot] + x.kcal <= slotCeil) ?? ranked.find(fits)
+        : (strategy === 'usual' ? rankSlot(pool, staples, slot) : rankByDensity(pool, staples, 'kcal')), slot)
+      const f = ranked.find(x => !used.has(x.id) &&
+        slotKcal[slot] + x.kcal <= w.max && kcal + x.kcal <= dayCeil)
       if (!f) break
       add(slot, f)
       used.add(f.id)
     }
   }
 
-  // Top-up: snack bundles until the kcal target AND protein floor are both
-  // met, the cap hits, or nothing fits under the Heavy ceiling. Protein gaps
-  // are closed first — ranked by ABSOLUTE protein (weight-unknown items must
-  // not sink) and free to repeat, since snacks repeat on real trips. The
-  // remaining kcal gap then fills with round-robin variety.
+  // Snacks close the day. Protein first — ranked by ABSOLUTE protein (weight-
+  // unknown items must not sink), repeats allowed — but only with kcal the
+  // ±50 window can afford; a residual protein gap is the Verdict's to flag.
+  // Then the kcal gap fills with round-robin variety until the day lands
+  // inside [target−50, target+50]. At most 3 bundles; repeats stack qty.
   const snackPool = hinted('snack')
+  const addSnack = food => {
+    const bundle = meals.snacks.find(s => s.items.some(e => e.foodId === food.id))
+    if (bundle) bundle.items.find(e => e.foodId === food.id).qty += 1
+    else if (meals.snacks.length < SNACK_BUNDLES) meals.snacks.push({ items: [{ foodId: food.id, qty: 1 }] })
+    else meals.snacks[meals.snacks.length - 1].items.push({ foodId: food.id, qty: 1 })
+    kcal += food.kcal
+    protein += food.proteinG ?? 0
+  }
   const byProtein = [...snackPool].sort((a, b) =>
     ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
   let guard = 0
-  while ((kcal < target || protein < proteinFloor) &&
-         meals.snacks.length < DRAFT_SNACK_CAP && snackPool.length > 0 && guard < 50) {
+  while (protein < proteinFloor && guard < 60) {
     guard += 1
-    // Soft suggestion: 3 snacks. Only exceed when the day would otherwise
-    // miss Fueled (90%) or the protein floor.
-    if (meals.snacks.length >= SNACK_SOFT_CAP &&
-        kcal >= FUELED_KCAL_PCT * target && protein >= proteinFloor) break
-    let next
-    if (protein < proteinFloor) {
-      next = byProtein.find(f => (f.proteinG ?? 0) > 0 && kcal + f.kcal <= ceiling)
-      if (!next && kcal >= target) break // no protein candidate fits — gap stays, Verdict flags it
-    }
-    if (!next) {
-      const ordered = strategy === 'usual'
-        ? rankHabit(snackPool, staples)
-        : rankByDensity(snackPool, staples, 'kcal')
-      const idx = meals.snacks.length % ordered.length
-      const rotation = [...ordered.slice(idx), ...ordered.slice(0, idx)]
-      next = rotation.find(f => kcal + f.kcal <= ceiling)
-    }
-    if (!next) break
-    meals.snacks.push({ items: [{ foodId: next.id, qty: 1 }] })
-    kcal += next.kcal
-    protein += next.proteinG ?? 0
+    const f = byProtein.find(x => (x.proteinG ?? 0) > 0 && kcal + x.kcal <= dayCeil)
+    if (!f) break
+    addSnack(f)
+  }
+  const ordered = strategy === 'usual'
+    ? rankHabit(snackPool, staples)
+    : rankByDensity(snackPool, staples, 'kcal')
+  let adds = 0
+  guard = 0
+  while (kcal < target - DAY_KCAL_TOL && ordered.length > 0 && guard < 100) {
+    guard += 1
+    const idx = adds % ordered.length
+    const rotation = [...ordered.slice(idx), ...ordered.slice(0, idx)]
+    const f = rotation.find(x => kcal + x.kcal <= dayCeil)
+    if (!f) break
+    addSnack(f)
+    adds += 1
   }
   return meals
 }

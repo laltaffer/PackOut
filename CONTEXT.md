@@ -57,10 +57,11 @@ now; gear and pre-trip Actions when Milestone 2 lands).
 A proposed meal plan for a Day (or all empty Days) that the user edits rather than
 building from nothing. Two strategies from the same inputs (targets, Staples,
 Favorites, library): **Usual Draft** (P0) — habit-replay: Staples/Favorites fill
-their usual slots first, then ranked fills top up toward targets, remaining gaps
-flagged via the Verdict; **Optimized Draft** (alternate) — nutrition-optimal: solve
-for targets with weight-efficient foods, habits as tie-breakers only. Both
-deterministic — no LLM.
+their usual slots first, then ranked fills; **Optimized Draft** (alternate) —
+weight-efficient foods, habits as tie-breakers only. Both deterministic — no LLM.
+A Draft lands the Day within ±50 kcal of its target; Breakfast obeys its 200–400
+window hard and biases to ready-to-eat food; a protein gap the window can't afford
+is left for the Verdict to flag rather than bought with extra calories.
 
 ## Favorite
 A food the user has explicitly marked as preferred. Suggestions rank Favorites first.

@@ -7,6 +7,10 @@ import { applySeedMigrations } from './seed.js'
 const app = document.getElementById('app')
 let state = load()
 
+// Deploys stamp ?v=<commit> on this module's URL; surfacing it answers
+// "which version is this browser actually running?" at a glance.
+const BUILD = new URL(import.meta.url).searchParams.get('v') ?? 'dev'
+
 const INTENSITIES = ['easy', 'medium', 'hard']
 
 // ---------- routing (hash-based so the phone back button works) ----------
@@ -159,6 +163,7 @@ function renderDashboard() {
           <label class="btn btn-file">Import JSON<input type="file" id="import" accept="application/json,.json"></label>
         </div>
       </section>
+      <p class="build-stamp mono">build ${esc(BUILD)}</p>
     </section>
   `))
   app.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => {

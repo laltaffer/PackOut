@@ -6,8 +6,11 @@
 // v2 (2026-07-19, dogfood feedback): every food carries its brand name; generic
 // commodity items removed. weightOz is packed ounces where known, else null.
 
+// favorite: true marks the meals from Lawrence's Guidefitter order
+// (reference/alaska-food-order.md) — his core meals, pre-starred so a fresh
+// state drafts from them with zero setup.
 export const SEED = {
-  version: 8,
+  version: 9,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -16,16 +19,15 @@ export const SEED = {
     { id: 'skratch-hydration-mix', name: 'Skratch Labs Sport Hydration Mix (scoop)', kcal: 80, carbsG: 19, fatG: 0, proteinG: 0, weightOz: 0.78, slotHint: 'electrolytes' },
 
     // Breakfast
-    { id: 'peak-strawberry-granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: null, slotHint: 'breakfast' },
+    { id: 'peak-strawberry-granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: null, slotHint: 'breakfast', favorite: true },
     { id: 'justins-honey-pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: null, slotHint: 'breakfast' },
 
     // Mains (lunch/dinner)
-    { id: 'peak-homestyle-chicken-rice', name: 'Peak Refuel Homestyle Chicken & Rice', kcal: 740, carbsG: 61, fatG: null, proteinG: 40, weightOz: null, slotHint: 'dinner', prep: 'cook' },
-    { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, slotHint: 'dinner', prep: 'cook' },
-    { id: 'peak-chicken-coconut-curry', name: 'Peak Refuel Chicken Coconut Curry', kcal: 850, carbsG: 66, fatG: 44, proteinG: 44, weightOz: 5.36, slotHint: 'dinner', prep: 'cook' },
-    { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner', prep: 'cook' },
-    { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner', prep: 'cook' },
-    { id: 'toasty-chee', name: 'Lance ToastChee', kcal: 220, carbsG: 25, fatG: 10, proteinG: 5, weightOz: null, slotHint: 'lunch' },
+    { id: 'peak-homestyle-chicken-rice', name: 'Peak Refuel Homestyle Chicken & Rice', kcal: 740, carbsG: 61, fatG: null, proteinG: 40, weightOz: null, slotHint: 'dinner', prep: 'cook', favorite: true },
+    { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, slotHint: 'dinner', prep: 'cook', favorite: true },
+    { id: 'peak-chicken-coconut-curry', name: 'Peak Refuel Chicken Coconut Curry', kcal: 850, carbsG: 66, fatG: 44, proteinG: 44, weightOz: 5.36, slotHint: 'dinner', prep: 'cook', favorite: true },
+    { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner', prep: 'cook', favorite: true },
+    { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner', prep: 'cook', favorite: true },
 
     // Peak Refuel meals catalog (reference/peak-refuel-catalog.md, label values)
     { id: 'peak-chicken-alfredo', name: 'Peak Refuel Chicken Alfredo', kcal: 830, carbsG: 46, fatG: 46, proteinG: 48, weightOz: 4.93, slotHint: 'dinner', prep: 'cook' },
@@ -249,6 +251,21 @@ export function applySeedMigrations(state) {
       if (seeded?.prep === 'cook' && f.prep === undefined) f.prep = 'cook'
     }
   }
+  if (from < 9) {
+    // Full reset (Lawrence 2026-07-20: "one wipe of the locally stored memory
+    // of the foods … and a fully wipe of the meal plans"). The library
+    // rebuilds from seed exactly — this is the one migration allowed to drop
+    // user foods and resurrect past deletions — and every planned day is
+    // cleared so stale drafts can't keep old items alive. Trips, gear, and
+    // gear packing survive; redrafting stays a user action.
+    state.library = SEED.foods.map(f => ({ favorite: false, ...f }))
+    for (const trip of state.trips) {
+      for (const day of trip.days) {
+        delete day.meals
+        delete day.packed
+      }
+    }
+  }
   return sweepRetired(state, () => { state.seedVersion = SEED.version })
 }
 
@@ -262,7 +279,7 @@ function sweepRetired(state, after) {
     'diy-no-bake-bar', 'dry-cereal-banana', 'almond-butter', 'rosemary-turkey-stick',
     'landjaeger-sticks', 'tailwind-wilderness-athlete', 'mh-chicken-fajita-bowl-2svg',
     'cheez-it-pack', 'alpine-spiced-apple-cider', 'belvita', 'austin-pb-crackers',
-    'powerbar', 'fritos-2svg',
+    'powerbar', 'fritos-2svg', 'toasty-chee',
   ])
   const stillReferenced = new Set()
   for (const trip of state.trips) {
