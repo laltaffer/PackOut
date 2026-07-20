@@ -7,7 +7,7 @@
 // commodity items removed. weightOz is packed ounces where known, else null.
 
 export const SEED = {
-  version: 5,
+  version: 6,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -48,6 +48,8 @@ export const SEED = {
     { id: 'gu-energy-gel', name: 'GU Energy Gel', kcal: 100, carbsG: 22, fatG: null, proteinG: 0, weightOz: null, slotHint: 'snack' },
     { id: 'honey-stinger-waffle', name: 'Honey Stinger Waffle', kcal: 150, carbsG: 19, fatG: null, proteinG: 1, weightOz: null, slotHint: 'snack' },
     { id: 'packaroon', name: 'Packaroon', kcal: 160, carbsG: 12, fatG: 12, proteinG: 2, weightOz: null, slotHint: 'snack' },
+    // Skratch Labs (label image, 2026-07-20): 80 kcal/25g serving, 2 servings/packet
+    { id: 'skratch-energy-chews', name: 'Skratch Labs Energy Chews (packet)', kcal: 160, carbsG: 38, fatG: 0, proteinG: 0, weightOz: 1.76, slotHint: 'snack' },
   ],
 }
 
@@ -217,6 +219,13 @@ export function applySeedMigrations(state) {
     const have = new Set(state.library.map(f => f.id))
     for (const f of SEED.foods) {
       if (ADDED_V5.includes(f.id) && !have.has(f.id)) state.library.push({ ...f, favorite: false })
+    }
+  }
+  if (from < 6) {
+    // Additive: Skratch Labs Energy Chews (Lawrence's source, 2026-07-20).
+    if (!state.library.some(f => f.id === 'skratch-energy-chews')) {
+      const f = SEED.foods.find(x => x.id === 'skratch-energy-chews')
+      state.library.push({ ...f, favorite: false })
     }
   }
   state.seedVersion = SEED.version
