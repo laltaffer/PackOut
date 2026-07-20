@@ -47,6 +47,15 @@ concept — readiness is about what's packed, not what's owned.
 The Trip-level "am I ready?" view: every Day Fueled, every planned item Packed (food
 now; gear and pre-trip Actions when Milestone 2 lands).
 
+## Draft
+A proposed meal plan for a Day (or all empty Days) that the user edits rather than
+building from nothing. Two strategies from the same inputs (targets, Staples,
+Favorites, library): **Usual Draft** (P0) — habit-replay: Staples/Favorites fill
+their usual slots first, then ranked fills top up toward targets, remaining gaps
+flagged via the Verdict; **Optimized Draft** (alternate) — nutrition-optimal: solve
+for targets with weight-efficient foods, habits as tie-breakers only. Both
+deterministic — no LLM.
+
 ## Favorite
 A food the user has explicitly marked as preferred. Suggestions rank Favorites first.
 

@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays } from './engine.js'
 import { load, save, newId, corruptInfo } from './store.js'
 import { applySeedMigrations } from './seed.js'
 
@@ -270,6 +270,13 @@ function renderTrip(trip) {
         <a class="btn" href="#/trip/${trip.id}/pack">Pack Plan</a>
         <a class="btn" href="#/trip/${trip.id}/ready">Readiness</a>
       </nav>
+      ${trip.days.some(d => dayTotals(d, state.library).kcal === 0) ? `
+      <div class="draft-all-row">
+        <button class="btn btn-primary" id="draft-all">
+          Draft ${trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length} empty day${trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length > 1 ? 's' : ''}
+        </button>
+        <span class="draft-note">Proposes meals from your usual food; planned days untouched.</span>
+      </div>` : ''}
       <ol class="days">
         ${trip.days.map((day, i) => dayCard(trip, day, i)).join('')}
       </ol>
@@ -279,6 +286,15 @@ function renderTrip(trip) {
     trip.days[Number(sel.dataset.day)].intensity = sel.value
     commit()
   }))
+  const draftAll = document.getElementById('draft-all')
+  if (draftAll) draftAll.addEventListener('click', () => {
+    const staples = stapleIds(state.trips)
+    for (const { dayIndex, meals } of draftEmptyDays(trip, state.library, staples, 'usual')) {
+      trip.days[dayIndex].meals = meals
+      delete trip.days[dayIndex].packed
+    }
+    commit()
+  })
 }
 
 function dayCard(trip, day, i) {
@@ -419,6 +435,15 @@ function renderDay(trip, i) {
         <div><dt>Weight</dt><dd>${totals.weightOz} oz${totals.missingWeightCount ? ` <span class="floor">+${totals.missingWeightCount} unweighed</span>` : ''}</dd></div>
         ${totals.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${totals.calsPerOz}</dd></div>` : ''}
       </dl>
+      ${totals.kcal === 0 ? `
+      <section class="draft-panel">
+        <p class="draft-lead">Let PackOut propose this day from your usual food — then edit anything.</p>
+        <div class="backup-actions">
+          <button class="btn btn-primary" data-draft="usual">Draft this day</button>
+          <button class="btn" data-draft="optimized">Optimized draft</button>
+        </div>
+        <p class="draft-note">…or build it manually below.</p>
+      </section>` : ''}
       ${verdictBlock}
       ${slotSection(trip, i, 'electrolytes', day.meals.electrolytes, '')}
       ${slotSection(trip, i, 'breakfast', day.meals.breakfast, `${st.breakfast.kcalMin}–${st.breakfast.kcalMax} kcal · ${st.breakfast.carbsMinG}–${st.breakfast.carbsMaxG}g C`)}
@@ -454,6 +479,12 @@ function renderDay(trip, i) {
         <button class="btn" id="copy-apply">Copy</button>
       </section>` : ''}
       ${importOptions(trip, i)}
+      ${totals.kcal > 0 ? `
+      <section class="copy-day draft-redo">
+        <span class="draft-note">Re-propose this day (replaces the current plan):</span>
+        <button class="btn" data-draft="usual">Draft</button>
+        <button class="btn" data-draft="optimized">Optimized</button>
+      </section>` : ''}
     </section>
   `))
 
@@ -465,6 +496,19 @@ function renderDay(trip, i) {
     day.meals.snacks.push({ items: [] })
     commit()
   })
+  app.querySelectorAll('[data-draft]').forEach(btn => btn.addEventListener('click', () => {
+    const current = dayTotals(day, state.library)
+    if (current.kcal > 0) {
+      const count = dayPackList(day, state.library).length
+      const ok = confirm(
+        `Day ${i + 1} already has ${count} item${count > 1 ? 's' : ''} planned — ` +
+        `drafting replaces that work and resets this day's packed marks.`)
+      if (!ok) return
+    }
+    day.meals = draftDay(trip, i, state.library, stapleIds(state.trips), btn.dataset.draft)
+    delete day.packed
+    commit()
+  }))
   wireImportDay(trip, i, day)
   const copyApply = document.getElementById('copy-apply')
   if (copyApply) copyApply.addEventListener('click', () => {

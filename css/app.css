@@ -468,6 +468,25 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
   position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0;
 }
 
+/* ---------- draft assistant ---------- */
+
+.draft-panel {
+  border: 2px solid var(--ink); border-left: 8px solid var(--flag);
+  padding: 0.9rem 1rem; margin-bottom: 1rem;
+  display: grid; gap: 0.6rem; justify-items: start;
+}
+
+.draft-lead { font-weight: 700; }
+
+.draft-note { color: var(--ink-soft); font-size: 0.85rem; }
+
+.draft-all-row {
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  margin: -0.4rem 0 1.1rem;
+}
+
+.draft-redo { align-items: center; flex-wrap: wrap; }
+
 /* ---------- gear + actions ---------- */
 
 .gear-stats { color: var(--ink-soft); margin-bottom: 0.6rem; }

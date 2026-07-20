@@ -225,6 +225,151 @@ export function readiness(trip, library, gearLibrary = []) {
   }
 }
 
+// ---------- Draft assistant (spec issue #14) ----------
+// Deterministic proposals. 'usual' replays Staples/Favorites into their hinted
+// slots then tops up toward the kcal target; 'optimized' solves for targets
+// with weight-efficient foods, habits as tie-breakers. Never crosses the 115%
+// Heavy line; remaining gaps are the Verdict's job to flag.
+
+const DRAFT_SNACK_CAP = 10
+// A dinner "main" needs substance; lighter dinner-hinted items (cider, cocoa)
+// are add-ons and never proposed as the day's one big meal.
+const MAIN_MIN_KCAL = 400
+
+function dinnerMains(library) {
+  const hinted = library.filter(f => f.slotHint === 'dinner')
+  const substantial = hinted.filter(f => f.kcal >= MAIN_MIN_KCAL)
+  return substantial.length ? substantial : hinted
+}
+
+function rankHabit(foods, staples) {
+  return [...foods].sort((a, b) =>
+    ((b.favorite === true) - (a.favorite === true)) ||
+    (staples.has(b.id) - staples.has(a.id)) ||
+    a.name.localeCompare(b.name))
+}
+
+function rankByDensity(foods, staples, metric) {
+  const d = f => f.weightOz ? (metric === 'protein' ? (f.proteinG ?? 0) : f.kcal) / f.weightOz : 0
+  return [...foods].sort((a, b) =>
+    (d(b) - d(a)) ||
+    ((b.favorite === true) - (a.favorite === true)) ||
+    (staples.has(b.id) - staples.has(a.id)) ||
+    a.name.localeCompare(b.name))
+}
+
+function pickMain(mains, avoid) {
+  if (mains.length === 0) return null
+  return mains.find(m => !avoid.has(m.id)) ?? mains[0]
+}
+
+function adjacentMains(trip, dayIndex) {
+  const avoid = new Set()
+  for (const j of [dayIndex - 1, dayIndex + 1]) {
+    const id = trip.days[j]?.meals?.dinner?.[0]?.foodId
+    if (id) avoid.add(id)
+  }
+  return avoid
+}
+
+function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, mainsOverride = null) {
+  const meals = emptyMeals()
+  if (library.length === 0) return meals
+  const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium')
+  const target = targets.kcal.target
+  const ceiling = HEAVY_KCAL_PCT * target
+  const proteinFloor = trip.weightLbs * PROTEIN_FLOOR_G_PER_LB
+  const hinted = slot => library.filter(f => f.slotHint === slot)
+  let kcal = 0
+  let protein = 0
+
+  const add = (slot, food) => {
+    meals[slot].push({ foodId: food.id, qty: 1 })
+    kcal += food.kcal
+    protein += food.proteinG ?? 0
+  }
+
+  // Base slots. Usual: replay every Favorite/Staple in its slot (that IS the
+  // habit), else the top-ranked candidate. Optimized: one efficient pick each.
+  for (const slot of ['electrolytes', 'breakfast', 'lunch']) {
+    const pool = hinted(slot)
+    if (pool.length === 0) continue
+    if (strategy === 'usual') {
+      const habits = rankHabit(pool.filter(f => f.favorite || staples.has(f.id)), staples)
+      for (const f of habits.length ? habits : [rankHabit(pool, staples)[0]]) add(slot, f)
+    } else {
+      add(slot, rankByDensity(pool, staples, 'kcal')[0])
+    }
+  }
+  const mains = mainsOverride ?? (strategy === 'usual'
+    ? rankHabit(dinnerMains(library), staples)
+    : rankByDensity(dinnerMains(library), staples, 'kcal'))
+  const main = pickMain(mains, avoidMains)
+  if (main) add('dinner', main)
+
+  // Top-up: snack bundles until the kcal target AND protein floor are both
+  // met, the cap hits, or nothing fits under the Heavy ceiling. Protein gaps
+  // are closed first — ranked by ABSOLUTE protein (weight-unknown items must
+  // not sink) and free to repeat, since snacks repeat on real trips. The
+  // remaining kcal gap then fills with round-robin variety.
+  const snackPool = hinted('snack')
+  const byProtein = [...snackPool].sort((a, b) =>
+    ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
+  let guard = 0
+  while ((kcal < target || protein < proteinFloor) &&
+         meals.snacks.length < DRAFT_SNACK_CAP && snackPool.length > 0 && guard < 50) {
+    guard += 1
+    let next
+    if (protein < proteinFloor) {
+      next = byProtein.find(f => (f.proteinG ?? 0) > 0 && kcal + f.kcal <= ceiling)
+      if (!next && kcal >= target) break // no protein candidate fits — gap stays, Verdict flags it
+    }
+    if (!next) {
+      const ordered = strategy === 'usual'
+        ? rankHabit(snackPool, staples)
+        : rankByDensity(snackPool, staples, 'kcal')
+      const idx = meals.snacks.length % ordered.length
+      const rotation = [...ordered.slice(idx), ...ordered.slice(0, idx)]
+      next = rotation.find(f => kcal + f.kcal <= ceiling)
+    }
+    if (!next) break
+    meals.snacks.push({ items: [{ foodId: next.id, qty: 1 }] })
+    kcal += next.kcal
+    protein += next.proteinG ?? 0
+  }
+  return meals
+}
+
+export function draftDay(trip, dayIndex, library, staples, strategy = 'usual') {
+  return buildDraft(trip, dayIndex, library, staples, strategy, adjacentMains(trip, dayIndex))
+}
+
+export function draftEmptyDays(trip, library, staples, strategy = 'usual') {
+  const out = []
+  let prevMain = null
+  trip.days.forEach((day, dayIndex) => {
+    const existingMain = day.meals?.dinner?.[0]?.foodId
+    if (dayTotals(day, library).kcal > 0) {
+      prevMain = existingMain ?? prevMain
+      return
+    }
+    const avoid = new Set(adjacentMains(trip, dayIndex))
+    if (prevMain) avoid.add(prevMain)
+    // Rotate the starting point through the ranked mains so a week cycles
+    // them instead of alternating between the top two.
+    const mains = strategy === 'usual'
+      ? rankHabit(dinnerMains(library), staples)
+      : rankByDensity(dinnerMains(library), staples, 'kcal')
+    const rotated = mains.length
+      ? [...mains.slice(out.length % mains.length), ...mains.slice(0, out.length % mains.length)]
+      : null
+    const meals = buildDraft(trip, dayIndex, library, staples, strategy, avoid, rotated)
+    out.push({ dayIndex, meals })
+    prevMain = meals.dinner[0]?.foodId ?? prevMain
+  })
+  return out
+}
+
 // Backup import validation. Returns {ok:true} or {ok:false, error} — never
 // throws. Deep on purpose: an accepted import replaces the whole state, so
 // anything that could crash a render or reach the DOM as a non-number is
