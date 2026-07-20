@@ -390,6 +390,67 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .form-screen form small { color: var(--ink-soft); }
 
+/* ---------- outputs ---------- */
+
+.trip-outputs { display: flex; gap: 0.5rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
+
+.trip-outputs .btn { font-size: 0.85rem; padding: 0.4rem 0.8rem; }
+
+.check-list { list-style: none; padding: 0; display: grid; }
+
+.check-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.45rem 0; border-bottom: 1px solid var(--line);
+  font-weight: 400; cursor: pointer;
+}
+
+.check-row input[type="checkbox"] {
+  width: 22px; height: 22px; min-height: 22px;
+  accent-color: var(--flag); flex-shrink: 0;
+}
+
+.check-name { flex: 1; }
+
+.check-name.is-done { text-decoration: line-through; color: var(--ink-soft); }
+
+.check-qty { color: var(--ink-soft); font-size: 0.75rem; }
+
+.pack-day { margin-bottom: 1.2rem; }
+
+.pack-day h2 {
+  font-family: var(--display); font-weight: 900; text-transform: uppercase;
+  font-size: 1.25rem; border-top: 3px solid var(--ink); padding-top: 0.5rem;
+}
+
+.pack-day .day-date { font-size: 0.7rem; margin-left: 0.4rem; }
+
+.empty-line { color: var(--ink-soft); padding: 0.35rem 0; }
+
+.ready-verdict {
+  font-family: var(--display); font-weight: 900; text-transform: uppercase;
+  font-size: 1.8rem; margin-bottom: 1rem;
+}
+
+.ready-block { margin-bottom: 1.1rem; }
+
+.ready-block h2 {
+  font-family: var(--display); font-weight: 900; text-transform: uppercase;
+  font-size: 1.15rem;
+}
+
+.ready-block a, .unpacked a { color: var(--v-short); }
+
+.unpacked { list-style: none; padding: 0.3rem 0 0; font-size: 0.72rem; display: grid; gap: 0.25rem; }
+
+/* ---------- print ---------- */
+
+@media print {
+  .masthead, .crumb, .btn, .btn-quiet, .btn-add { display: none !important; }
+  body { background: #fff; color: #000; }
+  .check-row, .food-row, .entry { border-color: #999; }
+  main { max-width: none; padding: 0; }
+}
+
 /* ---------- wider screens ---------- */
 
 @media (min-width: 700px) {

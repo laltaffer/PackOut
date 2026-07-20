@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, groceryList, dayPackList, readiness } from './engine.js'
 import { load, save, newId } from './store.js'
 
 const app = document.getElementById('app')
@@ -16,6 +16,15 @@ function route() {
   if (pickMatch) {
     const trip = state.trips.find(t => t.id === pickMatch[1])
     if (trip && trip.days[Number(pickMatch[2])]) return renderPicker(trip, Number(pickMatch[2]), pickMatch[3])
+  }
+  const outMatch = hash.match(/^#\/trip\/(.+)\/(grocery|pack|ready)$/)
+  if (outMatch) {
+    const trip = state.trips.find(t => t.id === outMatch[1])
+    if (trip) {
+      if (outMatch[2] === 'grocery') return renderGrocery(trip)
+      if (outMatch[2] === 'pack') return renderPack(trip)
+      return renderReady(trip)
+    }
   }
   const dayMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)$/)
   if (dayMatch) {
@@ -171,6 +180,11 @@ function renderTrip(trip) {
         <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs</p>
         ${rollup}
       </div>
+      <nav class="trip-outputs">
+        <a class="btn" href="#/trip/${trip.id}/grocery">Grocery</a>
+        <a class="btn" href="#/trip/${trip.id}/pack">Pack Plan</a>
+        <a class="btn" href="#/trip/${trip.id}/ready">Readiness</a>
+      </nav>
       <ol class="days">
         ${trip.days.map((day, i) => dayCard(trip, day, i)).join('')}
       </ol>
@@ -451,6 +465,113 @@ function renderPicker(trip, i, slotKey) {
     pickerSearch = ''
     location.hash = `#/trip/${trip.id}/day/${i}`
   }))
+}
+
+// ---------- outputs: grocery, pack plan, readiness ----------
+
+function renderGrocery(trip) {
+  trip.groceryChecked ??= {}
+  const rows = groceryList(trip, state.library)
+  app.replaceChildren(el(`
+    <section class="output">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <div class="dashboard-head">
+        <h1>Grocery</h1>
+        <button class="btn" id="print">Print</button>
+      </div>
+      ${rows.length === 0 ? '<p class="empty">Nothing planned yet — build some days first.</p>' : `
+      <ul class="check-list">
+        ${rows.map(r => `
+          <li>
+            <label class="check-row">
+              <input type="checkbox" data-check="${r.foodId}" ${trip.groceryChecked[r.foodId] ? 'checked' : ''}>
+              <span class="check-name ${trip.groceryChecked[r.foodId] ? 'is-done' : ''}">${esc(r.name)}</span>
+              <span class="check-qty mono">×${r.count}</span>
+            </label>
+          </li>`).join('')}
+      </ul>`}
+    </section>
+  `))
+  wirePrint()
+  app.querySelectorAll('[data-check]').forEach(cb => cb.addEventListener('change', () => {
+    trip.groceryChecked[cb.dataset.check] = cb.checked
+    commit()
+  }))
+}
+
+function renderPack(trip) {
+  app.replaceChildren(el(`
+    <section class="output">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <div class="dashboard-head">
+        <h1>Pack Plan</h1>
+        <button class="btn" id="print">Print</button>
+      </div>
+      ${trip.days.map((day, i) => {
+        const items = dayPackList(day, state.library)
+        return `
+        <section class="pack-day">
+          <h2>Day ${i + 1} <span class="day-date">${dayDate(trip, i)}</span></h2>
+          ${items.length === 0 ? '<p class="empty-line">Nothing planned.</p>' : `
+          <ul class="check-list">
+            ${items.map(it => `
+              <li>
+                <label class="check-row">
+                  <input type="checkbox" data-pack="${i}:${it.foodId}" ${day.packed?.[it.foodId] ? 'checked' : ''}>
+                  <span class="check-name ${day.packed?.[it.foodId] ? 'is-done' : ''}">${esc(it.name)}</span>
+                  <span class="check-qty mono">×${it.qty}</span>
+                </label>
+              </li>`).join('')}
+          </ul>`}
+        </section>`
+      }).join('')}
+    </section>
+  `))
+  wirePrint()
+  app.querySelectorAll('[data-pack]').forEach(cb => cb.addEventListener('change', () => {
+    const [i, foodId] = cb.dataset.pack.split(':')
+    const day = trip.days[Number(i)]
+    day.packed ??= {}
+    day.packed[foodId] = cb.checked
+    commit()
+  }))
+}
+
+function renderReady(trip) {
+  const r = readiness(trip, state.library)
+  const foodLine = r.fueled
+    ? `Every day Fueled${r.heavyDays.length ? ` (${r.heavyDays.map(i => `Day ${i + 1}`).join(', ')} heavy)` : ''}.`
+    : `Short: ${r.shortDays.map(i => `<a href="#/trip/${trip.id}/day/${i}">Day ${i + 1}</a>`).join(', ')}.`
+  app.replaceChildren(el(`
+    <section class="output">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <div class="dashboard-head">
+        <h1>Readiness</h1>
+        <button class="btn" id="print">Print</button>
+      </div>
+      <p class="ready-verdict ${r.ready ? 'rollup-fueled' : 'rollup-short'}">
+        ${r.ready ? 'READY. Go hunt.' : 'Not ready yet.'}
+      </p>
+      <section class="ready-block">
+        <h2>Food</h2>
+        <p>${r.totalItems === 0 ? 'Nothing planned yet.' : foodLine}</p>
+      </section>
+      <section class="ready-block">
+        <h2>Packing</h2>
+        <p>${r.packedItems} of ${r.totalItems} items packed.</p>
+        ${r.unpacked.length ? `
+        <ul class="unpacked mono">
+          ${r.unpacked.map(u => `<li><a href="#/trip/${trip.id}/pack">Day ${u.day + 1}</a> — ${esc(u.name)} ×${u.qty}</li>`).join('')}
+        </ul>` : ''}
+      </section>
+    </section>
+  `))
+  wirePrint()
+}
+
+function wirePrint() {
+  const b = document.getElementById('print')
+  if (b) b.addEventListener('click', () => window.print())
 }
 
 // ---------- food library ----------

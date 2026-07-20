@@ -67,12 +67,7 @@ export function sumEntries(entries, library) {
 }
 
 export function dayTotals(day, library) {
-  const meals = day.meals ?? emptyMeals()
-  const flat = [
-    ...meals.electrolytes, ...meals.breakfast, ...meals.lunch, ...meals.dinner,
-    ...meals.snacks.flatMap(s => s.items),
-  ]
-  return sumEntries(flat, library)
+  return sumEntries(flatEntries(day), library)
 }
 
 // Verdict thresholds (SPEC): Fueled = ≥90% kcal target AND protein ≥ floor;
@@ -125,6 +120,67 @@ export function stapleIds(trips) {
     if (n >= 3 && n >= plannedDays / 2) out.add(id)
   }
   return out
+}
+
+function flatEntries(day) {
+  const meals = day.meals ?? emptyMeals()
+  return [
+    ...meals.electrolytes, ...meals.breakfast, ...meals.lunch, ...meals.dinner,
+    ...meals.snacks.flatMap(s => s.items),
+  ]
+}
+
+// Grocery list: every planned food across the trip, one line per food, counts summed.
+export function groceryList(trip, library) {
+  const byId = new Map(library.map(f => [f.id, f]))
+  const counts = new Map()
+  for (const day of trip.days) {
+    for (const { foodId, qty } of flatEntries(day)) {
+      if (!byId.has(foodId)) continue
+      counts.set(foodId, (counts.get(foodId) ?? 0) + qty)
+    }
+  }
+  return [...counts]
+    .map(([foodId, count]) => ({ foodId, name: byId.get(foodId).name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// One day's physical pack list: duplicates merged, quantities kept.
+export function dayPackList(day, library) {
+  const byId = new Map(library.map(f => [f.id, f]))
+  const qtys = new Map()
+  for (const { foodId, qty } of flatEntries(day)) {
+    if (!byId.has(foodId)) continue
+    qtys.set(foodId, (qtys.get(foodId) ?? 0) + qty)
+  }
+  return [...qtys]
+    .map(([foodId, qty]) => ({ foodId, name: byId.get(foodId).name, qty }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// Readiness: every Day Fueled (heavy is a warning, not a blocker) and every
+// planned item Packed. Blockers are named, not counted.
+export function readiness(trip, library) {
+  const verdict = tripVerdict(trip, library)
+  let totalItems = 0
+  let packedItems = 0
+  const unpacked = []
+  trip.days.forEach((day, i) => {
+    for (const item of dayPackList(day, library)) {
+      totalItems += 1
+      if (day.packed?.[item.foodId]) packedItems += 1
+      else unpacked.push({ day: i, ...item })
+    }
+  })
+  return {
+    ready: verdict.fueled && unpacked.length === 0 && totalItems > 0,
+    fueled: verdict.fueled,
+    shortDays: verdict.shortDays,
+    heavyDays: verdict.heavyDays,
+    totalItems,
+    packedItems,
+    unpacked,
+  }
 }
 
 // Gap-closing suggestions, ranked: Favorite, then Staple, then how well the
