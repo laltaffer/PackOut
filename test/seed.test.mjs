@@ -140,10 +140,19 @@ test('v7 adds Skratch hydration (per scoop) and Goldbears normalized per ounce',
   assert.ok(!s.library.some(f => f.id === 'packaroon'), 'still never resurrects deletions')
 })
 
-test('migration is a no-op at current seed version', () => {
-  const st = { schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [{ id: 'gummy-bears-2svg', name: 'Gummy Bears (2 svg)', kcal: 300 }] }
+test('retired sweep is standing: unreferenced sample items vanish even at current version', () => {
+  const st = {
+    schemaVersion: 1, seedVersion: SEED.version, trips: [],
+    library: [
+      { id: 'gummy-bears-2svg', name: 'Gummy Bears (2 svg)', kcal: 300, favorite: false },
+      { id: 'powerbar', name: 'PowerBar', kcal: 230, favorite: true }, // starred = explicit keep
+      { id: 'custom-1', name: 'My Jerky', kcal: 500, favorite: false }, // user-created, untouchable
+    ],
+  }
   const s = applySeedMigrations(st)
-  assert.ok(s.library.some(f => f.id === 'gummy-bears-2svg'), 'no deletions once migrated')
+  assert.ok(!s.library.some(f => f.id === 'gummy-bears-2svg'), 'retired + unreferenced + unstarred → gone')
+  assert.ok(s.library.some(f => f.id === 'powerbar'), 'starred retired item survives')
+  assert.ok(s.library.some(f => f.id === 'custom-1'), 'user foods never swept')
 })
 
 test('every seed food honors the data contract', () => {

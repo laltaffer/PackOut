@@ -7,7 +7,7 @@
 // commodity items removed. weightOz is packed ounces where known, else null.
 
 export const SEED = {
-  version: 7,
+  version: 8,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -20,28 +20,28 @@ export const SEED = {
     { id: 'justins-honey-pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: null, slotHint: 'breakfast' },
 
     // Mains (lunch/dinner)
-    { id: 'peak-homestyle-chicken-rice', name: 'Peak Refuel Homestyle Chicken & Rice', kcal: 740, carbsG: 61, fatG: null, proteinG: 40, weightOz: null, slotHint: 'dinner' },
-    { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, slotHint: 'dinner' },
-    { id: 'peak-chicken-coconut-curry', name: 'Peak Refuel Chicken Coconut Curry', kcal: 850, carbsG: 66, fatG: 44, proteinG: 44, weightOz: 5.36, slotHint: 'dinner' },
-    { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner' },
-    { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner' },
+    { id: 'peak-homestyle-chicken-rice', name: 'Peak Refuel Homestyle Chicken & Rice', kcal: 740, carbsG: 61, fatG: null, proteinG: 40, weightOz: null, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-chicken-coconut-curry', name: 'Peak Refuel Chicken Coconut Curry', kcal: 850, carbsG: 66, fatG: 44, proteinG: 44, weightOz: 5.36, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner', prep: 'cook' },
     { id: 'toasty-chee', name: 'Lance ToastChee', kcal: 220, carbsG: 25, fatG: 10, proteinG: 5, weightOz: null, slotHint: 'lunch' },
 
     // Peak Refuel meals catalog (reference/peak-refuel-catalog.md, label values)
-    { id: 'peak-chicken-alfredo', name: 'Peak Refuel Chicken Alfredo', kcal: 830, carbsG: 46, fatG: 46, proteinG: 48, weightOz: 4.93, slotHint: 'dinner' },
-    { id: 'peak-breakfast-skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, slotHint: 'breakfast' },
-    { id: 'peak-chicken-teriyaki-rice', name: 'Peak Refuel Chicken Teriyaki Rice', kcal: 580, carbsG: 78, fatG: 8, proteinG: 40, weightOz: 4.66, slotHint: 'dinner' },
-    { id: 'peak-sweet-pork-rice', name: 'Peak Refuel Sweet Pork & Rice', kcal: 800, carbsG: 125, fatG: 17, proteinG: 40, weightOz: 6.07, slotHint: 'dinner' },
-    { id: 'peak-white-chicken-chili', name: 'Peak Refuel White Chicken Chili', kcal: 760, carbsG: 53, fatG: 44, proteinG: 41, weightOz: 4.94, slotHint: 'dinner' },
-    { id: 'peak-venison-casserole', name: 'Peak Refuel Venison Country Casserole', kcal: 920, carbsG: 69, fatG: 57, proteinG: 40, weightOz: 6.20, slotHint: 'dinner' },
-    { id: 'peak-bison-bowl', name: 'Peak Refuel Backcountry Bison Bowl', kcal: 930, carbsG: 106, fatG: 40, proteinG: 42, weightOz: 7.05, slotHint: 'dinner' },
-    { id: 'peak-buffalo-goulash', name: 'Peak Refuel MeatEater Buffalo Goulash', kcal: 890, carbsG: 79, fatG: 40, proteinG: 55, weightOz: 4.94, slotHint: 'dinner' },
-    { id: 'peak-three-bean-chili-mac', name: 'Peak Refuel Three Bean Chili Mac', kcal: 610, carbsG: 119, fatG: 3.5, proteinG: 30, weightOz: 4.79, slotHint: 'dinner' },
+    { id: 'peak-chicken-alfredo', name: 'Peak Refuel Chicken Alfredo', kcal: 830, carbsG: 46, fatG: 46, proteinG: 48, weightOz: 4.93, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-breakfast-skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'peak-chicken-teriyaki-rice', name: 'Peak Refuel Chicken Teriyaki Rice', kcal: 580, carbsG: 78, fatG: 8, proteinG: 40, weightOz: 4.66, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-sweet-pork-rice', name: 'Peak Refuel Sweet Pork & Rice', kcal: 800, carbsG: 125, fatG: 17, proteinG: 40, weightOz: 6.07, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-white-chicken-chili', name: 'Peak Refuel White Chicken Chili', kcal: 760, carbsG: 53, fatG: 44, proteinG: 41, weightOz: 4.94, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-venison-casserole', name: 'Peak Refuel Venison Country Casserole', kcal: 920, carbsG: 69, fatG: 57, proteinG: 40, weightOz: 6.20, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-bison-bowl', name: 'Peak Refuel Backcountry Bison Bowl', kcal: 930, carbsG: 106, fatG: 40, proteinG: 42, weightOz: 7.05, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-buffalo-goulash', name: 'Peak Refuel MeatEater Buffalo Goulash', kcal: 890, carbsG: 79, fatG: 40, proteinG: 55, weightOz: 4.94, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-three-bean-chili-mac', name: 'Peak Refuel Three Bean Chili Mac', kcal: 610, carbsG: 119, fatG: 3.5, proteinG: 30, weightOz: 4.79, slotHint: 'dinner', prep: 'cook' },
     { id: 'peak-mountain-berry-granola', name: 'Peak Refuel Mountain Berry Granola', kcal: 570, carbsG: 108, fatG: 1.5, proteinG: 13, weightOz: 5.07, slotHint: 'breakfast' },
-    { id: 'peak-butternut-dal-bhat', name: 'Peak Refuel Butternut Dal Bhat', kcal: 870, carbsG: 105, fatG: 43, proteinG: 23, weightOz: 5.85, slotHint: 'dinner' },
-    { id: 'peak-biscuits-gravy', name: 'Peak Refuel Biscuits & Sausage Gravy', kcal: 1100, carbsG: 51, fatG: 85, proteinG: 34, weightOz: 6.77, slotHint: 'breakfast' },
-    { id: 'peak-peaches-oats', name: 'Peak Refuel Creamy Peaches and Oats', kcal: 1010, carbsG: 128, fatG: 42, proteinG: 30, weightOz: 7.05, slotHint: 'breakfast' },
-    { id: 'peak-bison-ranch-mashers', name: 'Peak Refuel Bison Ranch Mashers', kcal: 1120, carbsG: 94, fatG: 66, proteinG: 40, weightOz: 7.40, slotHint: 'dinner' },
+    { id: 'peak-butternut-dal-bhat', name: 'Peak Refuel Butternut Dal Bhat', kcal: 870, carbsG: 105, fatG: 43, proteinG: 23, weightOz: 5.85, slotHint: 'dinner', prep: 'cook' },
+    { id: 'peak-biscuits-gravy', name: 'Peak Refuel Biscuits & Sausage Gravy', kcal: 1100, carbsG: 51, fatG: 85, proteinG: 34, weightOz: 6.77, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'peak-peaches-oats', name: 'Peak Refuel Creamy Peaches and Oats', kcal: 1010, carbsG: 128, fatG: 42, proteinG: 30, weightOz: 7.05, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'peak-bison-ranch-mashers', name: 'Peak Refuel Bison Ranch Mashers', kcal: 1120, carbsG: 94, fatG: 66, proteinG: 40, weightOz: 7.40, slotHint: 'dinner', prep: 'cook' },
 
     // Snacks
     { id: 'pro-bolt-chews', name: 'ProBar Bolt Chews', kcal: 90, carbsG: 23, fatG: null, proteinG: null, weightOz: null, slotHint: 'snack' },
@@ -170,7 +170,7 @@ const KILLED_V2 = [
 
 export function applySeedMigrations(state) {
   const from = state.seedVersion ?? 1
-  if (from >= SEED.version) return state
+  if (from >= SEED.version) return sweepRetired(state)
   if (from < 2) {
     const referenced = new Set()
     for (const trip of state.trips) {
@@ -241,6 +241,42 @@ export function applySeedMigrations(state) {
       }
     }
   }
-  state.seedVersion = SEED.version
+  if (from < 8) {
+    // Stamp prep:'cook' on hot-water meals users already have (only where the
+    // field is unset, so user-set values win).
+    for (const f of state.library) {
+      const seeded = SEED.foods.find(x => x.id === f.id)
+      if (seeded?.prep === 'cook' && f.prep === undefined) f.prep = 'cook'
+    }
+  }
+  return sweepRetired(state, () => { state.seedVersion = SEED.version })
+}
+
+// Standing sweep (every load, not version-gated): retired sample-tab items
+// disappear once nothing references them — unless the user starred them,
+// which is an explicit keep. Never touches user-created foods.
+function sweepRetired(state, after) {
+  const RETIRED = new Set([
+    'instant-oats-2pkg', 'dry-fruit', 'protein-powder', 'tortillas-2', 'salami-2oz',
+    'choc-chip-cookies-5', 'gummy-bears-2svg', 'pb-pretzels-2h', 'trail-mix-1svg',
+    'diy-no-bake-bar', 'dry-cereal-banana', 'almond-butter', 'rosemary-turkey-stick',
+    'landjaeger-sticks', 'tailwind-wilderness-athlete', 'mh-chicken-fajita-bowl-2svg',
+    'cheez-it-pack', 'alpine-spiced-apple-cider', 'belvita', 'austin-pb-crackers',
+    'powerbar', 'fritos-2svg',
+  ])
+  const stillReferenced = new Set()
+  for (const trip of state.trips) {
+    for (const day of trip.days) {
+      const m = day.meals
+      if (!m) continue
+      for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+        for (const e of m[k]) stillReferenced.add(e.foodId)
+      }
+      for (const sn of m.snacks) for (const e of sn.items) stillReferenced.add(e.foodId)
+    }
+  }
+  state.library = state.library.filter(f =>
+    !(RETIRED.has(f.id) && !stillReferenced.has(f.id) && f.favorite !== true))
+  if (after) after()
   return state
 }

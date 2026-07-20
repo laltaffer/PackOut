@@ -339,13 +339,16 @@ function renderTrip(trip) {
         <a class="btn" href="#/trip/${trip.id}/pack">Pack Plan</a>
         <a class="btn" href="#/trip/${trip.id}/ready">Readiness</a>
       </nav>
-      ${trip.days.some(d => dayTotals(d, state.library).kcal === 0) ? `
+      ${trip.days.length ? (() => {
+        const emptyCount = trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length
+        return `
       <div class="draft-all-row">
         <button class="btn btn-primary" id="draft-all">
-          Draft ${trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length} empty day${trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length > 1 ? 's' : ''}
+          ${emptyCount ? `Draft ${emptyCount} empty day${emptyCount > 1 ? 's' : ''}` : 'Re-draft all days'}
         </button>
-        <span class="draft-note">Proposes meals from your usual food; planned days untouched.</span>
-      </div>` : ''}
+        <span class="draft-note">${emptyCount ? 'Proposes meals from your usual food; planned days untouched.' : 'Replaces every day’s plan with a fresh proposal.'}</span>
+      </div>`
+      })() : ''}
       <ol class="days">
         ${trip.days.map((day, i) => dayCard(trip, day, i)).join('')}
       </ol>
@@ -357,6 +360,15 @@ function renderTrip(trip) {
   }))
   const draftAll = document.getElementById('draft-all')
   if (draftAll) draftAll.addEventListener('click', () => {
+    const plannedCount = trip.days.filter(d => dayTotals(d, state.library).kcal > 0).length
+    if (plannedCount === trip.days.length && plannedCount > 0) {
+      const ok = confirm(`Re-draft all ${plannedCount} days? Every day's current plan is replaced and packed marks reset.`)
+      if (!ok) return
+      for (const day of trip.days) {
+        delete day.meals
+        delete day.packed
+      }
+    }
     const staples = stapleIds(state.trips)
     for (const { dayIndex, meals } of draftEmptyDays(trip, state.library, staples, 'usual')) {
       trip.days[dayIndex].meals = meals
@@ -1106,6 +1118,13 @@ function renderFoodForm(food) {
             ${SLOT_HINTS.map(s => `<option value="${s}" ${!isNew && food.slotHint === s ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}
           </select>
         </label>
+        <label>Prep
+          <select name="prep">
+            <option value="ready" ${isNew || food.prep !== 'cook' ? 'selected' : ''}>Ready to eat</option>
+            <option value="cook" ${!isNew && food.prep === 'cook' ? 'selected' : ''}>Needs hot water</option>
+          </select>
+          <small>Drafts avoid hot-water breakfasts — mornings are mobile.</small>
+        </label>
         <button class="btn btn-primary" type="submit">${isNew ? 'Add to Library' : 'Save'}</button>
         ${isNew ? '' : `<button class="btn-quiet" type="button" id="food-delete">Delete this food</button>`}
       </form>
@@ -1123,6 +1142,7 @@ function renderFoodForm(food) {
       proteinG: num('proteinG'),
       weightOz: num('weightOz'),
       slotHint: f.get('slotHint'),
+      prep: f.get('prep') === 'cook' ? 'cook' : undefined,
     }
     if (isNew) {
       state.library.push({ id: newId(), favorite: false, ...values })

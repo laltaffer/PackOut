@@ -274,6 +274,14 @@ function rankByDensity(foods, staples, metric) {
     a.name.localeCompare(b.name))
 }
 
+// Mornings are mobile (Lawrence): breakfast candidates that need hot water
+// (prep === 'cook') sink below ready-to-eat ones. Stable sort keeps the
+// underlying ranking within each group; other slots are untouched.
+function prepRank(list, slot) {
+  if (slot !== 'breakfast') return list
+  return [...list].sort((a, b) => ((a.prep === 'cook') ? 1 : 0) - ((b.prep === 'cook') ? 1 : 0))
+}
+
 function pickMain(mains, avoid) {
   if (mains.length === 0) return null
   return mains.find(m => !avoid.has(m.id)) ?? mains[0]
@@ -313,10 +321,13 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     const pool = hinted(slot)
     if (pool.length === 0) continue
     if (strategy === 'usual') {
-      const habits = rankHabit(pool.filter(f => f.favorite || staples.has(f.id)), staples)
-      for (const f of habits.length ? habits : [rankHabit(pool, staples)[0]]) add(slot, f)
+      let habits = rankHabit(pool.filter(f => f.favorite || staples.has(f.id)), staples)
+      if (slot === 'breakfast' && habits.some(f => f.prep !== 'cook')) {
+        habits = habits.filter(f => f.prep !== 'cook')
+      }
+      for (const f of habits.length ? habits : [prepRank(rankHabit(pool, staples), slot)[0]]) add(slot, f)
     } else {
-      add(slot, rankByDensity(pool, staples, 'kcal')[0])
+      add(slot, prepRank(rankByDensity(pool, staples, 'kcal'), slot)[0])
     }
   }
   const mains = mainsOverride ?? (strategy === 'usual'
@@ -339,9 +350,9 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     // best-ranked item that fits the day ceiling, so growth never stalls).
     const slotCeil = grow * 1.5
     while (slotKcal[slot] < grow) {
-      const ranked = protein < proteinFloor
+      const ranked = prepRank(protein < proteinFloor
         ? [...pool].sort((a, b) => ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
-        : (strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal'))
+        : (strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal')), slot)
       const fits = x => !used.has(x.id) && kcal + x.kcal <= ceiling
       const f = ranked.find(x => fits(x) && slotKcal[slot] + x.kcal <= slotCeil) ?? ranked.find(fits)
       if (!f) break
@@ -477,6 +488,9 @@ export function validateImport(data) {
     if (!f.name?.trim?.() || !num(f.kcal) || f.kcal <= 0) return { ok: false, error: `Food "${f.name ?? '?'}" is malformed.` }
     if (![f.carbsG, f.fatG, f.proteinG, f.weightOz].every(numOrNull)) {
       return { ok: false, error: `Food "${f.name}" has non-numeric macros.` }
+    }
+    if (f.prep !== undefined && f.prep !== 'ready' && f.prep !== 'cook') {
+      return { ok: false, error: `Food "${f.name}" has an invalid prep value.` }
     }
   }
   return { ok: true }

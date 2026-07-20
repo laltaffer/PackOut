@@ -217,6 +217,32 @@ test('usual rotation cycles within favorite mains — the catalog never displace
   for (let i = 1; i < mains.length; i++) assert.notEqual(mains[i], mains[i - 1], 'no consecutive repeats')
 })
 
+test('breakfast drafts bias hard toward ready-to-eat — no boiling water at 4am', () => {
+  // Lawrence 2026-07-20: mornings are mobile; hot-water breakfasts only when
+  // nothing ready-to-eat can fill the slot.
+  const lib = [
+    { id: 'skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, favorite: false, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: 4.6, favorite: false, slotHint: 'breakfast' },
+    { id: 'pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: 1.15, favorite: false, slotHint: 'breakfast' },
+    { id: 'main', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner', prep: 'cook' },
+    { id: 'bar', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'snack' },
+  ]
+  const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
+  assert.ok(!meals.breakfast.some(e => e.foodId === 'skillet'), 'cook breakfast skipped while ready foods can fill the slot')
+  assert.ok(meals.breakfast.some(e => e.foodId === 'granola'), 'ready breakfast leads')
+  assert.equal(meals.dinner[0].foodId, 'main', 'dinner mains unaffected by prep bias')
+})
+
+test('a cook breakfast still drafts when it is the only breakfast there is', () => {
+  const lib = [
+    { id: 'skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, favorite: false, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'main', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner', prep: 'cook' },
+    { id: 'bar', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'snack' },
+  ]
+  const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
+  assert.ok(meals.breakfast.some(e => e.foodId === 'skillet'), 'graceful when nothing ready exists')
+})
+
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {
   const huge = [
     { id: 'mega', name: 'Mega Meal', kcal: 3000, carbsG: 100, fatG: 100, proteinG: 100, weightOz: 20, favorite: false, slotHint: 'dinner' },
