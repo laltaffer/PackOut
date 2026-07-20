@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, groceryList, dayPackList, readiness, validateImport } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport } from './engine.js'
 import { load, save, newId } from './store.js'
 
 const app = document.getElementById('app')
@@ -83,7 +83,12 @@ function fmt(n) {
 // ---------- dashboard ----------
 
 function renderDashboard() {
-  const trips = [...state.trips].sort((a, b) => b.startDate.localeCompare(a.startDate))
+  // Upcoming trips first (soonest on top), past trips after (newest first,
+  // oldest sinking to the bottom).
+  const today = new Date().toISOString().slice(0, 10)
+  const upcoming = state.trips.filter(t => t.startDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))
+  const past = state.trips.filter(t => t.startDate < today).sort((a, b) => b.startDate.localeCompare(a.startDate))
+  const trips = [...upcoming, ...past]
   app.replaceChildren(el(`
     <section class="dashboard">
       <div class="dashboard-head">
@@ -288,13 +293,20 @@ function foodName(id) {
   return f ? f.name : '(deleted food)'
 }
 
+// One place resolves a slot key ('breakfast', 'snack-2', …) to its entry list.
+function resolveEntries(day, key) {
+  return key.startsWith('snack-')
+    ? day.meals.snacks[Number(key.slice(6))].items
+    : day.meals[key]
+}
+
 function entryRows(entries, slotKey) {
   return entries.map((e, j) => {
     const f = state.library.find(x => x.id === e.foodId)
     return `
       <li class="entry">
         <span class="entry-name">${esc(foodName(e.foodId))}</span>
-        <span class="entry-kcal mono">${f ? (f.kcal * e.qty).toLocaleString() + ' kcal' : '—'}</span>
+        <span class="entry-kcal mono">${f ? sumEntries([e], state.library).kcal.toLocaleString() + ' kcal' : '—'}</span>
         <span class="entry-ctl">
           <button data-qty="${slotKey}:${j}:-1" aria-label="Less ${esc(foodName(e.foodId))}">−</button>
           <span class="qty mono">${e.qty}</span>
@@ -362,6 +374,7 @@ function renderDay(trip, i) {
         <div><dt>kcal</dt><dd>${totals.kcal.toLocaleString()} / ${fmt(targets.kcal.target)}</dd></div>
         <div><dt>Carbs</dt><dd>${totals.carbsG} / ${targets.carbsG.min}–${targets.carbsG.max} g</dd></div>
         <div><dt>Protein</dt><dd>${totals.proteinG} / floor ${targets.proteinG.floor} g</dd></div>
+        <div><dt>Fat</dt><dd>${totals.fatG} / ${targets.fatG.min}–${targets.fatG.max} g</dd></div>
         <div><dt>Weight</dt><dd>${totals.weightOz} oz${totals.missingWeightCount ? ` <span class="floor">+${totals.missingWeightCount} unweighed</span>` : ''}</dd></div>
         ${totals.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${totals.calsPerOz}</dd></div>` : ''}
       </dl>
@@ -420,18 +433,15 @@ function renderDay(trip, i) {
     }
   })
 
-  const slotEntries = key => key.startsWith('snack-')
-    ? day.meals.snacks[Number(key.slice(6))].items
-    : day.meals[key]
   app.querySelectorAll('[data-qty]').forEach(btn => btn.addEventListener('click', () => {
     const [key, j, delta] = btn.dataset.qty.split(':')
-    const entry = slotEntries(key)[Number(j)]
+    const entry = resolveEntries(day, key)[Number(j)]
     entry.qty = Math.max(1, entry.qty + Number(delta))
     commit()
   }))
   app.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', () => {
     const [key, j] = btn.dataset.rm.split(':')
-    slotEntries(key).splice(Number(j), 1)
+    resolveEntries(day, key).splice(Number(j), 1)
     commit()
   }))
   app.querySelectorAll('[data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
@@ -461,13 +471,8 @@ function renderPicker(trip, i, slotKey) {
   const slotBase = slotKey.startsWith('snack-') ? 'snack' : slotKey
   const q = pickerSearch.trim().toLowerCase()
   const staples = stapleIds(state.trips)
-  const foods = state.library
+  const foods = pickerRank(state.library, staples, slotBase)
     .filter(f => !q || f.name.toLowerCase().includes(q))
-    .sort((a, b) =>
-      (b.favorite - a.favorite) ||
-      (staples.has(b.id) - staples.has(a.id)) ||
-      ((b.slotHint === slotBase) - (a.slotHint === slotBase)) ||
-      a.name.localeCompare(b.name))
   const slotLabel = slotKey.startsWith('snack-') ? `Snack ${Number(slotKey.slice(6)) + 1}` : SLOT_LABELS[slotKey]
   app.replaceChildren(el(`
     <section class="picker">
@@ -494,9 +499,7 @@ function renderPicker(trip, i, slotKey) {
     s.setSelectionRange(s.value.length, s.value.length)
   })
   app.querySelectorAll('[data-pick]').forEach(btn => btn.addEventListener('click', () => {
-    const entries = slotKey.startsWith('snack-')
-      ? day.meals.snacks[Number(slotKey.slice(6))].items
-      : day.meals[slotKey]
+    const entries = resolveEntries(day, slotKey)
     const existing = entries.find(e => e.foodId === btn.dataset.pick)
     if (existing) existing.qty += 1
     else entries.push({ foodId: btn.dataset.pick, qty: 1 })
@@ -589,7 +592,7 @@ function renderReady(trip) {
         <button class="btn" id="print">Print</button>
       </div>
       <p class="ready-verdict ${r.ready ? 'rollup-fueled' : 'rollup-short'}">
-        ${r.ready ? 'READY. Go hunt.' : 'Not ready yet.'}
+        ${r.ready ? 'READY. Get after it.' : 'Not ready yet.'}
       </p>
       <section class="ready-block">
         <h2>Food</h2>

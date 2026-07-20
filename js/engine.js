@@ -105,11 +105,7 @@ export function stapleIds(trips) {
   let plannedDays = 0
   for (const trip of trips) {
     for (const day of trip.days) {
-      const meals = day.meals ?? emptyMeals()
-      const ids = new Set([
-        ...meals.electrolytes, ...meals.breakfast, ...meals.lunch, ...meals.dinner,
-        ...meals.snacks.flatMap(s => s.items),
-      ].map(e => e.foodId))
+      const ids = new Set(flatEntries(day).map(e => e.foodId))
       if (ids.size === 0) continue
       plannedDays += 1
       for (const id of ids) dayCounts.set(id, (dayCounts.get(id) ?? 0) + 1)
@@ -201,6 +197,16 @@ export function validateImport(data) {
     }
   }
   return { ok: true }
+}
+
+// Picker ordering: Favorite, then Staple, then foods that usually live in
+// this slot, then name. Owned here so the UI never re-implements ranking.
+export function pickerRank(library, staples, slotBase) {
+  return [...library].sort((a, b) =>
+    ((b.favorite === true) - (a.favorite === true)) ||
+    (staples.has(b.id) - staples.has(a.id)) ||
+    ((b.slotHint === slotBase) - (a.slotHint === slotBase)) ||
+    a.name.localeCompare(b.name))
 }
 
 // Gap-closing suggestions, ranked: Favorite, then Staple, then how well the
