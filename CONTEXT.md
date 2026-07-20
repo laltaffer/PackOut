@@ -38,8 +38,9 @@ against the per-snack target. A Day carries as many Snacks as the user will pack
 (V2P sheet shows five slots; the count is variable).
 
 ## Verdict
-The per-Day sufficiency call. **Fueled** = day kcal ≥ 90% of target AND protein ≥ the
-0.6 g/lb floor. **Short** = below either, stated with the concrete gap. **Heavy** =
+The per-Day sufficiency call. **Fueled** = day kcal ≥ 90% of target AND protein
+within 5 g of the 0.6 g/lb floor (trace shortfalls are noise, not a flag).
+**Short** = below either, stated with the concrete gap. **Heavy** =
 over 115% of kcal target (soft warning — extra carried weight, not an error). Carbs and
 fat are shown against their V2P ranges but never gate the Verdict. A Trip is Fueled
 only when every Day is Fueled.

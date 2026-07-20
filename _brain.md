@@ -82,6 +82,9 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   repeats stack qty (Goldbears per-oz is the ±50 fine-tuner). Protein is maximized
   inside the window, never bought past it — a residual gap shows as Short (protein).
   Library gap: no protein-dense snack (jerky) seeded, so some days run a few g short.
+- **Protein floor grace (2026-07-20, Lawrence):** a day inside its kcal window is
+  fine a couple grams under the floor — Verdict allows 5 g of grace before Short;
+  beyond it, the full gap to the true floor is reported.
 - **Seed v9 = one-time full wipe (2026-07-20, his explicit ask):** library rebuilt
   from seed exactly (user foods dropped, past deletions resurrected, ToastChee
   retired), all planned meals + food packed marks cleared on every device. The six

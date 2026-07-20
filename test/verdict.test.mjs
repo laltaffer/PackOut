@@ -55,12 +55,22 @@ test('verdict thresholds compare raw values — a sub-kcal deficit is still Shor
   assert.equal(v.kcalShort, 1) // ceil of 0.6, never rounded down to zero
 })
 
-test('protein floor comparison keeps its decimals — 121 g misses a 121.2 g floor', () => {
-  // 202 lb → raw floor 121.2 g
-  const lib = [{ id: 'x', name: 'X', kcal: 4000, carbsG: 0, fatG: 0, proteinG: 121, weightOz: 1, favorite: false }]
+test('protein floor carries a 5 g grace — a couple grams short is still Fueled', () => {
+  // Lawrence 2026-07-20: "we're probably fine by being 2 g short of protein."
+  // 202 lb → raw floor 121.2 g; 117 g is 4.2 short → inside the grace.
+  const lib = [{ id: 'x', name: 'X', kcal: 4000, carbsG: 0, fatG: 0, proteinG: 117, weightOz: 1, favorite: false }]
+  const v = dayVerdict(dayWith([{ foodId: 'x', qty: 1 }]), 202, lib)
+  assert.equal(v.status, 'fueled')
+  assert.equal(v.proteinShortG, 0)
+})
+
+test('beyond the grace, the reported protein gap is the full distance to the floor', () => {
+  // 202 lb → raw floor 121.2 g; 115 g is 6.2 short → Short by ceil(6.2) = 7,
+  // not 6.2 minus the grace.
+  const lib = [{ id: 'x', name: 'X', kcal: 4000, carbsG: 0, fatG: 0, proteinG: 115, weightOz: 1, favorite: false }]
   const v = dayVerdict(dayWith([{ foodId: 'x', qty: 1 }]), 202, lib)
   assert.equal(v.status, 'short')
-  assert.equal(v.proteinShortG, 1)
+  assert.equal(v.proteinShortG, 7)
 })
 
 test('trip verdict counts short days; heavy is not short', () => {

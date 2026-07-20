@@ -75,6 +75,10 @@ export function dayTotals(day, library) {
 // Heavy = >115% kcal (soft warning); Short otherwise, with the concrete gap.
 const FUELED_KCAL_PCT = 0.90
 const HEAVY_KCAL_PCT = 1.15
+// Lawrence 2026-07-20: a day inside its kcal window is "probably fine" a
+// couple grams under the protein floor — trace shortfalls don't flag Short.
+// Beyond the grace, the reported gap is the full distance to the true floor.
+const PROTEIN_FLOOR_GRACE_G = 5
 
 export function dayVerdict(day, weightLbs, library) {
   const targets = dailyTargets(weightLbs, day.intensity)
@@ -87,7 +91,7 @@ export function dayVerdict(day, weightLbs, library) {
   const rawProteinShort = weightLbs * PROTEIN_FLOOR_G_PER_LB - totals.proteinG
   const rawKcalOver = totals.kcal - HEAVY_KCAL_PCT * targets.kcal.target
   const kcalShort = rawKcalShort > EPS ? Math.ceil(rawKcalShort) : 0
-  const proteinShortG = rawProteinShort > EPS ? Math.ceil(rawProteinShort) : 0
+  const proteinShortG = rawProteinShort > PROTEIN_FLOOR_GRACE_G + EPS ? Math.ceil(rawProteinShort) : 0
   const kcalOver = rawKcalOver > EPS ? Math.ceil(rawKcalOver) : 0
   const status = (kcalShort > 0 || proteinShortG > 0) ? 'short' : (kcalOver > 0 ? 'heavy' : 'fueled')
   return { status, kcalShort, proteinShortG, kcalOver, totals, targets }
