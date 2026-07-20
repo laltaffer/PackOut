@@ -76,6 +76,11 @@ errors. Pending: Lawrence's SHIP sign-off; Milestone 2 (gear checklist from Mont
 sheet, Alaska-adjusted) before 2026-08-01.
 
 ## Open
+- **Recommendations/assistant (issue #12) — core product bet.** Lawrence 2026-07-19:
+  "otherwise this is just a better looking spreadsheet, thats actualy harder to use."
+  PackOut must propose plans (draft-a-day/trip from targets + Staples/Favorites), not
+  just total them. Needs a SPEC round.
+- **UI/UX pass (issue #11):** real issues he wants solved — his list, to be captured.
 - Google sign-on / sharing with friends: Lawrence floated 2026-07-19; recommended as
   post-Alaska milestone (see conversation) — needs his decision.
 - Library findability: Lawrence "will think on it" (2026-07-19).
