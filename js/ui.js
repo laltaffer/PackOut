@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals } from './engine.js'
 import { load, save, newId } from './store.js'
 
 const app = document.getElementById('app')
@@ -12,7 +12,17 @@ const INTENSITIES = ['easy', 'medium', 'hard']
 
 function route() {
   const hash = location.hash || '#/'
-  const tripMatch = hash.match(/^#\/trip\/(.+)$/)
+  const pickMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/add\/([a-z]+(?:-\d+)?)$/)
+  if (pickMatch) {
+    const trip = state.trips.find(t => t.id === pickMatch[1])
+    if (trip && trip.days[Number(pickMatch[2])]) return renderPicker(trip, Number(pickMatch[2]), pickMatch[3])
+  }
+  const dayMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)$/)
+  if (dayMatch) {
+    const trip = state.trips.find(t => t.id === dayMatch[1])
+    if (trip && trip.days[Number(dayMatch[2])]) return renderDay(trip, Number(dayMatch[2]))
+  }
+  const tripMatch = hash.match(/^#\/trip\/([^/]+)$/)
   if (tripMatch) {
     const trip = state.trips.find(t => t.id === tripMatch[1])
     if (trip) return renderTrip(trip)
@@ -168,6 +178,7 @@ function renderTrip(trip) {
 
 function dayCard(trip, day, i) {
   const t = dailyTargets(trip.weightLbs, day.intensity)
+  const planned = dayTotals(day, state.library)
   return `
     <li class="day-card">
       <div class="day-head">
@@ -186,7 +197,204 @@ function dayCard(trip, day, i) {
         <div><dt>Protein</dt><dd>${t.proteinG.min}–${t.proteinG.max} g<span class="floor">floor ${t.proteinG.floor} g</span></dd></div>
         <div><dt>Fat</dt><dd>${t.fatG.min}–${t.fatG.max} g</dd></div>
       </dl>
+      <a class="btn day-plan-link" href="#/trip/${trip.id}/day/${i}">
+        ${planned.kcal > 0 ? `${planned.kcal.toLocaleString()} kcal planned · edit` : 'Plan meals'}
+      </a>
     </li>`
+}
+
+// ---------- day meal builder ----------
+
+const SLOT_LABELS = { electrolytes: 'Electrolytes / Fluid', breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
+
+function foodName(id) {
+  const f = state.library.find(x => x.id === id)
+  return f ? f.name : '(deleted food)'
+}
+
+function entryRows(entries, slotKey) {
+  return entries.map((e, j) => {
+    const f = state.library.find(x => x.id === e.foodId)
+    return `
+      <li class="entry">
+        <span class="entry-name">${esc(foodName(e.foodId))}</span>
+        <span class="entry-kcal mono">${f ? (f.kcal * e.qty).toLocaleString() + ' kcal' : '—'}</span>
+        <span class="entry-ctl">
+          <button data-qty="${slotKey}:${j}:-1" aria-label="Less ${esc(foodName(e.foodId))}">−</button>
+          <span class="qty mono">${e.qty}</span>
+          <button data-qty="${slotKey}:${j}:1" aria-label="More ${esc(foodName(e.foodId))}">+</button>
+          <button data-rm="${slotKey}:${j}" aria-label="Remove ${esc(foodName(e.foodId))}">×</button>
+        </span>
+      </li>`
+  }).join('')
+}
+
+function slotSection(trip, i, slotKey, entries, targetLine) {
+  const sub = sumEntries(entries, state.library)
+  return `
+    <section class="slot">
+      <div class="slot-head">
+        <h2>${SLOT_LABELS[slotKey]}</h2>
+        ${targetLine ? `<span class="slot-target mono">${targetLine}</span>` : ''}
+      </div>
+      <ul class="entries">${entryRows(entries, slotKey)}</ul>
+      <div class="slot-foot">
+        <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/${slotKey}">+ Add food</a>
+        ${entries.length ? `<span class="slot-sub mono">${sub.kcal.toLocaleString()} kcal · C ${sub.carbsG}g · P ${sub.proteinG}g</span>` : ''}
+      </div>
+    </section>`
+}
+
+function renderDay(trip, i) {
+  const day = trip.days[i]
+  day.meals ??= emptyMeals()
+  const targets = dailyTargets(trip.weightLbs, day.intensity)
+  const st = slotTargets(targets)
+  const totals = dayTotals(day, state.library)
+  const otherDays = trip.days.map((_, j) => j).filter(j => j !== i)
+  app.replaceChildren(el(`
+    <section class="day-screen">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <div class="day-screen-head">
+        <h1>Day ${i + 1}</h1>
+        <span class="day-date">${dayDate(trip, i)}</span>
+        <label class="intensity">
+          <span class="visually-hidden">Intensity</span>
+          <select id="day-intensity">
+            ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <dl class="targets day-totals mono">
+        <div><dt>kcal</dt><dd>${totals.kcal.toLocaleString()} / ${fmt(targets.kcal.target)}</dd></div>
+        <div><dt>Carbs</dt><dd>${totals.carbsG} / ${targets.carbsG.min}–${targets.carbsG.max} g</dd></div>
+        <div><dt>Protein</dt><dd>${totals.proteinG} / floor ${targets.proteinG.floor} g</dd></div>
+        <div><dt>Weight</dt><dd>${totals.weightOz} oz${totals.missingWeightCount ? ` <span class="floor">+${totals.missingWeightCount} unweighed</span>` : ''}</dd></div>
+        ${totals.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${totals.calsPerOz}</dd></div>` : ''}
+      </dl>
+      ${slotSection(trip, i, 'electrolytes', day.meals.electrolytes, '')}
+      ${slotSection(trip, i, 'breakfast', day.meals.breakfast, `${st.breakfast.kcalMin}–${st.breakfast.kcalMax} kcal · ${st.breakfast.carbsMinG}–${st.breakfast.carbsMaxG}g C`)}
+      ${slotSection(trip, i, 'lunch', day.meals.lunch, '')}
+      ${slotSection(trip, i, 'dinner', day.meals.dinner, `~${st.dinner.kcal} kcal · ≥${st.dinner.carbsMinG}g C · ≥${st.dinner.proteinMinG}g P`)}
+      <section class="slot">
+        <div class="slot-head">
+          <h2>Snacks</h2>
+          <span class="slot-target mono">each ~${st.snack.kcal} kcal · ${st.snack.carbsMinG}–${st.snack.carbsMaxG}g C</span>
+        </div>
+        ${day.meals.snacks.map((snack, sIdx) => {
+          const sub = sumEntries(snack.items, state.library)
+          return `
+          <div class="snack-bundle">
+            <div class="snack-head">
+              <h3>Snack ${sIdx + 1}</h3>
+              <span class="slot-sub mono">${sub.kcal.toLocaleString()} kcal · C ${sub.carbsG}g</span>
+              <button data-rm-snack="${sIdx}" aria-label="Remove snack ${sIdx + 1}">×</button>
+            </div>
+            <ul class="entries">${entryRows(snack.items, `snack-${sIdx}`)}</ul>
+            <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/snack-${sIdx}">+ Add item</a>
+          </div>`
+        }).join('')}
+        <button class="btn" id="add-snack">+ Add Snack</button>
+      </section>
+      ${otherDays.length ? `
+      <section class="copy-day">
+        <label>Copy this day's plan to
+          <select id="copy-target">
+            ${otherDays.map(j => `<option value="${j}">Day ${j + 1} — ${dayDate(trip, j)}</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn" id="copy-apply">Copy</button>
+      </section>` : ''}
+    </section>
+  `))
+
+  document.getElementById('day-intensity').addEventListener('change', e => {
+    day.intensity = e.target.value
+    commit()
+  })
+  document.getElementById('add-snack').addEventListener('click', () => {
+    day.meals.snacks.push({ items: [] })
+    commit()
+  })
+  const copyApply = document.getElementById('copy-apply')
+  if (copyApply) copyApply.addEventListener('click', () => {
+    const j = Number(document.getElementById('copy-target').value)
+    if (confirm(`Replace Day ${j + 1}'s plan with Day ${i + 1}'s?`)) {
+      trip.days[j].meals = structuredClone(day.meals)
+      save(state)
+      location.hash = `#/trip/${trip.id}/day/${j}`
+    }
+  })
+
+  const slotEntries = key => key.startsWith('snack-')
+    ? day.meals.snacks[Number(key.slice(6))].items
+    : day.meals[key]
+  app.querySelectorAll('[data-qty]').forEach(btn => btn.addEventListener('click', () => {
+    const [key, j, delta] = btn.dataset.qty.split(':')
+    const entry = slotEntries(key)[Number(j)]
+    entry.qty = Math.max(1, entry.qty + Number(delta))
+    commit()
+  }))
+  app.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', () => {
+    const [key, j] = btn.dataset.rm.split(':')
+    slotEntries(key).splice(Number(j), 1)
+    commit()
+  }))
+  app.querySelectorAll('[data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
+    day.meals.snacks.splice(Number(btn.dataset.rmSnack), 1)
+    commit()
+  }))
+}
+
+let pickerSearch = ''
+
+function renderPicker(trip, i, slotKey) {
+  const day = trip.days[i]
+  day.meals ??= emptyMeals()
+  const slotBase = slotKey.startsWith('snack-') ? 'snack' : slotKey
+  const q = pickerSearch.trim().toLowerCase()
+  const foods = state.library
+    .filter(f => !q || f.name.toLowerCase().includes(q))
+    .sort((a, b) =>
+      (b.favorite - a.favorite) ||
+      ((b.slotHint === slotBase) - (a.slotHint === slotBase)) ||
+      a.name.localeCompare(b.name))
+  const slotLabel = slotKey.startsWith('snack-') ? `Snack ${Number(slotKey.slice(6)) + 1}` : SLOT_LABELS[slotKey]
+  app.replaceChildren(el(`
+    <section class="picker">
+      <a href="#/trip/${trip.id}/day/${i}" class="crumb">&larr; Day ${i + 1}</a>
+      <h1>Add to ${slotLabel}</h1>
+      <input id="picker-search" type="search" placeholder="Search foods…" value="${esc(pickerSearch)}" aria-label="Search foods">
+      <ul class="food-list">
+        ${foods.map(f => `
+          <li class="food-row">
+            <button class="food-pick" data-pick="${f.id}">
+              <span class="food-name">${f.favorite ? '★ ' : ''}${esc(f.name)}</span>
+              <span class="food-macros mono">${macroLine(f)}</span>
+            </button>
+          </li>`).join('')}
+      </ul>
+    </section>
+  `))
+  const search = document.getElementById('picker-search')
+  search.addEventListener('input', () => {
+    pickerSearch = search.value
+    renderPicker(trip, i, slotKey)
+    const s = document.getElementById('picker-search')
+    s.focus()
+    s.setSelectionRange(s.value.length, s.value.length)
+  })
+  app.querySelectorAll('[data-pick]').forEach(btn => btn.addEventListener('click', () => {
+    const entries = slotKey.startsWith('snack-')
+      ? day.meals.snacks[Number(slotKey.slice(6))].items
+      : day.meals[slotKey]
+    const existing = entries.find(e => e.foodId === btn.dataset.pick)
+    if (existing) existing.qty += 1
+    else entries.push({ foodId: btn.dataset.pick, qty: 1 })
+    save(state)
+    pickerSearch = ''
+    location.hash = `#/trip/${trip.id}/day/${i}`
+  }))
 }
 
 // ---------- food library ----------

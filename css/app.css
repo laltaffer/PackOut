@@ -209,6 +209,99 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .targets .floor { display: block; font-weight: 400; color: var(--ink-soft); font-size: 0.85em; }
 
+/* ---------- day meal builder ---------- */
+
+.day-plan-link { justify-self: start; font-size: 0.85rem; padding: 0.4rem 0.8rem; }
+
+.day-screen-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
+.day-screen-head h1 { font-size: 2rem; }
+.day-screen-head .day-date { flex: 1; }
+
+.day-totals { background: var(--paper-raised); border: 2px solid var(--ink); padding: 0.7rem 1rem 0.8rem; margin-bottom: 1rem; }
+
+.day-totals div { flex-direction: column; align-items: start; }
+
+.day-totals dd { text-align: left; }
+
+.slot { border-top: 3px solid var(--ink); padding: 0.7rem 0 1rem; }
+
+.slot-head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+
+.slot-head h2 {
+  font-family: var(--display); font-weight: 900; text-transform: uppercase;
+  font-size: 1.25rem;
+}
+
+.slot-target { color: var(--ink-soft); font-size: 0.65rem; }
+
+.entries { list-style: none; padding: 0; margin: 0.35rem 0; display: grid; }
+
+.entry {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0; border-bottom: 1px solid var(--line);
+}
+
+.entry-name { flex: 1; min-width: 0; }
+
+.entry-kcal { color: var(--ink-soft); font-size: 0.68rem; white-space: nowrap; }
+
+.entry-ctl { display: flex; align-items: center; gap: 0.15rem; }
+
+.entry-ctl button {
+  min-width: 38px; min-height: 38px;
+  border: 2px solid var(--ink); background: var(--paper-raised);
+  font-family: var(--mono); font-size: 0.9rem; cursor: pointer;
+}
+
+.entry-ctl .qty { min-width: 1.4rem; text-align: center; font-weight: 700; }
+
+.entry-ctl [data-rm], .snack-head [data-rm-snack] { border-color: var(--line); color: var(--ink-soft); }
+
+.slot-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+
+.btn-add {
+  font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--flag); text-decoration: none;
+  padding: 0.5rem 0; display: inline-block; font-weight: 700;
+}
+
+.slot-sub { color: var(--ink-soft); font-size: 0.68rem; }
+
+.snack-bundle { border: 1px solid var(--line); padding: 0.5rem 0.75rem; margin: 0.6rem 0; }
+
+.snack-head { display: flex; align-items: center; gap: 0.6rem; }
+
+.snack-head h3 {
+  font-family: var(--display); font-weight: 700; text-transform: uppercase;
+  font-size: 1rem;
+}
+
+.snack-head .slot-sub { flex: 1; }
+
+.snack-head button {
+  min-width: 38px; min-height: 38px; border: 2px solid var(--line);
+  background: var(--paper-raised); color: var(--ink-soft); cursor: pointer;
+}
+
+#add-snack { margin-top: 0.5rem; }
+
+.copy-day {
+  border-top: 3px solid var(--ink); padding: 1rem 0;
+  display: flex; align-items: end; gap: 0.75rem;
+}
+
+.copy-day label { flex: 1; }
+
+.picker input[type="search"] { width: 100%; margin-bottom: 0.9rem; }
+
+.food-pick {
+  all: unset; flex: 1; display: grid; gap: 0.1rem;
+  padding: 0.55rem 0.25rem; cursor: pointer; min-height: 44px;
+  box-sizing: border-box; width: 100%;
+}
+
+.food-pick:focus-visible { outline: 3px solid var(--flag); outline-offset: 2px; }
+
 /* ---------- library ---------- */
 
 .library input[type="search"] { width: 100%; margin-bottom: 0.9rem; }
