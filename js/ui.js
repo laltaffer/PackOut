@@ -12,6 +12,7 @@ const INTENSITIES = ['easy', 'medium', 'hard']
 // ---------- routing (hash-based so the phone back button works) ----------
 
 function route() {
+  updateNav()
   const hash = location.hash || '#/'
   const pickMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/add\/([a-z]+(?:-\d+)?)$/)
   if (pickMatch) {
@@ -56,6 +57,15 @@ function route() {
 
 window.addEventListener('hashchange', route)
 
+// Masthead nav is navigation, not tabs/filters — mark the active section.
+function updateNav() {
+  const inLibrary = (location.hash || '#/').startsWith('#/library')
+  document.querySelectorAll('.masthead-nav a').forEach(a => {
+    const isLibrary = a.getAttribute('href') === '#/library'
+    a.classList.toggle('is-active', isLibrary === inLibrary)
+  })
+}
+
 // ---------- helpers ----------
 
 let warnedSaveFailure = false
@@ -95,7 +105,7 @@ function tripDateRange(trip) {
 }
 
 function fmt(n) {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+  return Math.round(n).toLocaleString()
 }
 
 // ---------- dashboard ----------
@@ -300,28 +310,34 @@ function renderTrip(trip) {
 function dayCard(trip, day, i) {
   const t = dailyTargets(trip.weightLbs, day.intensity)
   const planned = dayTotals(day, state.library)
+  const hasPlan = planned.kcal > 0
+  const v = hasPlan ? dayVerdict(day, trip.weightLbs, state.library) : null
+  const g = (val) => hasPlan ? `${val} g` : '—'
   return `
-    <li class="day-card">
+    <li class="day-card accent-${v ? v.status : 'none'}">
       <div class="day-head">
         <span class="day-label">Day ${i + 1}</span>
-        ${planned.kcal > 0 ? verdictBadge(dayVerdict(day, trip.weightLbs, state.library)) : ''}
+        ${v ? verdictBadge(v) : ''}
         <span class="day-date">${dayDate(trip, i)}</span>
         <label class="intensity">
-          <span class="visually-hidden">Intensity for day ${i + 1}</span>
-          <select data-day="${i}">
+          <span class="intensity-label">Effort</span>
+          <select data-day="${i}" aria-label="Effort for day ${i + 1}">
             ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
           </select>
         </label>
       </div>
-      <dl class="targets mono">
-        <div><dt>kcal</dt><dd>${fmt(t.kcal.target)}</dd></div>
-        <div><dt>Carbs</dt><dd>${t.carbsG.min}–${t.carbsG.max} g</dd></div>
-        <div><dt>Protein</dt><dd>${t.proteinG.min}–${t.proteinG.max} g<span class="floor">floor ${t.proteinG.floor} g</span></dd></div>
-        <div><dt>Fat</dt><dd>${t.fatG.min}–${t.fatG.max} g</dd></div>
-      </dl>
-      <a class="btn day-plan-link" href="#/trip/${trip.id}/day/${i}">
-        ${planned.kcal > 0 ? `${planned.kcal.toLocaleString()} kcal planned · edit` : 'Plan meals'}
-      </a>
+      <table class="macro-table mono">
+        <thead>
+          <tr><th></th><th>Planned</th><th>Target</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>kcal</th><td>${hasPlan ? planned.kcal.toLocaleString() : '—'}</td><td>${fmt(t.kcal.target)}</td></tr>
+          <tr><th>Carbs</th><td>${g(planned.carbsG)}</td><td>${t.carbsG.min}–${t.carbsG.max} g</td></tr>
+          <tr><th>Protein</th><td>${g(planned.proteinG)}</td><td>${t.proteinG.min}–${t.proteinG.max} g</td></tr>
+          <tr><th>Fat</th><td>${g(planned.fatG)}</td><td>${t.fatG.min}–${t.fatG.max} g</td></tr>
+        </tbody>
+      </table>
+      <a class="day-edit" href="#/trip/${trip.id}/day/${i}">${hasPlan ? 'Edit day' : 'Draft or build this day'} &rarr;</a>
     </li>`
 }
 
@@ -421,16 +437,17 @@ function renderDay(trip, i) {
         <h1>Day ${i + 1}</h1>
         <span class="day-date">${dayDate(trip, i)}</span>
         <label class="intensity">
-          <span class="visually-hidden">Intensity</span>
+          <span class="intensity-label">Effort</span>
           <select id="day-intensity">
             ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
           </select>
         </label>
       </div>
       <dl class="targets day-totals mono">
+        <div class="totals-legend"><dt></dt><dd>planned / target</dd></div>
         <div><dt>kcal</dt><dd>${totals.kcal.toLocaleString()} / ${fmt(targets.kcal.target)}</dd></div>
         <div><dt>Carbs</dt><dd>${totals.carbsG} / ${targets.carbsG.min}–${targets.carbsG.max} g</dd></div>
-        <div><dt>Protein</dt><dd>${totals.proteinG} / floor ${targets.proteinG.floor} g</dd></div>
+        <div><dt>Protein</dt><dd>${totals.proteinG} / ${targets.proteinG.min}–${targets.proteinG.max} g</dd></div>
         <div><dt>Fat</dt><dd>${totals.fatG} / ${targets.fatG.min}–${targets.fatG.max} g</dd></div>
         <div><dt>Weight</dt><dd>${totals.weightOz} oz${totals.missingWeightCount ? ` <span class="floor">+${totals.missingWeightCount} unweighed</span>` : ''}</dd></div>
         ${totals.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${totals.calsPerOz}</dd></div>` : ''}
@@ -445,6 +462,12 @@ function renderDay(trip, i) {
         <p class="draft-note">…or build it manually below.</p>
       </section>` : ''}
       ${verdictBlock}
+      ${totals.kcal > 0 ? `
+      <div class="draft-redo">
+        <span class="draft-note">Re-propose this day (replaces the current plan):</span>
+        <button class="btn" data-draft="usual">Draft</button>
+        <button class="btn" data-draft="optimized">Optimized</button>
+      </div>` : ''}
       ${slotSection(trip, i, 'electrolytes', day.meals.electrolytes, '')}
       ${slotSection(trip, i, 'breakfast', day.meals.breakfast, `${st.breakfast.kcalMin}–${st.breakfast.kcalMax} kcal · ${st.breakfast.carbsMinG}–${st.breakfast.carbsMaxG}g C`)}
       ${slotSection(trip, i, 'lunch', day.meals.lunch, '')}
@@ -479,12 +502,6 @@ function renderDay(trip, i) {
         <button class="btn" id="copy-apply">Copy</button>
       </section>` : ''}
       ${importOptions(trip, i)}
-      ${totals.kcal > 0 ? `
-      <section class="copy-day draft-redo">
-        <span class="draft-note">Re-propose this day (replaces the current plan):</span>
-        <button class="btn" data-draft="usual">Draft</button>
-        <button class="btn" data-draft="optimized">Optimized</button>
-      </section>` : ''}
     </section>
   `))
 

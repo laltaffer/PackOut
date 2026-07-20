@@ -137,6 +137,29 @@ test('low-kcal dinner add-ons are never drafted as the main while real mains exi
   assert.notEqual(single.dinner[0]?.foodId, 'cider')
 })
 
+test('meal slots stack to at least 300 kcal — a lone cracker pack is never lunch', () => {
+  // Lawrence 2026-07-20: "cheese should never be suggested as a lunch or a
+  // meal… anything over 300 calories can be suggested as a meal. Or meals
+  // should have multiple things that add up."
+  const lib = [
+    ...LIB.filter(f => f.id !== 'toastchee'),
+    { id: 'crackers', name: 'Cracker Pack', kcal: 140, carbsG: 16, fatG: 7, proteinG: 3, weightOz: 1.0, favorite: false, slotHint: 'lunch' },
+  ]
+  const meals = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
+  const lunchKcal = meals.lunch.reduce((sum, e) => sum + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
+  assert.ok(lunchKcal >= 300, `lunch stacked to a real meal: ${lunchKcal} kcal`)
+  assert.ok(meals.lunch.length > 1, 'sub-300 base means multiple items add up')
+})
+
+test('a single ≥300 kcal item stands as a meal without forced stacking', () => {
+  const lib = [
+    ...LIB.filter(f => f.id !== 'toastchee'),
+    { id: 'big-wrap', name: 'ProBar Meal Wrap', kcal: 390, carbsG: 40, fatG: 12, proteinG: 15, weightOz: 3, favorite: false, slotHint: 'lunch' },
+  ]
+  const meals = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
+  assert.deepEqual(meals.lunch.map(e => e.foodId), ['big-wrap'])
+})
+
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {
   const huge = [
     { id: 'mega', name: 'Mega Meal', kcal: 3000, carbsG: 100, fatG: 100, proteinG: 100, weightOz: 20, favorite: false, slotHint: 'dinner' },

@@ -235,6 +235,9 @@ const DRAFT_SNACK_CAP = 10
 // A dinner "main" needs substance; lighter dinner-hinted items (cider, cocoa)
 // are add-ons and never proposed as the day's one big meal.
 const MAIN_MIN_KCAL = 400
+// A meal is ≥300 kcal (breakfast keeps V2P's 200 floor) — either one
+// substantial item or several that add up. A lone cracker pack is not lunch.
+const SLOT_MIN_KCAL = { breakfast: 200, lunch: 300 }
 
 function dinnerMains(library) {
   const hinted = library.filter(f => f.slotHint === 'dinner')
@@ -282,11 +285,13 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
   const hinted = slot => library.filter(f => f.slotHint === slot)
   let kcal = 0
   let protein = 0
+  const slotKcal = { electrolytes: 0, breakfast: 0, lunch: 0, dinner: 0 }
 
   const add = (slot, food) => {
     meals[slot].push({ foodId: food.id, qty: 1 })
     kcal += food.kcal
     protein += food.proteinG ?? 0
+    slotKcal[slot] += food.kcal
   }
 
   // Base slots. Usual: replay every Favorite/Staple in its slot (that IS the
@@ -306,6 +311,21 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     : rankByDensity(dinnerMains(library), staples, 'kcal'))
   const main = pickMain(mains, avoidMains)
   if (main) add('dinner', main)
+
+  // Meal-minimum pass: stack a slot to its floor with more slot-hinted items,
+  // then snack-pool items — "a ProBar plus gummy bears" is a legitimate lunch.
+  for (const [slot, min] of Object.entries(SLOT_MIN_KCAL)) {
+    const used = new Set(meals[slot].map(e => e.foodId))
+    if (used.size === 0 && slot === 'breakfast') continue // no breakfast candidates at all
+    const pool = [...hinted(slot), ...hinted('snack')].filter(f => !used.has(f.id))
+    const ranked = strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal')
+    for (const f of ranked) {
+      if (slotKcal[slot] >= min) break
+      if (kcal + f.kcal > ceiling) continue
+      add(slot, f)
+      used.add(f.id)
+    }
+  }
 
   // Top-up: snack bundles until the kcal target AND protein floor are both
   // met, the cap hits, or nothing fits under the Heavy ceiling. Protein gaps

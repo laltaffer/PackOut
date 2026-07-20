@@ -57,6 +57,19 @@ test('migration never touches user renames or custom foods', () => {
   assert.ok(s.library.some(f => f.id === 'custom-1'))
 })
 
+test('v3 migration re-hints Cheez-It to snack unless the user changed it', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: 2, trips: [],
+    library: [{ id: 'cheez-it-pack', name: 'Cheez-It (1 pack)', kcal: 140, slotHint: 'lunch' }],
+  })
+  assert.equal(s.library[0].slotHint, 'snack')
+  const custom = applySeedMigrations({
+    schemaVersion: 1, seedVersion: 2, trips: [],
+    library: [{ id: 'cheez-it-pack', name: 'Cheez-It (1 pack)', kcal: 140, slotHint: 'dinner' }],
+  })
+  assert.equal(custom.library[0].slotHint, 'dinner')
+})
+
 test('migration is a no-op at current seed version', () => {
   const st = { schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [{ id: 'gummy-bears-2svg', name: 'Gummy Bears (2 svg)', kcal: 300 }] }
   const s = applySeedMigrations(st)

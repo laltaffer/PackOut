@@ -62,10 +62,13 @@ body {
   letter-spacing: 0.14em;
   color: var(--ink-soft);
   text-decoration: none;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0 0.35rem;
+  border-bottom: 3px solid transparent;
 }
 
 .masthead-nav a:hover { color: var(--flag); }
+
+.masthead-nav a.is-active { color: var(--ink); border-bottom-color: var(--flag); }
 
 main { padding: 1rem; max-width: 44rem; margin-inline: auto; }
 
@@ -132,7 +135,7 @@ h1 {
 
 .trip-card {
   background: var(--paper-raised);
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line);
   display: flex; align-items: stretch;
 }
 
@@ -159,7 +162,7 @@ input, select {
   font-family: var(--mono);
   font-size: 0.9rem;
   padding: 0.6rem 0.7rem;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--ink);
   border-radius: 0;
   background: var(--paper-raised);
   color: var(--ink);
@@ -180,10 +183,16 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .day-card {
   background: var(--paper-raised);
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--line);
   padding: 0.85rem 1rem;
   display: grid; gap: 0.7rem;
+  align-content: start;
 }
+
+.day-card.accent-fueled { border-left-color: var(--v-fueled); }
+.day-card.accent-short { border-left-color: var(--v-short); }
+.day-card.accent-heavy { border-left-color: var(--v-heavy); }
 
 .day-head { display: flex; align-items: center; gap: 0.75rem; }
 
@@ -228,7 +237,8 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 .badge-heavy { background: var(--v-heavy); }
 
 .verdict {
-  border: 2px solid var(--ink); border-left-width: 8px;
+  border: 1px solid var(--line); border-left: 8px solid var(--line);
+  background: var(--paper-raised);
   padding: 0.65rem 0.9rem; margin-bottom: 1rem;
   display: grid; gap: 0.5rem; justify-items: start;
 }
@@ -264,13 +274,58 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 /* ---------- day meal builder ---------- */
 
-.day-plan-link { justify-self: start; font-size: 0.85rem; padding: 0.4rem 0.8rem; }
+.intensity { display: flex; align-items: center; gap: 0.45rem; }
+
+.intensity-label {
+  font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--ink-soft);
+}
+
+.macro-table {
+  width: 100%; border-collapse: collapse;
+  border-top: 1px solid var(--line);
+}
+
+.macro-table thead th {
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--ink-soft); font-weight: 400;
+  text-align: right; padding: 0.5rem 0 0.2rem;
+}
+
+.macro-table tbody th {
+  font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--ink-soft); font-weight: 400; text-align: left; padding: 0.18rem 0;
+}
+
+.macro-table td {
+  font-size: 0.8rem; text-align: right; padding: 0.18rem 0 0.18rem 1.25rem;
+  white-space: nowrap;
+}
+
+.macro-table td:nth-child(2) { font-weight: 700; }
+
+.macro-table td:nth-child(3) { color: var(--ink-soft); }
+
+.day-edit {
+  font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 700; color: var(--flag);
+  text-decoration: none; justify-self: start; padding: 0.25rem 0;
+}
+
+.day-edit:hover { text-decoration: underline; }
+
+.day-totals .totals-legend { flex-direction: row; justify-content: flex-end; }
+
+.day-totals .totals-legend dd {
+  font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--ink-soft); font-weight: 400;
+}
 
 .day-screen-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
 .day-screen-head h1 { font-size: 2rem; }
 .day-screen-head .day-date { flex: 1; }
 
-.day-totals { background: var(--paper-raised); border: 2px solid var(--ink); padding: 0.7rem 1rem 0.8rem; margin-bottom: 1rem; }
+.day-totals { background: var(--paper-raised); border: 1px solid var(--line); padding: 0.7rem 1rem 0.8rem; margin-bottom: 1rem; }
 
 .day-totals div { flex-direction: column; align-items: start; }
 
@@ -471,7 +526,8 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 /* ---------- draft assistant ---------- */
 
 .draft-panel {
-  border: 2px solid var(--ink); border-left: 8px solid var(--flag);
+  border: 1px solid var(--line); border-left: 8px solid var(--flag);
+  background: var(--paper-raised);
   padding: 0.9rem 1rem; margin-bottom: 1rem;
   display: grid; gap: 0.6rem; justify-items: start;
 }
@@ -485,7 +541,12 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
   margin: -0.4rem 0 1.1rem;
 }
 
-.draft-redo { align-items: center; flex-wrap: wrap; }
+.draft-redo {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.draft-redo .btn { font-size: 0.8rem; padding: 0.35rem 0.7rem; }
 
 /* ---------- gear + actions ---------- */
 
@@ -524,4 +585,14 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
   .targets { grid-template-columns: repeat(4, auto); }
   .targets div { flex-direction: column; }
   .targets dd { text-align: left; }
+  .day-totals .totals-legend { grid-column: 1 / -1; }
+}
+
+/* Desktop is the primary experience (Lawrence, 2026-07-20): wider canvas,
+   two-column day grid, denser reading. */
+@media (min-width: 1080px) {
+  main { max-width: 64rem; }
+  .days { grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .trip-cards { grid-template-columns: 1fr 1fr; }
+  .macro-table td { font-size: 0.85rem; }
 }

@@ -7,7 +7,7 @@
 // commodity items removed. weightOz is packed ounces where known, else null.
 
 export const SEED = {
-  version: 2,
+  version: 3,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -25,7 +25,7 @@ export const SEED = {
     { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner' },
     { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner' },
     { id: 'mh-chicken-fajita-bowl-2svg', name: 'Mountain House Chicken Fajita Bowl (2 svg)', kcal: 560, carbsG: 50, fatG: 22, proteinG: 40, weightOz: 4.2, slotHint: 'dinner' },
-    { id: 'cheez-it-pack', name: 'Cheez-It (1 pack)', kcal: 140, carbsG: 16, fatG: 7, proteinG: 3, weightOz: 1.0, slotHint: 'lunch' },
+    { id: 'cheez-it-pack', name: 'Cheez-It (1 pack)', kcal: 140, carbsG: 16, fatG: 7, proteinG: 3, weightOz: 1.0, slotHint: 'snack' },
     { id: 'toasty-chee', name: 'Lance ToastChee', kcal: 220, carbsG: 25, fatG: 10, proteinG: 5, weightOz: null, slotHint: 'lunch' },
     { id: 'alpine-spiced-apple-cider', name: 'Alpine Spiced Apple Cider', kcal: 60, carbsG: 15, fatG: 0, proteinG: 0, weightOz: 0.5, slotHint: 'dinner' },
 
@@ -173,6 +173,12 @@ export function applySeedMigrations(state) {
       if (r && f.name === r.from) f.name = r.to
     }
     state.library = state.library.filter(f => !(KILLED_V2.includes(f.id) && !referenced.has(f.id)))
+  }
+  if (from < 3) {
+    // Cheez-It is "at best a snack" (Lawrence) — flip the hint unless the
+    // user already re-hinted it themselves.
+    const c = state.library.find(f => f.id === 'cheez-it-pack')
+    if (c && c.slotHint === 'lunch') c.slotHint = 'snack'
   }
   state.seedVersion = SEED.version
   return state
