@@ -182,6 +182,25 @@ test('a ≥300 kcal lunch base leads the slot, then grows toward its share', () 
   assert.ok(lunchKcal >= 0.22 * dailyTargets(WEIGHT, 'medium').kcal.target, `grew toward share: ${lunchKcal}`)
 })
 
+test('slot growth prefers right-sized items — no 1,300-kcal breakfast to close a 470-kcal gap', () => {
+  // Cold start (no favorites/staples): protein-first growth must not grab a
+  // huge item when a right-sized protein source fits the slot's share.
+  const lib = [
+    { id: 'pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: 1.15, favorite: false, slotHint: 'breakfast' },
+    { id: 'biscuits', name: 'Peak Refuel Biscuits & Sausage Gravy', kcal: 1100, carbsG: 51, fatG: 85, proteinG: 34, weightOz: 6.77, favorite: false, slotHint: 'breakfast' },
+    { id: 'skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, favorite: false, slotHint: 'breakfast' },
+    { id: 'main', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, favorite: false, slotHint: 'dinner' },
+    { id: 'lunchy', name: 'Lance ToastChee', kcal: 220, carbsG: 25, fatG: 10, proteinG: 5, weightOz: 1.4, favorite: false, slotHint: 'lunch' },
+    { id: 'bar', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'snack' },
+    { id: 'bears', name: 'Haribo Goldbears (per oz)', kcal: 95, carbsG: 22, fatG: 0, proteinG: 2, weightOz: 1, favorite: false, slotHint: 'snack' },
+  ]
+  const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
+  const target = dailyTargets(WEIGHT, 'medium').kcal.target
+  const bKcal = meals.breakfast.reduce((s, e) => s + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
+  assert.ok(bKcal <= 0.18 * target * 1.5, `breakfast stays near its share: ${bKcal}`)
+  assert.ok(bKcal >= 200, 'still a real breakfast')
+})
+
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {
   const huge = [
     { id: 'mega', name: 'Mega Meal', kcal: 3000, carbsG: 100, fatG: 100, proteinG: 100, weightOz: 20, favorite: false, slotHint: 'dinner' },

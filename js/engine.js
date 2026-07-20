@@ -326,11 +326,16 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     const used = new Set(meals[slot].map(e => e.foodId))
     if (used.size === 0 && slot === 'breakfast') continue // no breakfast candidates at all
     const pool = [...hinted(slot), ...hinted('snack')].filter(f => !used.has(f.id))
+    // A slot may run a little over its share, but never balloon: an item only
+    // qualifies while it keeps the slot within 1.5× its share (fallback: the
+    // best-ranked item that fits the day ceiling, so growth never stalls).
+    const slotCeil = grow * 1.5
     while (slotKcal[slot] < grow) {
       const ranked = protein < proteinFloor
         ? [...pool].sort((a, b) => ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
         : (strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal'))
-      const f = ranked.find(x => !used.has(x.id) && kcal + x.kcal <= ceiling)
+      const fits = x => !used.has(x.id) && kcal + x.kcal <= ceiling
+      const f = ranked.find(x => fits(x) && slotKcal[slot] + x.kcal <= slotCeil) ?? ranked.find(fits)
       if (!f) break
       add(slot, f)
       used.add(f.id)
