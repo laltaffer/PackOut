@@ -68,11 +68,16 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
 - Verify: `curl` 200 + `<title>` on production URL, then phone smoke at 390px
 
 ## Status
-Created 2026-07-19. Scaffolded; sheet export captured in reference/. DEFINE complete —
-wedge = food planner first. No app code yet.
+2026-07-19: Milestone 1 (food planner) BUILT, REVIEWED, QA'd, and LIVE at
+https://packout.pages.dev. All 7 spec tickets + 2 dogfood tickets (#9 branded seed v2
+w/ migration, #10 cross-trip day import) shipped. eng-review + Codex findings all
+addressed (47 engine tests green). QA: all flows pass at 390px + desktop, zero console
+errors. Pending: Lawrence's SHIP sign-off; Milestone 2 (gear checklist from Montana
+sheet, Alaska-adjusted) before 2026-08-01.
 
 ## Open
-- Port nutrition math + sheet food items into a JSON food library and calc module.
-- Define the v1 gear suggestion baseline (Alaska early-Aug conditions first).
-- Build order: trip setup → food engine → gear → final checklist → deploy.
-- Hard deadline: usable before 2026-08-01 (Alaska hunt); target ~2026-07-25.
+- Google sign-on / sharing with friends: Lawrence floated 2026-07-19; recommended as
+  post-Alaska milestone (see conversation) — needs his decision.
+- Library findability: Lawrence "will think on it" (2026-07-19).
+- Milestone 2: gear checklist + pre-trip Actions, seeded from Montana sheet.
+- GitHub Action auto-deploy: needs a CLOUDFLARE_API_TOKEN repo secret (issue #3).
