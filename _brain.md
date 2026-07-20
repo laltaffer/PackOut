@@ -67,8 +67,17 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   until a CLOUDFLARE_API_TOKEN repo secret exists — see issue #3
 - Verify: `curl` 200 + `<title>` on production URL, then phone smoke at 390px
 
+## Key Decisions (Draft assistant, 2026-07-20)
+- Usual Draft (habit-replay, nutrition-corrected) is P0; Optimized (nutrition-optimal)
+  exposed as the alternate — Lawrence's call at SPEC.
+- Drafting is always user-initiated (never automatic); full-day proposal with an
+  overwrite warning on planned days; drafts write ordinary editable entries.
+- Dinners rotate across drafted days; all other food repeats. Mains need ≥400 kcal
+  (add-ons like cider never propose as the big meal).
+- P1 (issue #17): swap-in-place, "never suggest" flag.
+
 ## Status
-2026-07-19: Milestone 1 (food planner) shipped via full /cto pipeline — LIVE at
+2026-07-20: Draft assistant shipped (spec #14) — 63 engine tests green. 2026-07-19: Milestone 1 (food planner) shipped via full /cto pipeline — LIVE at
 https://packout.pages.dev. 7 spec tickets + dogfood tickets #9 (branded seed v2 w/
 migration) + #10 (cross-trip day import); eng-review + Codex + security findings all
 fixed. Milestone 2 (gear + pre-trip Actions + full readiness rollup, #13) shipped same
@@ -77,10 +86,6 @@ from past trip. 53 engine tests green. Lawrence dogfooding for Alaska 2026-08-01
 Alaska gear adjustments are his content edits in-app.
 
 ## Open
-- **Recommendations/assistant (issue #12) — core product bet.** Lawrence 2026-07-19:
-  "otherwise this is just a better looking spreadsheet, thats actualy harder to use."
-  PackOut must propose plans (draft-a-day/trip from targets + Staples/Favorites), not
-  just total them. Needs a SPEC round.
 - **UI/UX pass (issue #11):** real issues he wants solved — his list, to be captured.
 - Google sign-on / sharing with friends: Lawrence floated 2026-07-19; recommended as
   post-Alaska milestone (see conversation) — needs his decision.
