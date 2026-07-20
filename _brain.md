@@ -58,6 +58,15 @@ parties, offline service worker, weather/mapping integrations.
 **Open bets:** anyone beyond Lawrence wants this (demo publish tests it); deterministic
 gap-closing is "intelligent enough"; localStorage survives real-trip usage patterns.
 
+## Deploy Config
+- Platform: Cloudflare Pages, project `packout` (account laltaffer@gmail.com)
+- Production URL: https://packout.pages.dev
+- Deploy: `./deploy.sh` — runs the engine tests first, aborts on red, uploads only app files
+- Agent shells must wrap in a pty: `script -q /dev/null ./deploy.sh` (wrangler OAuth refuses non-TTY)
+- Auto-deploy: manual per slice for now; GitHub Action (DesignLeaderJobs pattern) deferred
+  until a CLOUDFLARE_API_TOKEN repo secret exists — see issue #3
+- Verify: `curl` 200 + `<title>` on production URL, then phone smoke at 390px
+
 ## Status
 Created 2026-07-19. Scaffolded; sheet export captured in reference/. DEFINE complete —
 wedge = food planner first. No app code yet.
