@@ -74,3 +74,70 @@ export function dayTotals(day, library) {
   ]
   return sumEntries(flat, library)
 }
+
+// Verdict thresholds (SPEC): Fueled = ≥90% kcal target AND protein ≥ floor;
+// Heavy = >115% kcal (soft warning); Short otherwise, with the concrete gap.
+const FUELED_KCAL_PCT = 0.90
+const HEAVY_KCAL_PCT = 1.15
+
+export function dayVerdict(day, weightLbs, library) {
+  const targets = dailyTargets(weightLbs, day.intensity)
+  const totals = dayTotals(day, library)
+  const kcalFloor = FUELED_KCAL_PCT * targets.kcal.target
+  const kcalCeil = HEAVY_KCAL_PCT * targets.kcal.target
+  const kcalShort = Math.max(0, Math.round(kcalFloor - totals.kcal))
+  const proteinShortG = Math.max(0, Math.round(targets.proteinG.floor - totals.proteinG))
+  const kcalOver = Math.max(0, Math.round(totals.kcal - kcalCeil))
+  const status = (kcalShort > 0 || proteinShortG > 0) ? 'short' : (kcalOver > 0 ? 'heavy' : 'fueled')
+  return { status, kcalShort, proteinShortG, kcalOver, totals, targets }
+}
+
+export function tripVerdict(trip, library) {
+  const shortDays = []
+  const heavyDays = []
+  trip.days.forEach((day, i) => {
+    const v = dayVerdict(day, trip.weightLbs, library)
+    if (v.status === 'short') shortDays.push(i)
+    if (v.status === 'heavy') heavyDays.push(i)
+  })
+  return { fueled: shortDays.length === 0, shortDays, heavyDays }
+}
+
+// Staples — deterministic habit detection: a food is a Staple when it appears
+// on at least 3 planned days and at least half of all planned days.
+export function stapleIds(trips) {
+  const dayCounts = new Map()
+  let plannedDays = 0
+  for (const trip of trips) {
+    for (const day of trip.days) {
+      const meals = day.meals ?? emptyMeals()
+      const ids = new Set([
+        ...meals.electrolytes, ...meals.breakfast, ...meals.lunch, ...meals.dinner,
+        ...meals.snacks.flatMap(s => s.items),
+      ].map(e => e.foodId))
+      if (ids.size === 0) continue
+      plannedDays += 1
+      for (const id of ids) dayCounts.set(id, (dayCounts.get(id) ?? 0) + 1)
+    }
+  }
+  const out = new Set()
+  for (const [id, n] of dayCounts) {
+    if (n >= 3 && n >= plannedDays / 2) out.add(id)
+  }
+  return out
+}
+
+// Gap-closing suggestions, ranked: Favorite, then Staple, then how well the
+// food fights the actual gap (protein density for protein gaps, cals/oz —
+// pack-weight efficiency — for calorie gaps).
+export function suggestions(gap, library, staples, limit = 5) {
+  const density = f => f.weightOz
+    ? (gap.proteinShortG > 0 ? (f.proteinG ?? 0) : f.kcal) / f.weightOz
+    : 0
+  return [...library]
+    .sort((a, b) =>
+      ((b.favorite === true) - (a.favorite === true)) ||
+      (staples.has(b.id) - staples.has(a.id)) ||
+      (density(b) - density(a)))
+    .slice(0, limit)
+}

@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions } from './engine.js'
 import { load, save, newId } from './store.js'
 
 const app = document.getElementById('app')
@@ -158,12 +158,18 @@ function renderNewTrip() {
 // ---------- trip view ----------
 
 function renderTrip(trip) {
+  const anyPlanned = trip.days.some(d => dayTotals(d, state.library).kcal > 0)
+  const tv = tripVerdict(trip, state.library)
+  const rollup = !anyPlanned ? '' : tv.fueled
+    ? `<p class="trip-rollup rollup-fueled">Every day Fueled${tv.heavyDays.length ? ` · ${tv.heavyDays.length} heavy` : ''}</p>`
+    : `<p class="trip-rollup rollup-short">${tv.shortDays.length} day${tv.shortDays.length > 1 ? 's' : ''} short: ${tv.shortDays.map(i => `Day ${i + 1}`).join(', ')}</p>`
   app.replaceChildren(el(`
     <section class="trip">
       <a href="#/" class="crumb">&larr; Trips</a>
       <div class="trip-head">
         <h1>${esc(trip.name)}</h1>
         <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs</p>
+        ${rollup}
       </div>
       <ol class="days">
         ${trip.days.map((day, i) => dayCard(trip, day, i)).join('')}
@@ -183,6 +189,7 @@ function dayCard(trip, day, i) {
     <li class="day-card">
       <div class="day-head">
         <span class="day-label">Day ${i + 1}</span>
+        ${planned.kcal > 0 ? verdictBadge(dayVerdict(day, trip.weightLbs, state.library)) : ''}
         <span class="day-date">${dayDate(trip, i)}</span>
         <label class="intensity">
           <span class="visually-hidden">Intensity for day ${i + 1}</span>
@@ -201,6 +208,22 @@ function dayCard(trip, day, i) {
         ${planned.kcal > 0 ? `${planned.kcal.toLocaleString()} kcal planned · edit` : 'Plan meals'}
       </a>
     </li>`
+}
+
+// ---------- verdicts ----------
+
+const VERDICT_LABELS = { fueled: 'Fueled', short: 'Short', heavy: 'Heavy' }
+
+function verdictBadge(v) {
+  return `<span class="badge badge-${v.status}">${VERDICT_LABELS[v.status]}</span>`
+}
+
+function gapSentence(v) {
+  if (v.status === 'heavy') return `${v.kcalOver.toLocaleString()} kcal over the 115% line — extra weight, your call.`
+  const parts = []
+  parts.push(v.kcalShort > 0 ? `${v.kcalShort.toLocaleString()} kcal short` : 'calories fine')
+  parts.push(v.proteinShortG > 0 ? `${v.proteinShortG} g protein short` : 'protein fine')
+  return parts.join(' · ')
 }
 
 // ---------- day meal builder ----------
@@ -252,6 +275,23 @@ function renderDay(trip, i) {
   const st = slotTargets(targets)
   const totals = dayTotals(day, state.library)
   const otherDays = trip.days.map((_, j) => j).filter(j => j !== i)
+  const v = dayVerdict(day, trip.weightLbs, state.library)
+  const staples = stapleIds(state.trips)
+  const suggs = v.status === 'short'
+    ? suggestions({ kcalShort: v.kcalShort, proteinShortG: v.proteinShortG }, state.library, staples)
+    : []
+  const verdictBlock = totals.kcal === 0 ? '' : `
+    <div class="verdict verdict-${v.status}">
+      ${verdictBadge(v)}
+      <span class="gap">${gapSentence(v)}</span>
+      ${suggs.length ? `
+        <div class="suggs">
+          ${suggs.map(f => `
+            <button class="sugg" data-sugg="${f.id}">
+              + ${esc(f.name)} <span class="mono">${f.kcal} kcal${v.proteinShortG > 0 && f.proteinG ? ` · ${f.proteinG}g P` : ''}</span>
+            </button>`).join('')}
+        </div>` : ''}
+    </div>`
   app.replaceChildren(el(`
     <section class="day-screen">
       <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
@@ -272,6 +312,7 @@ function renderDay(trip, i) {
         <div><dt>Weight</dt><dd>${totals.weightOz} oz${totals.missingWeightCount ? ` <span class="floor">+${totals.missingWeightCount} unweighed</span>` : ''}</dd></div>
         ${totals.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${totals.calsPerOz}</dd></div>` : ''}
       </dl>
+      ${verdictBlock}
       ${slotSection(trip, i, 'electrolytes', day.meals.electrolytes, '')}
       ${slotSection(trip, i, 'breakfast', day.meals.breakfast, `${st.breakfast.kcalMin}–${st.breakfast.kcalMax} kcal · ${st.breakfast.carbsMinG}–${st.breakfast.carbsMaxG}g C`)}
       ${slotSection(trip, i, 'lunch', day.meals.lunch, '')}
@@ -344,6 +385,19 @@ function renderDay(trip, i) {
     day.meals.snacks.splice(Number(btn.dataset.rmSnack), 1)
     commit()
   }))
+  app.querySelectorAll('[data-sugg]').forEach(btn => btn.addEventListener('click', () => {
+    const food = state.library.find(f => f.id === btn.dataset.sugg)
+    if (!food) return
+    if (food.slotHint === 'snack') {
+      day.meals.snacks.push({ items: [{ foodId: food.id, qty: 1 }] })
+    } else {
+      const entries = day.meals[food.slotHint] ?? day.meals.lunch
+      const existing = entries.find(e => e.foodId === food.id)
+      if (existing) existing.qty += 1
+      else entries.push({ foodId: food.id, qty: 1 })
+    }
+    commit()
+  }))
 }
 
 let pickerSearch = ''
@@ -353,10 +407,12 @@ function renderPicker(trip, i, slotKey) {
   day.meals ??= emptyMeals()
   const slotBase = slotKey.startsWith('snack-') ? 'snack' : slotKey
   const q = pickerSearch.trim().toLowerCase()
+  const staples = stapleIds(state.trips)
   const foods = state.library
     .filter(f => !q || f.name.toLowerCase().includes(q))
     .sort((a, b) =>
       (b.favorite - a.favorite) ||
+      (staples.has(b.id) - staples.has(a.id)) ||
       ((b.slotHint === slotBase) - (a.slotHint === slotBase)) ||
       a.name.localeCompare(b.name))
   const slotLabel = slotKey.startsWith('snack-') ? `Snack ${Number(slotKey.slice(6)) + 1}` : SLOT_LABELS[slotKey]
@@ -369,7 +425,7 @@ function renderPicker(trip, i, slotKey) {
         ${foods.map(f => `
           <li class="food-row">
             <button class="food-pick" data-pick="${f.id}">
-              <span class="food-name">${f.favorite ? '★ ' : ''}${esc(f.name)}</span>
+              <span class="food-name">${f.favorite ? '★ ' : ''}${esc(f.name)}${staples.has(f.id) ? ' <span class="staple-tag">every time</span>' : ''}</span>
               <span class="food-macros mono">${macroLine(f)}</span>
             </button>
           </li>`).join('')}

@@ -209,6 +209,59 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .targets .floor { display: block; font-weight: 400; color: var(--ink-soft); font-size: 0.85em; }
 
+/* ---------- verdicts ---------- */
+
+:root {
+  --v-fueled: #2f6b33;
+  --v-short: #b3261e;
+  --v-heavy: #9a6a00;
+}
+
+.badge {
+  font-family: var(--mono); font-size: 0.62rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  padding: 0.2rem 0.45rem; color: var(--paper-raised);
+}
+
+.badge-fueled { background: var(--v-fueled); }
+.badge-short { background: var(--v-short); }
+.badge-heavy { background: var(--v-heavy); }
+
+.verdict {
+  border: 2px solid var(--ink); border-left-width: 8px;
+  padding: 0.65rem 0.9rem; margin-bottom: 1rem;
+  display: grid; gap: 0.5rem; justify-items: start;
+}
+
+.verdict-fueled { border-left-color: var(--v-fueled); }
+.verdict-short { border-left-color: var(--v-short); }
+.verdict-heavy { border-left-color: var(--v-heavy); }
+
+.verdict .gap { font-weight: 700; }
+
+.suggs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.sugg {
+  border: 2px solid var(--ink); background: var(--paper-raised);
+  font: inherit; font-size: 0.8rem; padding: 0.45rem 0.6rem;
+  cursor: pointer; min-height: 40px;
+}
+
+.sugg:hover { border-color: var(--flag); }
+
+.sugg .mono { color: var(--ink-soft); font-size: 0.62rem; }
+
+.trip-rollup { font-weight: 700; }
+.rollup-fueled { color: var(--v-fueled); }
+.rollup-short { color: var(--v-short); }
+
+.staple-tag {
+  font-family: var(--mono); font-size: 0.58rem; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--flag); font-weight: 700;
+  border: 1px solid currentColor; padding: 0.05rem 0.3rem; margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
 /* ---------- day meal builder ---------- */
 
 .day-plan-link { justify-self: start; font-size: 0.85rem; padding: 0.4rem 0.8rem; }
