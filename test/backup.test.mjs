@@ -60,6 +60,20 @@ test('rejects non-numeric macros (markup cannot reach the DOM through numbers)',
   assert.equal(validateImport(evilMacro).ok, false)
 })
 
+test('rejects ids outside the safe charset (attribute-injection vector)', () => {
+  const evilFoodId = { ...GOOD, library: [{ ...GOOD.library[0], id: '"><img src=x onerror=alert(1)>' }] }
+  assert.equal(validateImport(evilFoodId).ok, false)
+  const evilTripId = { ...GOOD, trips: [{ ...GOOD.trips[0], id: 'a" onmouseover="x' }] }
+  assert.equal(validateImport(evilTripId).ok, false)
+  const evilEntryId = withDay({
+    intensity: 'medium',
+    meals: { electrolytes: [], breakfast: [{ foodId: '<script>', qty: 1 }], lunch: [], dinner: [], snacks: [] },
+  })
+  assert.equal(validateImport(evilEntryId).ok, false)
+  const evilPackedKey = withDay({ intensity: 'medium', packed: { '"><i>': 1 } })
+  assert.equal(validateImport(evilPackedKey).ok, false)
+})
+
 test('rejects duplicate ids and zero-day trips', () => {
   const dup = { ...GOOD, library: [GOOD.library[0], { ...GOOD.library[0] }] }
   assert.equal(validateImport(dup).ok, false)

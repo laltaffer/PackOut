@@ -210,9 +210,14 @@ const MEAL_KEYS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']
 function num(v) { return typeof v === 'number' && Number.isFinite(v) }
 function numOrNull(v) { return v === null || num(v) }
 
+// Ids are interpolated into HTML attributes and hash routes; constrain them at
+// the import boundary so they can never carry markup.
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/
+function validId(v) { return typeof v === 'string' && SAFE_ID.test(v) }
+
 function validEntries(entries) {
   return Array.isArray(entries) && entries.every(e =>
-    e && typeof e.foodId === 'string' && num(e.qty) && e.qty >= 1)
+    e && validId(e.foodId) && num(e.qty) && e.qty >= 1)
 }
 
 function validDay(day) {
@@ -226,7 +231,7 @@ function validDay(day) {
   }
   if (day.packed !== undefined) {
     if (!day.packed || typeof day.packed !== 'object') return false
-    if (!Object.values(day.packed).every(num)) return false
+    if (!Object.entries(day.packed).every(([k, v]) => validId(k) && num(v))) return false
   }
   return true
 }
@@ -239,7 +244,7 @@ export function validateImport(data) {
   }
   const tripIds = new Set()
   for (const t of data.trips) {
-    if (!t?.id || typeof t.id !== 'string' || tripIds.has(t.id)) return { ok: false, error: 'Trip ids must be unique strings.' }
+    if (!t || !validId(t.id) || tripIds.has(t.id)) return { ok: false, error: 'Trip ids must be unique, plain identifiers.' }
     tripIds.add(t.id)
     if (!t.name || !Array.isArray(t.days) || t.days.length === 0 || !num(t.weightLbs) || t.weightLbs <= 0 || !t.startDate) {
       return { ok: false, error: `Trip "${t.name ?? '?'}" is malformed.` }
@@ -250,7 +255,7 @@ export function validateImport(data) {
   }
   const foodIds = new Set()
   for (const f of data.library) {
-    if (!f?.id || typeof f.id !== 'string' || foodIds.has(f.id)) return { ok: false, error: 'Food ids must be unique strings.' }
+    if (!f || !validId(f.id) || foodIds.has(f.id)) return { ok: false, error: 'Food ids must be unique, plain identifiers.' }
     foodIds.add(f.id)
     if (!f.name?.trim?.() || !num(f.kcal) || f.kcal <= 0) return { ok: false, error: `Food "${f.name ?? '?'}" is malformed.` }
     if (![f.carbsG, f.fatG, f.proteinG, f.weightOz].every(numOrNull)) {
