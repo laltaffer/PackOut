@@ -100,6 +100,10 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-20 (later): ±50 kcal draft engine + seed v9 wipe + no-store HTML shipped at
+943db15 — 75 tests green; verified live: migration wipes a stale pre-v9 state, week
+drafts within ±48 of target, dinners rotate the 5 ordered mains. Known gap: no
+protein-dense snack in the library, so a day can read Short by a few grams.
 2026-07-20: Draft assistant shipped (spec #14) — 63 engine tests green. 2026-07-19: Milestone 1 (food planner) shipped via full /cto pipeline — LIVE at
 https://packout.pages.dev. 7 spec tickets + dogfood tickets #9 (branded seed v2 w/
 migration) + #10 (cross-trip day import); eng-review + Codex + security findings all
