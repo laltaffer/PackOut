@@ -7,11 +7,13 @@
 // commodity items removed. weightOz is packed ounces where known, else null.
 
 export const SEED = {
-  version: 6,
+  version: 7,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
     { id: 'liquid-iv-energy', name: 'Liquid IV Energy', kcal: 45, carbsG: 10, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
+    // Skratch Labs label (SVG panel, 2026-07-20): 1 scoop = 22g serving
+    { id: 'skratch-hydration-mix', name: 'Skratch Labs Sport Hydration Mix (scoop)', kcal: 80, carbsG: 19, fatG: 0, proteinG: 0, weightOz: 0.78, slotHint: 'electrolytes' },
 
     // Breakfast
     { id: 'peak-strawberry-granola', name: 'Peak Refuel Strawberry Granola', kcal: 530, carbsG: 87, fatG: 9, proteinG: 23, weightOz: null, slotHint: 'breakfast' },
@@ -50,6 +52,9 @@ export const SEED = {
     { id: 'packaroon', name: 'Packaroon', kcal: 160, carbsG: 12, fatG: 12, proteinG: 2, weightOz: null, slotHint: 'snack' },
     // Skratch Labs (label image, 2026-07-20): 80 kcal/25g serving, 2 servings/packet
     { id: 'skratch-energy-chews', name: 'Skratch Labs Energy Chews (packet)', kcal: 160, carbsG: 38, fatG: 0, proteinG: 0, weightOz: 1.76, slotHint: 'snack' },
+    // haribo.com table: 100 kcal / 23g C / 2g P per 30g serving, normalized to
+    // a 1 oz unit (Lawrence: track gummies by weight, not pieces) — qty = oz
+    { id: 'haribo-goldbears-oz', name: 'Haribo Goldbears (per oz)', kcal: 95, carbsG: 22, fatG: 0, proteinG: 2, weightOz: 1, slotHint: 'snack' },
   ],
 }
 
@@ -226,6 +231,14 @@ export function applySeedMigrations(state) {
     if (!state.library.some(f => f.id === 'skratch-energy-chews')) {
       const f = SEED.foods.find(x => x.id === 'skratch-energy-chews')
       state.library.push({ ...f, favorite: false })
+    }
+  }
+  if (from < 7) {
+    // Additive: Skratch hydration mix + Goldbears (Lawrence's sources).
+    for (const id of ['skratch-hydration-mix', 'haribo-goldbears-oz']) {
+      if (!state.library.some(f => f.id === id)) {
+        state.library.push({ ...SEED.foods.find(x => x.id === id), favorite: false })
+      }
     }
   }
   state.seedVersion = SEED.version

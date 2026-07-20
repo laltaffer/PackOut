@@ -130,6 +130,16 @@ test('v5 migration adds exactly the new catalog items — never resurrects user 
   assert.equal(s.seedVersion, SEED.version)
 })
 
+test('v7 adds Skratch hydration (per scoop) and Goldbears normalized per ounce', () => {
+  const scoop = SEED.foods.find(f => f.id === 'skratch-hydration-mix')
+  assert.deepEqual([scoop.kcal, scoop.carbsG, scoop.weightOz, scoop.slotHint], [80, 19, 0.78, 'electrolytes'])
+  const bears = SEED.foods.find(f => f.id === 'haribo-goldbears-oz')
+  assert.deepEqual([bears.kcal, bears.carbsG, bears.proteinG, bears.weightOz], [95, 22, 2, 1])
+  const s = applySeedMigrations({ schemaVersion: 1, seedVersion: 6, trips: [], library: [] })
+  assert.ok(s.library.some(f => f.id === 'haribo-goldbears-oz'))
+  assert.ok(!s.library.some(f => f.id === 'packaroon'), 'still never resurrects deletions')
+})
+
 test('migration is a no-op at current seed version', () => {
   const st = { schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [{ id: 'gummy-bears-2svg', name: 'Gummy Bears (2 svg)', kcal: 300 }] }
   const s = applySeedMigrations(st)
