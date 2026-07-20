@@ -160,6 +160,19 @@ export function dayPackList(day, library) {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+// Planned days across every trip, for importing a past day's plan into a new
+// one. Empty days are noise, not options.
+export function plannedDayOptions(trips, library) {
+  const out = []
+  for (const trip of trips) {
+    trip.days.forEach((day, dayIndex) => {
+      const kcal = dayTotals(day, library).kcal
+      if (kcal > 0) out.push({ tripId: trip.id, tripName: trip.name, dayIndex, kcal })
+    })
+  }
+  return out
+}
+
 // Readiness: every Day Fueled (heavy is a warning, not a blocker) and every
 // planned item Packed. Blockers are named, not counted.
 export function readiness(trip, library) {

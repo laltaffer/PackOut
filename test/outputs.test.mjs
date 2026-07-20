@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { groceryList, dayPackList, readiness, emptyMeals } from '../js/engine.js'
+import { groceryList, dayPackList, readiness, emptyMeals, plannedDayOptions } from '../js/engine.js'
 
 const LIB = [
   { id: 'meal', name: 'Meal', kcal: 800, carbsG: 60, fatG: 20, proteinG: 40, weightOz: 6, favorite: false },
@@ -54,6 +54,17 @@ test('readiness rolls up verdicts and packed state with named blockers', () => {
   assert.deepEqual(r.unpacked, [
     { day: 0, foodId: 'bar', name: 'Bar', qty: 2 },
     { day: 1, foodId: 'bar', name: 'Bar', qty: 1 },
+  ])
+})
+
+test('plannedDayOptions lists planned days across trips with kcal, skipping empty days', () => {
+  const trips = [
+    { id: 't1', name: 'Alaska', days: [dayWith({ dinner: [{ foodId: 'meal', qty: 1 }] }), { intensity: 'medium' }] },
+    { id: 't2', name: 'Montana', days: [dayWith({ snacks: [[{ foodId: 'bar', qty: 2 }]] })] },
+  ]
+  assert.deepEqual(plannedDayOptions(trips, LIB), [
+    { tripId: 't1', tripName: 'Alaska', dayIndex: 0, kcal: 800 },
+    { tripId: 't2', tripName: 'Montana', dayIndex: 0, kcal: 800 },
   ])
 })
 

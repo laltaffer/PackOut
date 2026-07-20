@@ -1,6 +1,6 @@
 // Storage adapter — the only module that touches localStorage.
 
-import { SEED } from './seed.js'
+import { SEED, applySeedMigrations } from './seed.js'
 
 const KEY = 'packout/v1'
 
@@ -49,7 +49,7 @@ export function load() {
   try {
     const state = JSON.parse(raw)
     if (!state || state.schemaVersion !== 1 || !Array.isArray(state.trips)) throw new Error('bad shape')
-    return sanitizePacked(ensureLibrary(state))
+    return applySeedMigrations(sanitizePacked(ensureLibrary(state)))
   } catch {
     // Never crash the shell on corrupt state; keep a timestamped copy and
     // expose it via corruptInfo() so the UI can offer recovery.

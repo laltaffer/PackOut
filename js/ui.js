@@ -1,7 +1,8 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions } from './engine.js'
 import { load, save, newId, corruptInfo } from './store.js'
+import { applySeedMigrations } from './seed.js'
 
 const app = document.getElementById('app')
 let state = load()
@@ -182,6 +183,7 @@ function renderDashboard() {
       `Replace current data (${state.trips.length} trips, ${state.library.length} foods) ` +
       `with this backup (${data.trips.length} trips, ${data.library.length} foods)?`)
     if (!ok) return
+    applySeedMigrations(data) // older exports get current seed names/removals
     // Write-through: the backup must reach disk before it becomes the live
     // state, so a quota failure can't strand memory and disk out of sync.
     if (!save(data)) {
@@ -444,6 +446,7 @@ function renderDay(trip, i) {
         </label>
         <button class="btn" id="copy-apply">Copy</button>
       </section>` : ''}
+      ${importOptions(trip, i)}
     </section>
   `))
 
@@ -455,6 +458,7 @@ function renderDay(trip, i) {
     day.meals.snacks.push({ items: [] })
     commit()
   })
+  wireImportDay(trip, i, day)
   const copyApply = document.getElementById('copy-apply')
   if (copyApply) copyApply.addEventListener('click', () => {
     const j = Number(document.getElementById('copy-target').value)
@@ -494,6 +498,46 @@ function renderDay(trip, i) {
     }
     commit()
   }))
+}
+
+// Import a planned day from any trip — proven meals over manual re-entry.
+function importOptions(trip, i) {
+  const options = plannedDayOptions(state.trips, state.library)
+    .filter(o => !(o.tripId === trip.id && o.dayIndex === i))
+  if (!options.length) return ''
+  const byTrip = new Map()
+  for (const o of options) {
+    if (!byTrip.has(o.tripId)) byTrip.set(o.tripId, { name: o.tripName, days: [] })
+    byTrip.get(o.tripId).days.push(o)
+  }
+  return `
+    <section class="copy-day">
+      <label>Import a day's plan from
+        <select id="import-source">
+          ${[...byTrip.values()].map(g => `
+            <optgroup label="${esc(g.name)}">
+              ${g.days.map(o => `<option value="${o.tripId}:${o.dayIndex}">Day ${o.dayIndex + 1} — ${o.kcal.toLocaleString()} kcal</option>`).join('')}
+            </optgroup>`).join('')}
+        </select>
+      </label>
+      <button class="btn" id="import-apply">Import</button>
+    </section>`
+}
+
+function wireImportDay(trip, i, day) {
+  const btn = document.getElementById('import-apply')
+  if (!btn) return
+  btn.addEventListener('click', () => {
+    const [tripId, dayIndex] = document.getElementById('import-source').value.split(':')
+    const source = state.trips.find(t => t.id === tripId)?.days[Number(dayIndex)]
+    if (!source) return
+    const sourceName = state.trips.find(t => t.id === tripId).name
+    if (confirm(`Replace Day ${i + 1}'s plan with ${sourceName} Day ${Number(dayIndex) + 1}'s?`)) {
+      day.meals = structuredClone(source.meals)
+      delete day.packed
+      commit()
+    }
+  })
 }
 
 let pickerSearch = ''
