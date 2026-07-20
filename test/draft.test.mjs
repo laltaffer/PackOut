@@ -201,6 +201,22 @@ test('slot growth prefers right-sized items — no 1,300-kcal breakfast to close
   assert.ok(bKcal >= 200, 'still a real breakfast')
 })
 
+test('usual rotation cycles within favorite mains — the catalog never displaces owned core meals', () => {
+  // Lawrence 2026-07-20: core meals come from his Peak Refuel order. With 2+
+  // favorite mains, a week's dinners rotate through the favorites tier only.
+  const favs = ['strog', 'curry', 'homestyle'].map((id, j) => (
+    { id, name: `Peak Refuel Fav ${j}`, kcal: 800 + j * 10, carbsG: 50, fatG: 20, proteinG: 41, weightOz: 5, favorite: true, slotHint: 'dinner' }))
+  const catalog = ['alfredo', 'mashers', 'goulash'].map((id, j) => (
+    { id, name: `Peak Refuel Cat ${j}`, kcal: 900 + j * 10, carbsG: 60, fatG: 30, proteinG: 45, weightOz: 6, favorite: false, slotHint: 'dinner' }))
+  const lib = [...LIB.filter(f => f.slotHint !== 'dinner'), ...favs, ...catalog]
+  const trip = mkTrip(7)
+  const drafts = draftEmptyDays(trip, lib, new Set(), 'usual')
+  const mains = drafts.map(d => d.meals.dinner[0].foodId)
+  assert.equal(mains.length, 7)
+  for (const m of mains) assert.ok(['strog', 'curry', 'homestyle'].includes(m), `catalog main drafted: ${m}`)
+  for (let i = 1; i < mains.length; i++) assert.notEqual(mains[i], mains[i - 1], 'no consecutive repeats')
+})
+
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {
   const huge = [
     { id: 'mega', name: 'Mega Meal', kcal: 3000, carbsG: 100, fatG: 100, proteinG: 100, weightOz: 20, favorite: false, slotHint: 'dinner' },

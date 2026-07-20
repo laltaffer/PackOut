@@ -244,10 +244,18 @@ const SLOT_MIN_KCAL = { breakfast: 200, lunch: 300 }
 const MEAL_SHARE = { breakfast: 0.18, lunch: 0.27 }
 const SNACK_SOFT_CAP = 3
 
-function dinnerMains(library) {
+function dinnerMains(library, staples = new Set(), habitTier = false) {
   const hinted = library.filter(f => f.slotHint === 'dinner')
   const substantial = hinted.filter(f => f.kcal >= MAIN_MIN_KCAL)
-  return substantial.length ? substantial : hinted
+  const mains = substantial.length ? substantial : hinted
+  if (habitTier) {
+    // Usual drafts treat the user's own mains (Favorites/Staples) as the
+    // rotation pool when there are enough for variety — the catalog never
+    // displaces owned core meals.
+    const own = mains.filter(f => f.favorite || staples.has(f.id))
+    if (own.length >= 2) return own
+  }
+  return mains
 }
 
 function rankHabit(foods, staples) {
@@ -312,7 +320,7 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     }
   }
   const mains = mainsOverride ?? (strategy === 'usual'
-    ? rankHabit(dinnerMains(library), staples)
+    ? rankHabit(dinnerMains(library, staples, true), staples)
     : rankByDensity(dinnerMains(library), staples, 'kcal'))
   const main = pickMain(mains, avoidMains)
   if (main) add('dinner', main)
@@ -397,7 +405,7 @@ export function draftEmptyDays(trip, library, staples, strategy = 'usual') {
     // Rotate the starting point through the ranked mains so a week cycles
     // them instead of alternating between the top two.
     const mains = strategy === 'usual'
-      ? rankHabit(dinnerMains(library), staples)
+      ? rankHabit(dinnerMains(library, staples, true), staples)
       : rankByDensity(dinnerMains(library), staples, 'kcal')
     const rotated = mains.length
       ? [...mains.slice(out.length % mains.length), ...mains.slice(0, out.length % mains.length)]
