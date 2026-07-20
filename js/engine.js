@@ -183,6 +183,26 @@ export function readiness(trip, library) {
   }
 }
 
+// Backup import validation. Returns {ok:true} or {ok:false, error} — never throws.
+export function validateImport(data) {
+  if (!data || typeof data !== 'object') return { ok: false, error: 'Not a PackOut backup file.' }
+  if (data.schemaVersion !== 1) return { ok: false, error: `Unsupported schema version: ${data.schemaVersion}.` }
+  if (!Array.isArray(data.trips) || !Array.isArray(data.library)) {
+    return { ok: false, error: 'Backup is missing trips or library.' }
+  }
+  for (const t of data.trips) {
+    if (!t?.id || !t?.name || !Array.isArray(t.days) || typeof t.weightLbs !== 'number' || !t.startDate) {
+      return { ok: false, error: `Trip "${t?.name ?? '?'}" is malformed.` }
+    }
+  }
+  for (const f of data.library) {
+    if (!f?.id || !f?.name?.trim?.() || typeof f.kcal !== 'number') {
+      return { ok: false, error: `Food "${f?.name ?? '?'}" is malformed.` }
+    }
+  }
+  return { ok: true }
+}
+
 // Gap-closing suggestions, ranked: Favorite, then Staple, then how well the
 // food fights the actual gap (protein density for protein gaps, cals/oz —
 // pack-weight efficiency — for calorie gaps).

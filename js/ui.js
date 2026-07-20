@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, groceryList, dayPackList, readiness } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, groceryList, dayPackList, readiness, validateImport } from './engine.js'
 import { load, save, newId } from './store.js'
 
 const app = document.getElementById('app')
@@ -106,6 +106,14 @@ function renderDashboard() {
               <button class="btn-quiet" data-del="${t.id}" aria-label="Delete ${esc(t.name)}">Delete</button>
             </li>`).join('')}
         </ul>`}
+      <section class="backup">
+        <h2>Backup</h2>
+        <p>Your data lives only in this browser. Export before the trip.</p>
+        <div class="backup-actions">
+          <button class="btn" id="export">Export JSON</button>
+          <label class="btn btn-file">Import JSON<input type="file" id="import" accept="application/json,.json"></label>
+        </div>
+      </section>
     </section>
   `))
   app.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => {
@@ -115,6 +123,37 @@ function renderDashboard() {
       commit()
     }
   }))
+  document.getElementById('export').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `packout-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  })
+  document.getElementById('import').addEventListener('change', async e => {
+    const file = e.target.files[0]
+    if (!file) return
+    let data
+    try {
+      data = JSON.parse(await file.text())
+    } catch {
+      alert('That file is not valid JSON.')
+      return
+    }
+    const check = validateImport(data)
+    if (!check.ok) {
+      alert(`Import rejected: ${check.error} Nothing was changed.`)
+      return
+    }
+    const ok = confirm(
+      `Replace current data (${state.trips.length} trips, ${state.library.length} foods) ` +
+      `with this backup (${data.trips.length} trips, ${data.library.length} foods)?`)
+    if (!ok) return
+    state = data
+    save(state)
+    route()
+  })
 }
 
 // ---------- new trip ----------
