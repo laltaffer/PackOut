@@ -1,5 +1,5 @@
 ---
-status: planning
+status: active
 type: web app
 stack: vanilla HTML/CSS/JS (no build step), localStorage, Cloudflare Pages
 github: https://github.com/laltaffer/PackOut
@@ -90,5 +90,4 @@ Alaska gear adjustments are his content edits in-app.
 - Google sign-on / sharing with friends: Lawrence floated 2026-07-19; recommended as
   post-Alaska milestone (see conversation) — needs his decision.
 - Library findability: Lawrence "will think on it" (2026-07-19).
-- Milestone 2: gear checklist + pre-trip Actions, seeded from Montana sheet.
 - GitHub Action auto-deploy: needs a CLOUDFLARE_API_TOKEN repo secret (issue #3).
