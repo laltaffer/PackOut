@@ -35,15 +35,35 @@ test('usual draft replays staples and favorites into their hinted slots', () => 
   assert.equal(meals.dinner[0].foodId, 'curry', 'favorite main drafts first')
 })
 
-test('usual draft tops up to the kcal target without crossing the 115% line', () => {
+test('usual draft lands the day Fueled without crossing the 115% line', () => {
   const trip = mkTrip()
   const meals = draftDay(trip, 0, LIB, STAPLES, 'usual')
   const day = { intensity: 'medium', meals }
   const t = dayTotals(day, LIB)
   const target = dailyTargets(WEIGHT, 'medium').kcal.target
-  assert.ok(t.kcal >= target, `reached target: ${t.kcal} >= ${target}`)
+  assert.ok(t.kcal >= 0.9 * target, `at least Fueled: ${t.kcal}`)
   assert.ok(t.kcal <= 1.15 * target, `stayed under heavy line: ${t.kcal}`)
   assert.equal(dayVerdict(day, WEIGHT, LIB).status, 'fueled')
+})
+
+test('meals carry the day — lunch and breakfast grow toward their share, at most 3 snacks suggested', () => {
+  // Lawrence 2026-07-20 (his sheet's Day One: ~740 breakfast, 4-item ~1150
+  // lunch, snacks as options): bigger breakfast/lunch, ~3 snacks soft.
+  const meals = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
+  const target = dailyTargets(WEIGHT, 'medium').kcal.target
+  const slotKcal = entries => entries.reduce((s, e) => s + LIB.find(f => f.id === e.foodId).kcal * e.qty, 0)
+  assert.ok(slotKcal(meals.breakfast) >= 0.15 * target, `breakfast is a real meal: ${slotKcal(meals.breakfast)}`)
+  assert.ok(slotKcal(meals.lunch) >= 0.22 * target, `lunch is a real meal: ${slotKcal(meals.lunch)}`)
+  assert.ok(meals.lunch.length > 1, 'lunch groups multiple items, like the sheet')
+  // Soft rule, stated precisely: more than 3 snacks is allowed ONLY when 3
+  // would leave the day below the Fueled line (or the protein floor).
+  if (meals.snacks.length > 3) {
+    const trimmed = structuredClone(meals)
+    trimmed.snacks = trimmed.snacks.slice(0, 3)
+    const t3 = dayTotals({ intensity: 'medium', meals: trimmed }, LIB)
+    assert.ok(t3.kcal < 0.9 * target || t3.proteinG < 0.6 * WEIGHT,
+      `extra snacks only when 3 would miss Fueled (3-snack day was ${t3.kcal} kcal)`)
+  }
 })
 
 test('drafting is deterministic: same inputs, identical output', () => {
@@ -151,13 +171,15 @@ test('meal slots stack to at least 300 kcal — a lone cracker pack is never lun
   assert.ok(meals.lunch.length > 1, 'sub-300 base means multiple items add up')
 })
 
-test('a single ≥300 kcal item stands as a meal without forced stacking', () => {
+test('a ≥300 kcal lunch base leads the slot, then grows toward its share', () => {
   const lib = [
     ...LIB.filter(f => f.id !== 'toastchee'),
     { id: 'big-wrap', name: 'ProBar Meal Wrap', kcal: 390, carbsG: 40, fatG: 12, proteinG: 15, weightOz: 3, favorite: false, slotHint: 'lunch' },
   ]
   const meals = draftDay(mkTrip(), 0, lib, STAPLES, 'usual')
-  assert.deepEqual(meals.lunch.map(e => e.foodId), ['big-wrap'])
+  assert.equal(meals.lunch[0].foodId, 'big-wrap')
+  const lunchKcal = meals.lunch.reduce((s, e) => s + lib.find(f => f.id === e.foodId).kcal * e.qty, 0)
+  assert.ok(lunchKcal >= 0.22 * dailyTargets(WEIGHT, 'medium').kcal.target, `grew toward share: ${lunchKcal}`)
 })
 
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {

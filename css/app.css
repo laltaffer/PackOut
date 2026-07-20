@@ -262,6 +262,13 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 .sugg .mono { color: var(--ink-soft); font-size: 0.62rem; }
 
 .trip-rollup { font-weight: 700; }
+
+.trip-edit-link {
+  font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--flag); text-decoration: none; font-weight: 700;
+}
+
+.trip-edit-link:hover { text-decoration: underline; }
 .rollup-fueled { color: var(--v-fueled); }
 .rollup-short { color: var(--v-short); }
 

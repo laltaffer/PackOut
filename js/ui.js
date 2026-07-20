@@ -39,6 +39,11 @@ function route() {
     const trip = state.trips.find(t => t.id === dayMatch[1])
     if (trip && trip.days[Number(dayMatch[2])]) return renderDay(trip, Number(dayMatch[2]))
   }
+  const editTripMatch = hash.match(/^#\/trip\/(.+)\/edit$/)
+  if (editTripMatch) {
+    const trip = state.trips.find(t => t.id === editTripMatch[1])
+    if (trip) return renderEditTrip(trip)
+  }
   const tripMatch = hash.match(/^#\/trip\/([^/]+)$/)
   if (tripMatch) {
     const trip = state.trips.find(t => t.id === tripMatch[1])
@@ -258,6 +263,60 @@ function renderNewTrip() {
   })
 }
 
+// ---------- edit trip ----------
+
+function renderEditTrip(trip) {
+  app.replaceChildren(el(`
+    <section class="form-screen">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <h1>Edit Trip</h1>
+      <form id="edit-trip">
+        <label>Trip name
+          <input name="name" required value="${esc(trip.name)}">
+        </label>
+        <label>Destination
+          <input name="destination" required value="${esc(trip.destination)}">
+        </label>
+        <label>Start date
+          <input name="startDate" type="date" required value="${trip.startDate}">
+        </label>
+        <label>Days
+          <input name="days" type="number" min="1" max="30" required value="${trip.days.length}">
+          <small>Adding days appends empty ones; removing days deletes them from the end.</small>
+        </label>
+        <label>Your body weight (lbs)
+          <input name="weightLbs" type="number" min="50" max="400" required value="${trip.weightLbs}">
+        </label>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </form>
+    </section>
+  `))
+  document.getElementById('edit-trip').addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    const newCount = Number(f.get('days'))
+    if (newCount < trip.days.length) {
+      const doomed = trip.days.slice(newCount)
+        .map((d, j) => ({ idx: newCount + j, kcal: dayTotals(d, state.library).kcal }))
+        .filter(d => d.kcal > 0)
+      if (doomed.length) {
+        const ok = confirm(
+          `Shortening to ${newCount} days deletes ${doomed.map(d => `Day ${d.idx + 1} (${d.kcal.toLocaleString()} kcal planned)`).join(', ')}. Continue?`)
+        if (!ok) return
+      }
+      trip.days = trip.days.slice(0, newCount)
+    } else {
+      while (trip.days.length < newCount) trip.days.push({ intensity: 'medium' })
+    }
+    trip.name = f.get('name').trim()
+    trip.destination = f.get('destination').trim()
+    trip.startDate = f.get('startDate')
+    trip.weightLbs = Number(f.get('weightLbs'))
+    persist()
+    location.hash = `#/trip/${trip.id}`
+  })
+}
+
 // ---------- trip view ----------
 
 function renderTrip(trip) {
@@ -271,7 +330,7 @@ function renderTrip(trip) {
       <a href="#/" class="crumb">&larr; Trips</a>
       <div class="trip-head">
         <h1>${esc(trip.name)}</h1>
-        <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs</p>
+        <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs · <a class="trip-edit-link" href="#/trip/${trip.id}/edit">Edit trip</a></p>
         ${rollup}
       </div>
       <nav class="trip-outputs">

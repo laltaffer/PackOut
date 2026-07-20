@@ -238,6 +238,11 @@ const MAIN_MIN_KCAL = 400
 // A meal is ≥300 kcal (breakfast keeps V2P's 200 floor) — either one
 // substantial item or several that add up. A lone cracker pack is not lunch.
 const SLOT_MIN_KCAL = { breakfast: 200, lunch: 300 }
+// Meals carry the day (Lawrence's sheet: ~740 breakfast, ~1150 lunch): drafts
+// grow breakfast/lunch toward these day-kcal shares before leaning on snacks,
+// and suggest at most 3 snacks unless Fueled or the protein floor demands more.
+const MEAL_SHARE = { breakfast: 0.18, lunch: 0.27 }
+const SNACK_SOFT_CAP = 3
 
 function dinnerMains(library) {
   const hinted = library.filter(f => f.slotHint === 'dinner')
@@ -312,16 +317,21 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
   const main = pickMain(mains, avoidMains)
   if (main) add('dinner', main)
 
-  // Meal-minimum pass: stack a slot to its floor with more slot-hinted items,
-  // then snack-pool items — "a ProBar plus gummy bears" is a legitimate lunch.
-  for (const [slot, min] of Object.entries(SLOT_MIN_KCAL)) {
+  // Meal-growing pass: lunch then breakfast stack toward their day-kcal share
+  // (never below the meal floors) with slot-hinted then snack-pool items —
+  // "a ProBar plus gummy bears" is a legitimate lunch. Protein gaps steer the
+  // picks while the floor is unmet.
+  for (const slot of ['lunch', 'breakfast']) {
+    const grow = Math.max(SLOT_MIN_KCAL[slot], MEAL_SHARE[slot] * target)
     const used = new Set(meals[slot].map(e => e.foodId))
     if (used.size === 0 && slot === 'breakfast') continue // no breakfast candidates at all
     const pool = [...hinted(slot), ...hinted('snack')].filter(f => !used.has(f.id))
-    const ranked = strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal')
-    for (const f of ranked) {
-      if (slotKcal[slot] >= min) break
-      if (kcal + f.kcal > ceiling) continue
+    while (slotKcal[slot] < grow) {
+      const ranked = protein < proteinFloor
+        ? [...pool].sort((a, b) => ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
+        : (strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal'))
+      const f = ranked.find(x => !used.has(x.id) && kcal + x.kcal <= ceiling)
+      if (!f) break
       add(slot, f)
       used.add(f.id)
     }
@@ -339,6 +349,10 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
   while ((kcal < target || protein < proteinFloor) &&
          meals.snacks.length < DRAFT_SNACK_CAP && snackPool.length > 0 && guard < 50) {
     guard += 1
+    // Soft suggestion: 3 snacks. Only exceed when the day would otherwise
+    // miss Fueled (90%) or the protein floor.
+    if (meals.snacks.length >= SNACK_SOFT_CAP &&
+        kcal >= FUELED_KCAL_PCT * target && protein >= proteinFloor) break
     let next
     if (protein < proteinFloor) {
       next = byProtein.find(f => (f.proteinG ?? 0) > 0 && kcal + f.kcal <= ceiling)
