@@ -68,12 +68,13 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
 - Verify: `curl` 200 + `<title>` on production URL, then phone smoke at 390px
 
 ## Status
-2026-07-19: Milestone 1 (food planner) BUILT, REVIEWED, QA'd, and LIVE at
-https://packout.pages.dev. All 7 spec tickets + 2 dogfood tickets (#9 branded seed v2
-w/ migration, #10 cross-trip day import) shipped. eng-review + Codex findings all
-addressed (47 engine tests green). QA: all flows pass at 390px + desktop, zero console
-errors. Pending: Lawrence's SHIP sign-off; Milestone 2 (gear checklist from Montana
-sheet, Alaska-adjusted) before 2026-08-01.
+2026-07-19: Milestone 1 (food planner) shipped via full /cto pipeline — LIVE at
+https://packout.pages.dev. 7 spec tickets + dogfood tickets #9 (branded seed v2 w/
+migration) + #10 (cross-trip day import); eng-review + Codex + security findings all
+fixed. Milestone 2 (gear + pre-trip Actions + full readiness rollup, #13) shipped same
+day — gear library seeded from the Montana sheet (77 items), per-trip kits, import kit
+from past trip. 53 engine tests green. Lawrence dogfooding for Alaska 2026-08-01;
+Alaska gear adjustments are his content edits in-app.
 
 ## Open
 - **Recommendations/assistant (issue #12) — core product bet.** Lawrence 2026-07-19:
