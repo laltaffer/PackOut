@@ -173,9 +173,28 @@ export function plannedDayOptions(trips, library) {
   return out
 }
 
-// Readiness: every Day Fueled (heavy is a warning, not a blocker) and every
-// planned item Packed. Blockers are named, not counted.
-export function readiness(trip, library) {
+// Trip gear rollup: packed vs total against the gear library, named unpacked
+// items, and total known pack weight. Entries whose gear was deleted are ignored.
+export function gearStats(trip, gearLibrary) {
+  const byId = new Map(gearLibrary.map(g => [g.id, g]))
+  const stats = { total: 0, packed: 0, unpacked: [], weightOz: 0, missingWeightCount: 0 }
+  for (const entry of trip.gear ?? []) {
+    const g = byId.get(entry.gearId)
+    if (!g) continue
+    stats.total += 1
+    if (entry.packed) stats.packed += 1
+    else stats.unpacked.push({ gearId: g.id, name: g.name, category: g.category })
+    if (g.weightOz === null) stats.missingWeightCount += 1
+    else stats.weightOz += g.weightOz
+  }
+  stats.weightOz = Math.round(stats.weightOz * 100) / 100
+  return stats
+}
+
+// Readiness: every Day Fueled (heavy is a warning, not a blocker), every
+// planned food Packed, every gear item Packed, every Action done. Blockers
+// are named, not counted. Trips without gear/actions aren't blocked by them.
+export function readiness(trip, library, gearLibrary = []) {
   const verdict = tripVerdict(trip, library)
   let totalItems = 0
   let packedItems = 0
@@ -189,14 +208,20 @@ export function readiness(trip, library) {
       else unpacked.push({ day: i, ...item })
     }
   })
+  const gear = gearStats(trip, gearLibrary)
+  const actionsAll = trip.actions ?? []
+  const actions = { total: actionsAll.length, pending: actionsAll.filter(a => !a.done).length }
   return {
-    ready: verdict.fueled && unpacked.length === 0 && totalItems > 0,
+    ready: verdict.fueled && unpacked.length === 0 && totalItems > 0 &&
+      gear.unpacked.length === 0 && actions.pending === 0,
     fueled: verdict.fueled,
     shortDays: verdict.shortDays,
     heavyDays: verdict.heavyDays,
     totalItems,
     packedItems,
     unpacked,
+    gear,
+    actions,
   }
 }
 

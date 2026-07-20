@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats } from './engine.js'
 import { load, save, newId, corruptInfo } from './store.js'
 import { applySeedMigrations } from './seed.js'
 
@@ -18,12 +18,18 @@ function route() {
     const trip = state.trips.find(t => t.id === pickMatch[1])
     if (trip && trip.days[Number(pickMatch[2])]) return renderPicker(trip, Number(pickMatch[2]), pickMatch[3])
   }
-  const outMatch = hash.match(/^#\/trip\/(.+)\/(grocery|pack|ready)$/)
+  const gearAddMatch = hash.match(/^#\/trip\/(.+)\/gear\/add$/)
+  if (gearAddMatch) {
+    const trip = state.trips.find(t => t.id === gearAddMatch[1])
+    if (trip) return renderGearPicker(trip)
+  }
+  const outMatch = hash.match(/^#\/trip\/(.+)\/(grocery|pack|ready|gear)$/)
   if (outMatch) {
     const trip = state.trips.find(t => t.id === outMatch[1])
     if (trip) {
       if (outMatch[2] === 'grocery') return renderGrocery(trip)
       if (outMatch[2] === 'pack') return renderPack(trip)
+      if (outMatch[2] === 'gear') return renderGear(trip)
       return renderReady(trip)
     }
   }
@@ -259,6 +265,7 @@ function renderTrip(trip) {
         ${rollup}
       </div>
       <nav class="trip-outputs">
+        <a class="btn" href="#/trip/${trip.id}/gear">Gear</a>
         <a class="btn" href="#/trip/${trip.id}/grocery">Grocery</a>
         <a class="btn" href="#/trip/${trip.id}/pack">Pack Plan</a>
         <a class="btn" href="#/trip/${trip.id}/ready">Readiness</a>
@@ -659,8 +666,160 @@ function renderPack(trip) {
   }))
 }
 
+// ---------- gear ----------
+
+const GEAR_CATEGORIES = [
+  'Pack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
+  'Kill kit', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
+]
+
+function renderGear(trip) {
+  trip.gear ??= []
+  const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
+  const stats = gearStats(trip, state.gearLibrary)
+  const inKit = new Set(trip.gear.map(e => e.gearId))
+  const otherTrips = state.trips.filter(t => t.id !== trip.id && (t.gear?.length ?? 0) > 0)
+  const grouped = GEAR_CATEGORIES
+    .map(cat => ({ cat, entries: trip.gear.filter(e => byId.get(e.gearId)?.category === cat) }))
+    .filter(g => g.entries.length > 0)
+  app.replaceChildren(el(`
+    <section class="output">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <div class="dashboard-head">
+        <h1>Gear</h1>
+        <button class="btn" id="print">Print</button>
+      </div>
+      ${trip.gear.length ? `
+      <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.weightOz ? ` · ${stats.weightOz} oz known weight` : ''}${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>` : `
+      <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
+      <div class="backup-actions gear-actions">
+        <button class="btn" id="gear-full-kit">Add full kit</button>
+        <a class="btn" href="#/trip/${trip.id}/gear/add">Add item</a>
+        ${otherTrips.length ? `
+        <label class="gear-import-label">Import kit from
+          <select id="gear-import-source">
+            ${otherTrips.map(t => `<option value="${t.id}">${esc(t.name)} (${t.gear.length} items)</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn" id="gear-import">Import</button>` : ''}
+      </div>
+      ${grouped.map(g => `
+        <section class="pack-day">
+          <h2>${esc(g.cat)}</h2>
+          <ul class="check-list">
+            ${g.entries.map(e => {
+              const item = byId.get(e.gearId)
+              return `
+              <li>
+                <label class="check-row">
+                  <input type="checkbox" data-gear-pack="${e.gearId}" ${e.packed ? 'checked' : ''}>
+                  <span class="check-name ${e.packed ? 'is-done' : ''}">${esc(item.name)}</span>
+                  <span class="check-qty mono">${item.weightOz !== null ? `${item.weightOz} oz` : ''}</span>
+                  <button class="btn-quiet" data-gear-rm="${e.gearId}" aria-label="Remove ${esc(item.name)}">×</button>
+                </label>
+              </li>`
+            }).join('')}
+          </ul>
+        </section>`).join('')}
+    </section>
+  `))
+  wirePrint()
+  document.getElementById('gear-full-kit').addEventListener('click', () => {
+    for (const g of state.gearLibrary) {
+      if (!inKit.has(g.id)) trip.gear.push({ gearId: g.id, packed: false })
+    }
+    commit()
+  })
+  const importBtn = document.getElementById('gear-import')
+  if (importBtn) importBtn.addEventListener('click', () => {
+    const source = state.trips.find(t => t.id === document.getElementById('gear-import-source').value)
+    if (!source) return
+    if (confirm(`Replace this trip's gear list with ${source.name}'s? Packed marks reset.`)) {
+      trip.gear = source.gear.map(e => ({ gearId: e.gearId, packed: false }))
+      commit()
+    }
+  })
+  app.querySelectorAll('[data-gear-pack]').forEach(cb => cb.addEventListener('change', () => {
+    const entry = trip.gear.find(e => e.gearId === cb.dataset.gearPack)
+    entry.packed = cb.checked
+    commit()
+  }))
+  app.querySelectorAll('[data-gear-rm]').forEach(btn => btn.addEventListener('click', e => {
+    e.preventDefault()
+    trip.gear = trip.gear.filter(x => x.gearId !== btn.dataset.gearRm)
+    commit()
+  }))
+}
+
+let gearSearch = ''
+
+function renderGearPicker(trip) {
+  trip.gear ??= []
+  const inKit = new Set(trip.gear.map(e => e.gearId))
+  const q = gearSearch.trim().toLowerCase()
+  const items = state.gearLibrary
+    .filter(g => !inKit.has(g.id))
+    .filter(g => !q || g.name.toLowerCase().includes(q) || g.category.toLowerCase().includes(q))
+    .sort((a, b) => GEAR_CATEGORIES.indexOf(a.category) - GEAR_CATEGORIES.indexOf(b.category) || a.name.localeCompare(b.name))
+  app.replaceChildren(el(`
+    <section class="picker">
+      <a href="#/trip/${trip.id}/gear" class="crumb">&larr; Gear</a>
+      <h1>Add Gear</h1>
+      <input id="gear-search" type="search" placeholder="Search gear…" value="${esc(gearSearch)}" aria-label="Search gear">
+      <ul class="food-list">
+        ${items.map(g => `
+          <li class="food-row">
+            <button class="food-pick" data-gear-pick="${g.id}">
+              <span class="food-name">${esc(g.name)}</span>
+              <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${g.weightOz} oz` : ''}</span>
+            </button>
+          </li>`).join('')}
+      </ul>
+      <form id="gear-new" class="gear-new">
+        <h2>New gear item</h2>
+        <label>Name<input name="name" required placeholder="Kifaru Woobie"></label>
+        <label>Category
+          <select name="category">${GEAR_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
+        </label>
+        <label>Weight oz (optional)<input name="weightOz" type="number" min="0.05" step="any"></label>
+        <button class="btn btn-primary" type="submit">Add to library + trip</button>
+      </form>
+    </section>
+  `))
+  const search = document.getElementById('gear-search')
+  search.addEventListener('input', () => {
+    gearSearch = search.value
+    renderGearPicker(trip)
+    const s = document.getElementById('gear-search')
+    s.focus()
+    s.setSelectionRange(s.value.length, s.value.length)
+  })
+  app.querySelectorAll('[data-gear-pick]').forEach(btn => btn.addEventListener('click', () => {
+    trip.gear.push({ gearId: btn.dataset.gearPick, packed: false })
+    persist()
+    gearSearch = ''
+    location.hash = `#/trip/${trip.id}/gear`
+  }))
+  document.getElementById('gear-new').addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    const item = {
+      id: newId(),
+      name: f.get('name').trim(),
+      category: f.get('category'),
+      weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
+    }
+    state.gearLibrary.push(item)
+    trip.gear.push({ gearId: item.id, packed: false })
+    persist()
+    gearSearch = ''
+    location.hash = `#/trip/${trip.id}/gear`
+  })
+}
+
 function renderReady(trip) {
-  const r = readiness(trip, state.library)
+  trip.actions ??= []
+  const r = readiness(trip, state.library, state.gearLibrary)
   const foodLine = r.fueled
     ? `Every day Fueled${r.heavyDays.length ? ` (${r.heavyDays.map(i => `Day ${i + 1}`).join(', ')} heavy)` : ''}.`
     : `Short: ${r.shortDays.map(i => `<a href="#/trip/${trip.id}/day/${i}">Day ${i + 1}</a>`).join(', ')}.`
@@ -679,16 +838,57 @@ function renderReady(trip) {
         <p>${r.totalItems === 0 ? 'Nothing planned yet.' : foodLine}</p>
       </section>
       <section class="ready-block">
-        <h2>Packing</h2>
+        <h2>Food packing</h2>
         <p>${r.packedItems} of ${r.totalItems} items packed.</p>
         ${r.unpacked.length ? `
         <ul class="unpacked mono">
           ${r.unpacked.map(u => `<li><a href="#/trip/${trip.id}/pack">Day ${u.day + 1}</a> — ${esc(u.name)} ×${u.qty}</li>`).join('')}
         </ul>` : ''}
       </section>
+      <section class="ready-block">
+        <h2>Gear</h2>
+        <p>${r.gear.total === 0 ? `No gear list yet — <a href="#/trip/${trip.id}/gear">build one</a>.` : `${r.gear.packed} of ${r.gear.total} packed.`}</p>
+        ${r.gear.unpacked.length ? `
+        <ul class="unpacked mono">
+          ${r.gear.unpacked.slice(0, 12).map(u => `<li><a href="#/trip/${trip.id}/gear">${esc(u.category)}</a> — ${esc(u.name)}</li>`).join('')}
+          ${r.gear.unpacked.length > 12 ? `<li>…and ${r.gear.unpacked.length - 12} more</li>` : ''}
+        </ul>` : ''}
+      </section>
+      <section class="ready-block">
+        <h2>Pre-trip actions</h2>
+        <ul class="check-list">
+          ${trip.actions.map(a => `
+            <li>
+              <label class="check-row">
+                <input type="checkbox" data-action-done="${a.id}" ${a.done ? 'checked' : ''}>
+                <span class="check-name ${a.done ? 'is-done' : ''}">${esc(a.text)}</span>
+                <button class="btn-quiet" data-action-rm="${a.id}" aria-label="Remove ${esc(a.text)}">×</button>
+              </label>
+            </li>`).join('')}
+        </ul>
+        <form id="action-add" class="action-add">
+          <input name="text" required placeholder="Charge inReach, download maps…" aria-label="New action">
+          <button class="btn" type="submit">Add</button>
+        </form>
+      </section>
     </section>
   `))
   wirePrint()
+  app.querySelectorAll('[data-action-done]').forEach(cb => cb.addEventListener('change', () => {
+    trip.actions.find(a => a.id === cb.dataset.actionDone).done = cb.checked
+    commit()
+  }))
+  app.querySelectorAll('[data-action-rm]').forEach(btn => btn.addEventListener('click', e => {
+    e.preventDefault()
+    trip.actions = trip.actions.filter(a => a.id !== btn.dataset.actionRm)
+    commit()
+  }))
+  document.getElementById('action-add').addEventListener('submit', e => {
+    e.preventDefault()
+    const text = new FormData(e.target).get('text').trim()
+    if (text) trip.actions.push({ id: newId(), text, done: false })
+    commit()
+  })
 }
 
 function wirePrint() {

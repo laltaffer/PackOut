@@ -1,6 +1,6 @@
 // Storage adapter — the only module that touches localStorage.
 
-import { SEED, applySeedMigrations } from './seed.js'
+import { SEED, GEAR_SEED, applySeedMigrations } from './seed.js'
 
 const KEY = 'packout/v1'
 
@@ -12,6 +12,10 @@ function ensureLibrary(state) {
   if (!Array.isArray(state.library)) {
     state.library = SEED.foods.map(f => ({ ...f, favorite: false }))
     state.seedVersion = SEED.version
+  }
+  if (!Array.isArray(state.gearLibrary)) {
+    state.gearLibrary = GEAR_SEED.items.map(g => ({ ...g }))
+    state.gearSeedVersion = GEAR_SEED.version
   }
   return state
 }
