@@ -51,13 +51,21 @@ body {
   text-decoration: none;
 }
 
-.masthead-note {
+.masthead-nav {
+  display: flex; gap: 1rem; margin-left: auto;
+}
+
+.masthead-nav a {
   font-family: var(--mono);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--ink-soft);
+  text-decoration: none;
+  padding: 0.5rem 0;
 }
+
+.masthead-nav a:hover { color: var(--flag); }
 
 main { padding: 1rem; max-width: 44rem; margin-inline: auto; }
 
@@ -200,6 +208,41 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 .targets dd { font-size: 0.78rem; font-weight: 700; text-align: right; white-space: nowrap; }
 
 .targets .floor { display: block; font-weight: 400; color: var(--ink-soft); font-size: 0.85em; }
+
+/* ---------- library ---------- */
+
+.library input[type="search"] { width: 100%; margin-bottom: 0.9rem; }
+
+.food-list { list-style: none; padding: 0; display: grid; }
+
+.food-row {
+  display: flex; align-items: center; gap: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.fav {
+  background: none; border: none; cursor: pointer;
+  font-size: 1.25rem; line-height: 1;
+  color: var(--line);
+  padding: 0.6rem 0.35rem;
+}
+
+.fav.is-fav { color: var(--flag); }
+
+.food-link {
+  flex: 1; display: grid; gap: 0.1rem;
+  padding: 0.55rem 0.25rem;
+  text-decoration: none; color: var(--ink);
+  min-height: 44px;
+}
+
+.food-name { font-weight: 700; }
+
+.food-macros { color: var(--ink-soft); font-size: 0.68rem; }
+
+.macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+.form-screen form small { color: var(--ink-soft); }
 
 /* ---------- wider screens ---------- */
 

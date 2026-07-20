@@ -17,6 +17,13 @@ function route() {
     const trip = state.trips.find(t => t.id === tripMatch[1])
     if (trip) return renderTrip(trip)
   }
+  const editMatch = hash.match(/^#\/library\/edit\/(.+)$/)
+  if (editMatch) {
+    const food = state.library.find(f => f.id === editMatch[1])
+    if (food) return renderFoodForm(food)
+  }
+  if (hash === '#/library/new') return renderFoodForm(null)
+  if (hash === '#/library') return renderLibrary()
   if (hash === '#/new') return renderNewTrip()
   renderDashboard()
 }
@@ -180,6 +187,133 @@ function dayCard(trip, day, i) {
         <div><dt>Fat</dt><dd>${t.fatG.min}–${t.fatG.max} g</dd></div>
       </dl>
     </li>`
+}
+
+// ---------- food library ----------
+
+const SLOT_HINTS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snack']
+let librarySearch = ''
+
+function macroLine(f) {
+  const g = v => v === null ? '—' : `${v}g`
+  const oz = f.weightOz === null ? '— oz' : `${f.weightOz} oz`
+  return `${f.kcal} kcal · C ${g(f.carbsG)} · F ${g(f.fatG)} · P ${g(f.proteinG)} · ${oz}`
+}
+
+function renderLibrary() {
+  const q = librarySearch.trim().toLowerCase()
+  const foods = state.library
+    .filter(f => !q || f.name.toLowerCase().includes(q))
+    .sort((a, b) => (b.favorite - a.favorite) || a.name.localeCompare(b.name))
+  app.replaceChildren(el(`
+    <section class="library">
+      <div class="dashboard-head">
+        <h1>Library</h1>
+        <a class="btn btn-primary" href="#/library/new">Add Food</a>
+      </div>
+      <input id="lib-search" type="search" placeholder="Search ${state.library.length} foods…" value="${esc(librarySearch)}" aria-label="Search foods">
+      <ul class="food-list">
+        ${foods.map(f => `
+          <li class="food-row">
+            <button class="fav ${f.favorite ? 'is-fav' : ''}" data-fav="${f.id}" aria-pressed="${f.favorite}" aria-label="Favorite ${esc(f.name)}">★</button>
+            <a class="food-link" href="#/library/edit/${f.id}">
+              <span class="food-name">${esc(f.name)}</span>
+              <span class="food-macros mono">${macroLine(f)}</span>
+            </a>
+          </li>`).join('')}
+      </ul>
+      ${foods.length === 0 ? '<p class="empty">No foods match.</p>' : ''}
+    </section>
+  `))
+  const search = document.getElementById('lib-search')
+  search.addEventListener('input', () => {
+    librarySearch = search.value
+    // Re-render the list only, preserving input focus.
+    const keep = document.activeElement === search
+    renderLibrary()
+    if (keep) {
+      const s = document.getElementById('lib-search')
+      s.focus()
+      s.setSelectionRange(s.value.length, s.value.length)
+    }
+  })
+  app.querySelectorAll('[data-fav]').forEach(btn => btn.addEventListener('click', () => {
+    const food = state.library.find(f => f.id === btn.dataset.fav)
+    food.favorite = !food.favorite
+    save(state)
+    renderLibrary()
+  }))
+}
+
+function renderFoodForm(food) {
+  const isNew = food === null
+  const numOrBlank = v => v === null || v === undefined ? '' : v
+  app.replaceChildren(el(`
+    <section class="form-screen">
+      <a href="#/library" class="crumb">&larr; Library</a>
+      <h1>${isNew ? 'Add Food' : 'Edit Food'}</h1>
+      <form id="food-form">
+        <label>Name
+          <input name="name" required value="${isNew ? '' : esc(food.name)}" placeholder="Peak Chicken Teriyaki">
+        </label>
+        <label>Calories (whole item as you pack it)
+          <input name="kcal" type="number" min="1" step="any" required value="${isNew ? '' : food.kcal}">
+        </label>
+        <div class="macro-grid">
+          <label>Carbs g
+            <input name="carbsG" type="number" min="0" step="any" value="${isNew ? '' : numOrBlank(food.carbsG)}">
+          </label>
+          <label>Fat g
+            <input name="fatG" type="number" min="0" step="any" value="${isNew ? '' : numOrBlank(food.fatG)}">
+          </label>
+          <label>Protein g
+            <input name="proteinG" type="number" min="0" step="any" value="${isNew ? '' : numOrBlank(food.proteinG)}">
+          </label>
+          <label>Weight oz
+            <input name="weightOz" type="number" min="0.05" step="any" value="${isNew ? '' : numOrBlank(food.weightOz)}">
+          </label>
+        </div>
+        <small>Leave a field blank if the label doesn't say — blanks show as “—” and count as 0.</small>
+        <label>Usual slot
+          <select name="slotHint">
+            ${SLOT_HINTS.map(s => `<option value="${s}" ${!isNew && food.slotHint === s ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn btn-primary" type="submit">${isNew ? 'Add to Library' : 'Save'}</button>
+        ${isNew ? '' : `<button class="btn-quiet" type="button" id="food-delete">Delete this food</button>`}
+      </form>
+    </section>
+  `))
+  document.getElementById('food-form').addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    const num = k => f.get(k) === '' ? null : Number(f.get(k))
+    const values = {
+      name: f.get('name').trim(),
+      kcal: Number(f.get('kcal')),
+      carbsG: num('carbsG'),
+      fatG: num('fatG'),
+      proteinG: num('proteinG'),
+      weightOz: num('weightOz'),
+      slotHint: f.get('slotHint'),
+    }
+    if (isNew) {
+      state.library.push({ id: newId(), favorite: false, ...values })
+    } else {
+      Object.assign(food, values)
+    }
+    save(state)
+    location.hash = '#/library'
+  })
+  if (!isNew) {
+    document.getElementById('food-delete').addEventListener('click', () => {
+      if (confirm(`Delete "${food.name}" from the library?`)) {
+        state.library = state.library.filter(x => x.id !== food.id)
+        save(state)
+        location.hash = '#/library'
+      }
+    })
+  }
 }
 
 route()
