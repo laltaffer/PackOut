@@ -7,7 +7,7 @@
 // commodity items removed. weightOz is packed ounces where known, else null.
 
 export const SEED = {
-  version: 4,
+  version: 5,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -24,6 +24,22 @@ export const SEED = {
     { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner' },
     { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner' },
     { id: 'toasty-chee', name: 'Lance ToastChee', kcal: 220, carbsG: 25, fatG: 10, proteinG: 5, weightOz: null, slotHint: 'lunch' },
+
+    // Peak Refuel meals catalog (reference/peak-refuel-catalog.md, label values)
+    { id: 'peak-chicken-alfredo', name: 'Peak Refuel Chicken Alfredo', kcal: 830, carbsG: 46, fatG: 46, proteinG: 48, weightOz: 4.93, slotHint: 'dinner' },
+    { id: 'peak-breakfast-skillet', name: 'Peak Refuel Breakfast Skillet', kcal: 540, carbsG: 36, fatG: 31, proteinG: 31, weightOz: 3.88, slotHint: 'breakfast' },
+    { id: 'peak-chicken-teriyaki-rice', name: 'Peak Refuel Chicken Teriyaki Rice', kcal: 580, carbsG: 78, fatG: 8, proteinG: 40, weightOz: 4.66, slotHint: 'dinner' },
+    { id: 'peak-sweet-pork-rice', name: 'Peak Refuel Sweet Pork & Rice', kcal: 800, carbsG: 125, fatG: 17, proteinG: 40, weightOz: 6.07, slotHint: 'dinner' },
+    { id: 'peak-white-chicken-chili', name: 'Peak Refuel White Chicken Chili', kcal: 760, carbsG: 53, fatG: 44, proteinG: 41, weightOz: 4.94, slotHint: 'dinner' },
+    { id: 'peak-venison-casserole', name: 'Peak Refuel Venison Country Casserole', kcal: 920, carbsG: 69, fatG: 57, proteinG: 40, weightOz: 6.20, slotHint: 'dinner' },
+    { id: 'peak-bison-bowl', name: 'Peak Refuel Backcountry Bison Bowl', kcal: 930, carbsG: 106, fatG: 40, proteinG: 42, weightOz: 7.05, slotHint: 'dinner' },
+    { id: 'peak-buffalo-goulash', name: 'Peak Refuel MeatEater Buffalo Goulash', kcal: 890, carbsG: 79, fatG: 40, proteinG: 55, weightOz: 4.94, slotHint: 'dinner' },
+    { id: 'peak-three-bean-chili-mac', name: 'Peak Refuel Three Bean Chili Mac', kcal: 610, carbsG: 119, fatG: 3.5, proteinG: 30, weightOz: 4.79, slotHint: 'dinner' },
+    { id: 'peak-mountain-berry-granola', name: 'Peak Refuel Mountain Berry Granola', kcal: 570, carbsG: 108, fatG: 1.5, proteinG: 13, weightOz: 5.07, slotHint: 'breakfast' },
+    { id: 'peak-butternut-dal-bhat', name: 'Peak Refuel Butternut Dal Bhat', kcal: 870, carbsG: 105, fatG: 43, proteinG: 23, weightOz: 5.85, slotHint: 'dinner' },
+    { id: 'peak-biscuits-gravy', name: 'Peak Refuel Biscuits & Sausage Gravy', kcal: 1100, carbsG: 51, fatG: 85, proteinG: 34, weightOz: 6.77, slotHint: 'breakfast' },
+    { id: 'peak-peaches-oats', name: 'Peak Refuel Creamy Peaches and Oats', kcal: 1010, carbsG: 128, fatG: 42, proteinG: 30, weightOz: 7.05, slotHint: 'breakfast' },
+    { id: 'peak-bison-ranch-mashers', name: 'Peak Refuel Bison Ranch Mashers', kcal: 1120, carbsG: 94, fatG: 66, proteinG: 40, weightOz: 7.40, slotHint: 'dinner' },
 
     // Snacks
     { id: 'pro-bolt-chews', name: 'ProBar Bolt Chews', kcal: 90, carbsG: 23, fatG: null, proteinG: null, weightOz: null, slotHint: 'snack' },
@@ -190,6 +206,18 @@ export function applySeedMigrations(state) {
       }
     }
     state.library = state.library.filter(f => !(KILLED_V4.includes(f.id) && !referenced.has(f.id)))
+  }
+  if (from < 5) {
+    // Additive: the Peak Refuel catalog scrape (2026-07-20). Only the 14 new
+    // catalog ids are added — never resurrects foods the user deleted.
+    const ADDED_V5 = ['peak-chicken-alfredo', 'peak-breakfast-skillet', 'peak-chicken-teriyaki-rice',
+      'peak-sweet-pork-rice', 'peak-white-chicken-chili', 'peak-venison-casserole', 'peak-bison-bowl',
+      'peak-buffalo-goulash', 'peak-three-bean-chili-mac', 'peak-mountain-berry-granola',
+      'peak-butternut-dal-bhat', 'peak-biscuits-gravy', 'peak-peaches-oats', 'peak-bison-ranch-mashers']
+    const have = new Set(state.library.map(f => f.id))
+    for (const f of SEED.foods) {
+      if (ADDED_V5.includes(f.id) && !have.has(f.id)) state.library.push({ ...f, favorite: false })
+    }
   }
   state.seedVersion = SEED.version
   return state

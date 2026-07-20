@@ -104,6 +104,32 @@ test('v3 migration re-hints Cheez-It to snack unless the user changed it', () =>
   assert.equal(custom.library[0].slotHint, 'dinner')
 })
 
+test('v5 seeds the Peak Refuel catalog with label values', () => {
+  const alfredo = SEED.foods.find(f => f.id === 'peak-chicken-alfredo')
+  assert.deepEqual(
+    { kcal: alfredo.kcal, carbsG: alfredo.carbsG, fatG: alfredo.fatG, proteinG: alfredo.proteinG, weightOz: alfredo.weightOz },
+    { kcal: 830, carbsG: 46, fatG: 46, proteinG: 48, weightOz: 4.93 })
+  // Goulash: page said 740/45 but the FDA label reads 890/55 — label wins.
+  const goulash = SEED.foods.find(f => f.id === 'peak-buffalo-goulash')
+  assert.equal(goulash.kcal, 890)
+  assert.equal(goulash.proteinG, 55)
+  assert.equal(SEED.foods.filter(f => f.slotHint === 'breakfast').length, 6) // 2 originals + 4 catalog
+})
+
+test('v5 migration adds exactly the new catalog items — never resurrects user deletions', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: 4, trips: [],
+    library: [
+      { id: 'toasty-chee', name: 'Lance ToastChee', kcal: 220, slotHint: 'lunch' },
+      // note: user deleted packaroon — it must NOT come back
+    ],
+  })
+  assert.ok(s.library.some(f => f.id === 'peak-chicken-alfredo'), 'catalog item added')
+  assert.ok(!s.library.some(f => f.id === 'packaroon'), 'deleted food stays deleted')
+  assert.equal(s.library.filter(f => f.id === 'toasty-chee').length, 1, 'no duplicates')
+  assert.equal(s.seedVersion, SEED.version)
+})
+
 test('migration is a no-op at current seed version', () => {
   const st = { schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [{ id: 'gummy-bears-2svg', name: 'Gummy Bears (2 svg)', kcal: 300 }] }
   const s = applySeedMigrations(st)
