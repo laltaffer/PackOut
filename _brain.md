@@ -76,6 +76,16 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   (add-ons like cider never propose as the big meal).
 - P1 (issue #17): swap-in-place, "never suggest" flag.
 
+## Key Decisions (UI/UX round 1, 2026-07-20)
+- **Desktop-first for PackOut** — Lawrence's directive, overrides the global
+  mobile-first rule for this project; mobile must stay functional (Alaska = phone).
+- Intensity is labeled "Effort" in the UI. Protein floor removed from all displays
+  (Verdict still uses 0.6 g/lb internally — revisit if Lawrence kills the concept).
+- Day cards: Planned | Target two-column macro table; verdict-colored left accents
+  carry the hierarchy; container borders quieted to 1px.
+- Meals are ≥300 kcal (breakfast 200 per V2P), single item or stacked — drafting
+  composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
+
 ## Status
 2026-07-20: Draft assistant shipped (spec #14) — 63 engine tests green. 2026-07-19: Milestone 1 (food planner) shipped via full /cto pipeline — LIVE at
 https://packout.pages.dev. 7 spec tickets + dogfood tickets #9 (branded seed v2 w/

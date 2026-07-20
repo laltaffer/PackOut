@@ -18,7 +18,13 @@ One calendar day of a Trip. Each Day has an Intensity and its own meal plan.
 ## Intensity
 The V2P activity rating for a Day: Easy (little elevation change and/or <5 mi),
 Medium (moderate elevation and/or 5–10 mi), Hard (significant elevation and/or >10 mi).
-Drives the Day's nutrition targets.
+Drives the Day's nutrition targets. Displayed in the UI as **Effort** (Lawrence,
+2026-07-20); Intensity remains the internal/code term.
+
+## Meal
+A Breakfast, Lunch, or Dinner slot's contents. A meal is at least 300 kcal
+(breakfast: 200 per V2P) — one substantial item or several that add up. Sub-300
+items (crackers, cheese) are Snack-grade and never stand alone as a meal.
 
 ## Meal Slot
 One of the fixed V2P day divisions: Electrolytes/Fluid, Breakfast, Lunch, Dinner,
