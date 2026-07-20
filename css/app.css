@@ -1,0 +1,211 @@
+/* PackOut — surveyor's flagging tape on a topo map.
+   Ink on paper; one hi-vis flagging color (surveyor pink) does all interactive
+   work; green/red/amber are reserved for Verdicts (arrive with ticket #6). */
+
+:root {
+  --ink: #26221c;
+  --ink-soft: #5c554a;
+  --paper: #f4f0e6;
+  --paper-raised: #fbf8f1;
+  --line: #d8d1c0;
+  --flag: #e6007e;          /* surveyor pink — interactive only */
+  --flag-ink: #ffffff;
+  --display: "Big Shoulders", "Arial Narrow", sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --mono: "Martian Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1rem;
+  line-height: 1.45;
+  min-height: 100dvh;
+}
+
+.mono { font-family: var(--mono); font-size: 0.8em; letter-spacing: 0.01em; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  display: flex; align-items: baseline; gap: 0.75rem;
+  padding: 0.9rem 1rem 0.7rem;
+  border-bottom: 3px solid var(--ink);
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 1.9rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.masthead-note {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+}
+
+main { padding: 1rem; max-width: 44rem; margin-inline: auto; }
+
+h1 {
+  font-family: var(--display);
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 2.2rem;
+  letter-spacing: 0.015em;
+  line-height: 1;
+}
+
+/* ---------- buttons & links ---------- */
+
+.btn {
+  display: inline-block;
+  font-family: var(--display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 1.05rem;
+  padding: 0.55rem 1.1rem;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-raised);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-primary { background: var(--flag); border-color: var(--flag); color: var(--flag-ink); }
+.btn-primary:active { translate: 0 1px; }
+
+.btn-quiet {
+  font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase;
+  letter-spacing: 0.1em; background: none; border: none;
+  color: var(--ink-soft); text-decoration: underline; cursor: pointer;
+  padding: 0.5rem;
+}
+
+.crumb {
+  font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--ink-soft); text-decoration: none;
+  display: inline-block; margin-bottom: 0.75rem;
+}
+
+.crumb:hover, .btn-quiet:hover { color: var(--flag); }
+
+/* ---------- dashboard ---------- */
+
+.dashboard-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 1rem;
+}
+
+.empty {
+  border: 2px dashed var(--line);
+  padding: 2rem 1.25rem;
+  color: var(--ink-soft);
+  display: grid; gap: 0.5rem;
+}
+
+.trip-cards { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+
+.trip-card {
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  display: flex; align-items: stretch;
+}
+
+.trip-card-link {
+  flex: 1; display: grid; gap: 0.15rem;
+  padding: 0.85rem 1rem; text-decoration: none; color: var(--ink);
+  border-left: 6px solid var(--flag);
+}
+
+.trip-name { font-family: var(--display); font-weight: 900; font-size: 1.5rem; text-transform: uppercase; line-height: 1.05; }
+.trip-dest { color: var(--ink-soft); }
+.trip-meta { color: var(--ink-soft); }
+
+/* ---------- forms ---------- */
+
+.form-screen form { display: grid; gap: 1rem; margin-top: 1.25rem; }
+
+label { display: grid; gap: 0.3rem; font-weight: 700; }
+
+label small { font-weight: 400; color: var(--ink-soft); }
+
+input, select {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  padding: 0.6rem 0.7rem;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-raised);
+  color: var(--ink);
+  min-height: 44px;
+}
+
+input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
+  outline: 3px solid var(--flag);
+  outline-offset: 2px;
+}
+
+/* ---------- trip view ---------- */
+
+.trip-head { margin-bottom: 1.25rem; display: grid; gap: 0.35rem; }
+.trip-sub { color: var(--ink-soft); }
+
+.days { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+
+.day-card {
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  padding: 0.85rem 1rem;
+  display: grid; gap: 0.7rem;
+}
+
+.day-head { display: flex; align-items: center; gap: 0.75rem; }
+
+.day-label {
+  font-family: var(--display); font-weight: 900; font-size: 1.3rem;
+  text-transform: uppercase;
+}
+
+.day-date { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-soft); flex: 1; }
+
+.intensity select { min-height: 40px; padding: 0.35rem 0.5rem; }
+
+.targets {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem 1rem;
+  border-top: 1px solid var(--line); padding-top: 0.7rem;
+}
+
+.targets div { display: flex; justify-content: space-between; gap: 0.5rem; }
+
+.targets dt { text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.1em; color: var(--ink-soft); }
+
+.targets dd { font-size: 0.78rem; font-weight: 700; text-align: right; white-space: nowrap; }
+
+.targets .floor { display: block; font-weight: 400; color: var(--ink-soft); font-size: 0.85em; }
+
+/* ---------- wider screens ---------- */
+
+@media (min-width: 700px) {
+  h1 { font-size: 3rem; }
+  .targets { grid-template-columns: repeat(4, auto); }
+  .targets div { flex-direction: column; }
+  .targets dd { text-align: left; }
+}
