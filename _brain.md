@@ -96,7 +96,8 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   adds untouched — Lawrence's rule); sit-down breakfast widens its kcal cap to
   the dinner share (~25% of day kcal — the Skillet can land, snacks shrink to
   compensate); sit-down lunch draws the dehydrated catalog (favorites first,
-  never the day's own dinner); mobile dinner composes from ready foods toward
+  never the day's own dinner, one pouch max — one boil per meal, the rest of
+  the window fills with ready sides); mobile dinner composes from ready foods toward
   its share. Defaults (breakfast/lunch Mobile, dinner Sit-down) reproduce prior
   drafts exactly, so existing trips are unaffected until the dropdowns move.
 

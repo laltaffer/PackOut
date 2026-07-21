@@ -297,8 +297,9 @@ test('sit-down lunch, real seed: a starred dehydrated pouch lands — never the 
   const target = dailyTargets(205, 'medium').kcal.target
   const drafts = draftEmptyDays(trip, lib, new Set(), 'usual')
   for (const d of drafts) {
-    const pouch = d.meals.lunch.map(e => lib.find(f => f.id === e.foodId)).find(f => f.prep === 'cook')
-    assert.ok(pouch, `day ${d.dayIndex} lunch carries a dehydrated pouch`)
+    const pouches = d.meals.lunch.map(e => lib.find(f => f.id === e.foodId)).filter(f => f.prep === 'cook')
+    assert.equal(pouches.length, 1, `day ${d.dayIndex} lunch carries exactly one pouch — one boil per meal (Lawrence 2026-07-21), got ${pouches.map(p => p.id)}`)
+    const pouch = pouches[0]
     assert.ok(pouch.favorite, `the catalog never displaces owned core meals: ${pouch.id}`)
     assert.notEqual(pouch.id, d.meals.dinner[0].foodId, 'lunch pouch differs from the dinner main')
     const t = dayTotals({ intensity: 'medium', meals: d.meals }, lib)

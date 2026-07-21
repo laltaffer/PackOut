@@ -395,15 +395,19 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     }
     if (style[slot] === 'mobile') pool = pool.filter(f => f.prep !== 'cook')
     const used = new Set()
+    // One boil per meal (Lawrence 2026-07-21): a composed slot drafts at
+    // most one cook food; the rest of the window fills with ready sides.
+    let pouched = false
     while (slotKcal[slot] < w.goal) {
       const ranked = protein < proteinFloor
         ? [...pool].sort((a, b) => ((b.favorite === true) - (a.favorite === true)) || ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
         : (strategy === 'usual' ? rankSlot(pool, staples, slot) : rankByDensity(pool, staples, 'kcal'))
-      const f = ranked.find(x => !used.has(x.id) &&
+      const f = ranked.find(x => !used.has(x.id) && !(pouched && x.prep === 'cook') &&
         slotKcal[slot] + x.kcal <= w.max && kcal + x.kcal <= dayCeil)
       if (!f) break
       add(slot, f)
       used.add(f.id)
+      if (f.prep === 'cook') pouched = true
     }
   }
 
