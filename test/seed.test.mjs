@@ -74,6 +74,28 @@ test('v9 wipe resurrects past deletions on purpose — a fresh start beats old h
   assert.ok(s.library.some(f => f.id === 'haribo-goldbears-oz'))
 })
 
+test('v10 is additive: a v9 state gains the jerky and nothing else changes', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: 9, trips: [],
+    library: [
+      { id: 'peak-beef-stroganoff', name: 'Strog (my usual)', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner' },
+      { id: 'custom-1', name: 'My Special Bar', kcal: 500, carbsG: 5, fatG: 30, proteinG: 45, weightOz: 4, favorite: true, slotHint: 'snack' },
+    ],
+  })
+  assert.ok(s.library.some(f => f.id === 'jack-links-original-oz'), 'jerky added')
+  assert.equal(s.library.find(f => f.id === 'peak-beef-stroganoff').name, 'Strog (my usual)', 'no wipe — user edits survive an additive migration')
+  assert.ok(s.library.some(f => f.id === 'custom-1'), 'user foods survive')
+  assert.equal(s.seedVersion, SEED.version)
+})
+
+test('v10 label values: Jack Link\'s Original per ounce, verbatim from the USDA FDC branded label', () => {
+  // fdcId 2073102 (Link Snacks, Inc.): 80 kcal / 8g C / 1g F / 10g P per 28g (1 oz).
+  const jerky = SEED.foods.find(f => f.id === 'jack-links-original-oz')
+  assert.deepEqual(
+    [jerky.kcal, jerky.carbsG, jerky.fatG, jerky.proteinG, jerky.weightOz, jerky.slotHint],
+    [80, 8, 1, 10, 1, 'snack'])
+})
+
 test('v7 seed values: Skratch hydration per scoop, Goldbears normalized per ounce', () => {
   const scoop = SEED.foods.find(f => f.id === 'skratch-hydration-mix')
   assert.deepEqual([scoop.kcal, scoop.carbsG, scoop.weightOz, scoop.slotHint], [80, 19, 0.78, 'electrolytes'])

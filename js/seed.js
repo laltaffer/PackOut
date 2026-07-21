@@ -10,7 +10,7 @@
 // (reference/alaska-food-order.md) — his core meals, pre-starred so a fresh
 // state drafts from them with zero setup.
 export const SEED = {
-  version: 9,
+  version: 10,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -57,6 +57,10 @@ export const SEED = {
     // haribo.com table: 100 kcal / 23g C / 2g P per 30g serving, normalized to
     // a 1 oz unit (Lawrence: track gummies by weight, not pieces) — qty = oz
     { id: 'haribo-goldbears-oz', name: 'Haribo Goldbears (per oz)', kcal: 95, carbsG: 22, fatG: 0, proteinG: 2, weightOz: 1, slotHint: 'snack' },
+    // USDA FDC branded label (fdcId 2073102, Link Snacks Inc.): 80 kcal /
+    // 8g C / 1g F / 10g P per 28g (1 oz) serving — qty = oz, like Goldbears.
+    // The protein-dense snack that closes residual floor gaps (2026-07-21).
+    { id: 'jack-links-original-oz', name: "Jack Link's Original Beef Jerky (per oz)", kcal: 80, carbsG: 8, fatG: 1, proteinG: 10, weightOz: 1, slotHint: 'snack' },
   ],
 }
 
@@ -264,6 +268,13 @@ export function applySeedMigrations(state) {
         delete day.meals
         delete day.packed
       }
+    }
+  }
+  if (from < 10) {
+    // Additive: Jack Link's Original per-oz (Lawrence 2026-07-21, "add a
+    // jerky option") — the protein-dense snack the library lacked.
+    if (!state.library.some(f => f.id === 'jack-links-original-oz')) {
+      state.library.push({ ...SEED.foods.find(x => x.id === 'jack-links-original-oz'), favorite: false })
     }
   }
   return sweepRetired(state, () => { state.seedVersion = SEED.version })

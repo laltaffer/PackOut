@@ -320,6 +320,21 @@ test('mobile dinner, real seed: no cook foods; dinner composes toward its share;
   assert.ok(Math.abs(t.kcal - target) <= TOL, `|${t.kcal} - ${target}| <= ${TOL}`)
 })
 
+test('with the jerky seeded, a real-seed week meets the raw protein floor — no grace needed', () => {
+  // The 80 kcal / 10 g per-oz jerky closes the floor inside the ±50 window;
+  // before v10 the library couldn't buy those grams without busting kcal.
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  const trip = mkTrip(7, 205)
+  const floor = 205 * 0.6
+  const drafts = draftEmptyDays(trip, lib, new Set(), 'usual')
+  for (const d of drafts) {
+    const t = dayTotals({ intensity: 'medium', meals: d.meals }, lib)
+    assert.ok(t.proteinG >= floor, `day ${d.dayIndex}: ${t.proteinG} g ≥ ${floor} g`)
+    const target = dailyTargets(205, 'medium').kcal.target
+    assert.ok(Math.abs(t.kcal - target) <= TOL, `day ${d.dayIndex}: |${t.kcal} - ${target}| <= ${TOL}`)
+  }
+})
+
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {
   const huge = [
     { id: 'mega', name: 'Mega Meal', kcal: 3000, carbsG: 100, fatG: 100, proteinG: 100, weightOz: 20, favorite: false, slotHint: 'dinner' },

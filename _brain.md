@@ -81,7 +81,8 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   his "bias breakfast against Peak Refuel toward bars/no-prep"). Snacks: ≤3 bundles,
   repeats stack qty (Goldbears per-oz is the ±50 fine-tuner). Protein is maximized
   inside the window, never bought past it — a residual gap shows as Short (protein).
-  Library gap: no protein-dense snack (jerky) seeded, so some days run a few g short.
+  Library gap (no protein-dense snack) closed by seed v10 (2026-07-21): Jack Link's
+  Original per-oz (USDA FDC 2073102: 80 kcal / 10 g P) — drafts now meet the raw floor.
 - **Protein floor grace (2026-07-20, Lawrence):** a day inside its kcal window is
   fine a couple grams under the floor — Verdict allows 5 g of grace before Short;
   beyond it, the full gap to the true floor is reported.
@@ -112,6 +113,9 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-21 (later): seed v10 — Jack Link's Original Beef Jerky per-oz added from the
+USDA FDC branded label (additive migration, user libraries untouched); real-seed weeks
+now meet the raw protein floor. 85 tests green.
 2026-07-21: Meal Style (issue #18) shipped at b95dd71 — Mobile/Sit-down dropdowns
 per slot at trip setup + edit; 82 tests green; verified live end-to-end (sit-down
 lunch drafted starred pouches distinct from dinner, days landed ±50).
