@@ -77,12 +77,13 @@ test('auth: wrong audience, unverified email, and expired tokens are all rejecte
   assert.equal(googleDown.status, 401)
 })
 
-test('me: valid session returns the profile; missing or bad cookie is 401', async () => {
+test('me: valid session returns the profile; signed-out is a clean 200, never a console-red 401', async () => {
   const ok = await handleMe({ request: await sessionRequest('https://x/api/me'), env: env(), now: NOW })
   assert.equal(ok.status, 200)
   assert.equal((await ok.json()).sub, 'g-123')
   const anon = await handleMe({ request: new Request('https://x/api/me'), env: env(), now: NOW })
-  assert.equal(anon.status, 401)
+  assert.equal(anon.status, 200)
+  assert.deepEqual(await anon.json(), { signedIn: false })
 })
 
 test('logout clears the cookie', async () => {

@@ -37,8 +37,10 @@ export async function handleAuth({ request, env, fetcher = fetch, now = Date.now
 }
 
 export async function handleMe({ request, env, now = Date.now() }) {
+  // Signed-out is a normal state, not an error — a 401 here would paint a
+  // red console line on every anonymous page load.
   const s = await session(request, env, now)
-  return s ? json(s) : json({ error: 'Signed out.' }, 401)
+  return json(s ?? { signedIn: false })
 }
 
 export async function handleLogout() {

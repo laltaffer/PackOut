@@ -1,0 +1,45 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/auth",
+      "mountPath": "/api",
+      "method": "POST",
+      "module": [
+        "api/auth.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/logout",
+      "mountPath": "/api",
+      "method": "POST",
+      "module": [
+        "api/logout.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/me",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/me.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/state",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/state.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/state",
+      "mountPath": "/api",
+      "method": "PUT",
+      "module": [
+        "api/state.js:onRequestPut"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}

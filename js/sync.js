@@ -28,7 +28,8 @@ const api = (path, opts = {}) => fetch(path, { credentials: 'same-origin', ...op
 export async function initAccount() {
   try {
     const res = await api('/api/me')
-    profile = res.ok ? await res.json() : null
+    const body = res.ok ? await res.json() : null
+    profile = body?.sub ? body : null
   } catch {
     profile = null
   }
@@ -120,18 +121,28 @@ function ensureGis() {
   return gisLoading
 }
 
+let gisInitialized = false
+let onSignedInLatest = () => {}
+
 export async function mountSignInButton(container, onSignedIn) {
   await ensureGis()
-  window.google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    callback: async ({ credential }) => {
-      try {
-        await signInWithCredential(credential)
-        onSignedIn()
-      } catch {
-        setStatus('error')
-      }
-    },
-  })
+  onSignedInLatest = onSignedIn
+  if (!gisInitialized) {
+    // GIS warns (and misbehaves) on repeated initialize; the chip re-mounts
+    // on every dashboard render, so initialize exactly once and route the
+    // callback through the latest mount's handler.
+    gisInitialized = true
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: async ({ credential }) => {
+        try {
+          await signInWithCredential(credential)
+          onSignedInLatest()
+        } catch {
+          setStatus('error')
+        }
+      },
+    })
+  }
   window.google.accounts.id.renderButton(container, { theme: 'outline', size: 'medium', text: 'signin_with' })
 }
