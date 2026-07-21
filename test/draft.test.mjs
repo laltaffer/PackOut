@@ -320,9 +320,9 @@ test('mobile dinner, real seed: no cook foods; dinner composes toward its share;
   assert.ok(Math.abs(t.kcal - target) <= TOL, `|${t.kcal} - ${target}| <= ${TOL}`)
 })
 
-test('with the jerky seeded, a real-seed week meets the raw protein floor — no grace needed', () => {
-  // The 80 kcal / 10 g per-oz jerky closes the floor inside the ±50 window;
-  // before v10 the library couldn't buy those grams without busting kcal.
+test('with the FATTY stick seeded, a real-seed week meets the raw protein floor — no grace needed', () => {
+  // The 200 kcal / 13 g stick closes the floor inside the ±50 window;
+  // before it the library couldn't buy those grams without busting kcal.
   const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
   const trip = mkTrip(7, 205)
   const floor = 205 * 0.6

@@ -74,7 +74,7 @@ test('v9 wipe resurrects past deletions on purpose — a fresh start beats old h
   assert.ok(s.library.some(f => f.id === 'haribo-goldbears-oz'))
 })
 
-test('v10 is additive: a v9 state gains the jerky and nothing else changes', () => {
+test('v11 is additive: a v9 state gains the FATTY stick and nothing else changes', () => {
   const s = applySeedMigrations({
     schemaVersion: 1, seedVersion: 9, trips: [],
     library: [
@@ -82,18 +82,28 @@ test('v10 is additive: a v9 state gains the jerky and nothing else changes', () 
       { id: 'custom-1', name: 'My Special Bar', kcal: 500, carbsG: 5, fatG: 30, proteinG: 45, weightOz: 4, favorite: true, slotHint: 'snack' },
     ],
   })
-  assert.ok(s.library.some(f => f.id === 'jack-links-original-oz'), 'jerky added')
+  assert.ok(s.library.some(f => f.id === 'fatty-original-2oz'), 'FATTY stick added')
   assert.equal(s.library.find(f => f.id === 'peak-beef-stroganoff').name, 'Strog (my usual)', 'no wipe — user edits survive an additive migration')
   assert.ok(s.library.some(f => f.id === 'custom-1'), 'user foods survive')
   assert.equal(s.seedVersion, SEED.version)
 })
 
-test('v10 label values: Jack Link\'s Original per ounce, verbatim from the USDA FDC branded label', () => {
-  // fdcId 2073102 (Link Snacks, Inc.): 80 kcal / 8g C / 1g F / 10g P per 28g (1 oz).
-  const jerky = SEED.foods.find(f => f.id === 'jack-links-original-oz')
+test('the short-lived Jack Link\'s entry (v10) retires by sweep on a v10 state; FATTY arrives', () => {
+  // v10 shipped for ~an hour on 2026-07-21 before Lawrence picked his brand.
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: 10, trips: [],
+    library: [{ id: 'jack-links-original-oz', name: "Jack Link's Original Beef Jerky (per oz)", kcal: 80, carbsG: 8, fatG: 1, proteinG: 10, weightOz: 1, favorite: false, slotHint: 'snack' }],
+  })
+  assert.ok(!s.library.some(f => f.id === 'jack-links-original-oz'), 'unreferenced Jack Link\'s swept')
+  assert.ok(s.library.some(f => f.id === 'fatty-original-2oz'), 'FATTY stick added')
+})
+
+test('v11 label values: FATTY Original 2 oz stick, verbatim from the USDA FDC branded label', () => {
+  // fdcId 2510113 (Sweetwood Cattle Company): 200 kcal / 2g C / 15g F / 13g P per 56g (2 oz) stick.
+  const stick = SEED.foods.find(f => f.id === 'fatty-original-2oz')
   assert.deepEqual(
-    [jerky.kcal, jerky.carbsG, jerky.fatG, jerky.proteinG, jerky.weightOz, jerky.slotHint],
-    [80, 8, 1, 10, 1, 'snack'])
+    [stick.kcal, stick.carbsG, stick.fatG, stick.proteinG, stick.weightOz, stick.slotHint],
+    [200, 2, 15, 13, 2, 'snack'])
 })
 
 test('v7 seed values: Skratch hydration per scoop, Goldbears normalized per ounce', () => {

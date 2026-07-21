@@ -10,7 +10,7 @@
 // (reference/alaska-food-order.md) — his core meals, pre-starred so a fresh
 // state drafts from them with zero setup.
 export const SEED = {
-  version: 10,
+  version: 11,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -57,10 +57,11 @@ export const SEED = {
     // haribo.com table: 100 kcal / 23g C / 2g P per 30g serving, normalized to
     // a 1 oz unit (Lawrence: track gummies by weight, not pieces) — qty = oz
     { id: 'haribo-goldbears-oz', name: 'Haribo Goldbears (per oz)', kcal: 95, carbsG: 22, fatG: 0, proteinG: 2, weightOz: 1, slotHint: 'snack' },
-    // USDA FDC branded label (fdcId 2073102, Link Snacks Inc.): 80 kcal /
-    // 8g C / 1g F / 10g P per 28g (1 oz) serving — qty = oz, like Goldbears.
-    // The protein-dense snack that closes residual floor gaps (2026-07-21).
-    { id: 'jack-links-original-oz', name: "Jack Link's Original Beef Jerky (per oz)", kcal: 80, carbsG: 8, fatG: 1, proteinG: 10, weightOz: 1, slotHint: 'snack' },
+    // USDA FDC branded label (fdcId 2510113, Sweetwood Cattle Company; the
+    // older Sweetwood Smokehouse listing 1785273 agrees): 200 kcal / 2g C /
+    // 15g F / 13g P per 56g (2 oz) stick — qty = sticks. The protein-dense
+    // snack that closes residual floor gaps (Lawrence's brand, 2026-07-21).
+    { id: 'fatty-original-2oz', name: 'FATTY Original Smoked Meat Stick (2 oz)', kcal: 200, carbsG: 2, fatG: 15, proteinG: 13, weightOz: 2, slotHint: 'snack' },
   ],
 }
 
@@ -270,11 +271,13 @@ export function applySeedMigrations(state) {
       }
     }
   }
-  if (from < 10) {
-    // Additive: Jack Link's Original per-oz (Lawrence 2026-07-21, "add a
-    // jerky option") — the protein-dense snack the library lacked.
-    if (!state.library.some(f => f.id === 'jack-links-original-oz')) {
-      state.library.push({ ...SEED.foods.find(x => x.id === 'jack-links-original-oz'), favorite: false })
+  // v10 (Jack Link's per-oz) was superseded within the day by v11 — its
+  // additive block is gone; the item retires via the standing sweep below.
+  if (from < 11) {
+    // Additive: FATTY Original 2 oz stick (Lawrence 2026-07-21, his brand)
+    // — the protein-dense snack the library lacked.
+    if (!state.library.some(f => f.id === 'fatty-original-2oz')) {
+      state.library.push({ ...SEED.foods.find(x => x.id === 'fatty-original-2oz'), favorite: false })
     }
   }
   return sweepRetired(state, () => { state.seedVersion = SEED.version })
@@ -290,7 +293,7 @@ function sweepRetired(state, after) {
     'diy-no-bake-bar', 'dry-cereal-banana', 'almond-butter', 'rosemary-turkey-stick',
     'landjaeger-sticks', 'tailwind-wilderness-athlete', 'mh-chicken-fajita-bowl-2svg',
     'cheez-it-pack', 'alpine-spiced-apple-cider', 'belvita', 'austin-pb-crackers',
-    'powerbar', 'fritos-2svg', 'toasty-chee',
+    'powerbar', 'fritos-2svg', 'toasty-chee', 'jack-links-original-oz',
   ])
   const stillReferenced = new Set()
   for (const trip of state.trips) {
