@@ -32,6 +32,14 @@ Snacks. The V2P doc is the gold standard for this structure. Meal-level targets 
 to slots (snack ~300 kcal / 40–60 g carbs each; breakfast 200–400 kcal; dinner ~25% of
 daily kcal, ≥30–40 g protein, 60–90 g+ carbs).
 
+## Meal Style
+A per-Trip choice for each of Breakfast, Lunch, and Dinner: **Mobile** (grab & go —
+drafting never proposes foods that need boiling water) or **Sit-down** (time to
+cook — dehydrated meals welcome). Draft-time only: any food can always be added
+to any meal by hand. Defaults: Breakfast and Lunch Mobile, Dinner Sit-down. A
+sit-down Breakfast may take one big hot item up to the Dinner share (~25% of day
+kcal) — the day window then simply leaves fewer Snacks.
+
 ## Snack
 A bundle of one or more food items packed and eaten as a unit, judged as a whole
 against the per-snack target. A Day carries as many Snacks as the user will pack
@@ -60,9 +68,10 @@ building from nothing. Two strategies from the same inputs (targets, Staples,
 Favorites, library): **Usual Draft** (P0) — habit-replay: Staples/Favorites fill
 their usual slots first, then ranked fills; **Optimized Draft** (alternate) —
 weight-efficient foods, habits as tie-breakers only. Both deterministic — no LLM.
-A Draft lands the Day within ±50 kcal of its target; Breakfast obeys its 200–400
-window hard and biases to ready-to-eat food; a protein gap the window can't afford
-is left for the Verdict to flag rather than bought with extra calories.
+A Draft lands the Day within ±50 kcal of its target and honors the Trip's Meal
+Style per slot; a mobile Breakfast obeys its 200–400 window hard; a protein gap
+the window can't afford is left for the Verdict to flag rather than bought with
+extra calories.
 
 ## Favorite
 A food the user has explicitly marked as preferred. Suggestions rank Favorites first.

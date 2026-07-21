@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { draftDay, draftEmptyDays, dailyTargets, dayTotals, dayVerdict, emptyMeals } from '../js/engine.js'
+import { draftDay, draftEmptyDays, dailyTargets, dayTotals, dayVerdict, emptyMeals, MEAL_STYLE_DEFAULTS } from '../js/engine.js'
 import { SEED } from '../js/seed.js'
 
 // 200 lb medium → target 3700 kcal, protein floor 120 g.
@@ -196,13 +196,25 @@ test('breakfast drafts bias hard toward ready-to-eat — no boiling water at 4am
   assert.equal(meals.dinner[0].foodId, 'main', 'dinner mains unaffected by prep bias')
 })
 
-test('a cook breakfast still drafts when nothing ready can fill the slot', () => {
+test('a mobile breakfast never drafts a cook food — even when nothing else could fill it', () => {
+  // Lawrence 2026-07-21: mobile means excluded when we draft, period; the
+  // user can still add cook foods by hand. The slot drafts light instead.
   const lib = [
     { id: 'oatmeal', name: 'Peak Refuel Hot Oatmeal', kcal: 350, carbsG: 60, fatG: 6, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'breakfast', prep: 'cook' },
     { id: 'main', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner', prep: 'cook' },
   ]
   const meals = draftDay(mkTrip(), 0, lib, new Set(), 'usual')
-  assert.ok(meals.breakfast.some(e => e.foodId === 'oatmeal'), 'graceful when nothing ready exists')
+  assert.equal(meals.breakfast.length, 0, 'better an honest gap than boiling water at 4am')
+})
+
+test('a sit-down breakfast drafts that same cook food', () => {
+  const lib = [
+    { id: 'oatmeal', name: 'Peak Refuel Hot Oatmeal', kcal: 350, carbsG: 60, fatG: 6, proteinG: 12, weightOz: 3, favorite: false, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'main', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner', prep: 'cook' },
+  ]
+  const trip = { ...mkTrip(), mealStyle: { breakfast: 'sitdown' } }
+  const meals = draftDay(trip, 0, lib, new Set(), 'usual')
+  assert.ok(meals.breakfast.some(e => e.foodId === 'oatmeal'), 'sit-down welcomes the hot option')
 })
 
 test('with the real seed, breakfast is bars and no-prep food — never a Peak Refuel pouch', () => {
@@ -254,6 +266,57 @@ test('±50 holds across weights and efforts with the real seed', () => {
         `${weightLbs} lb ${intensity}: |${t.kcal} - ${target}| <= ${TOL}`)
     }
   }
+})
+
+// ---------- Meal Style (issue #18) ----------
+
+test('a trip without mealStyle drafts exactly like explicit defaults', () => {
+  const bare = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
+  const explicit = draftDay({ ...mkTrip(), mealStyle: { ...MEAL_STYLE_DEFAULTS } }, 0, LIB, STAPLES, 'usual')
+  assert.deepEqual(bare, explicit)
+})
+
+test('sit-down breakfast, real seed: the starred granola lands; the cap is the dinner share', () => {
+  // Lawrence 2026-07-21: "focus on breakfast-type foods like the Peak Refuel
+  // Strawberry Granola … the Skillet can land, that just means less snacks later."
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  const trip = { ...mkTrip(1, 205), mealStyle: { breakfast: 'sitdown' } }
+  const meals = draftDay(trip, 0, lib, new Set(), 'usual')
+  assert.ok(meals.breakfast.some(e => e.foodId === 'peak-strawberry-granola'),
+    `starred granola heads a sit-down breakfast, got ${meals.breakfast.map(e => e.foodId)}`)
+  const target = dailyTargets(205, 'medium').kcal.target
+  assert.ok(slotKcal(meals.breakfast, lib) <= Math.round(target * 0.25) + 1,
+    'no breakfast beyond the dinner share — one meal never eats the day')
+  const t = dayTotals({ intensity: 'medium', meals }, lib)
+  assert.ok(Math.abs(t.kcal - target) <= TOL, `|${t.kcal} - ${target}| <= ${TOL}`)
+})
+
+test('sit-down lunch, real seed: a starred dehydrated pouch lands — never the day’s own dinner', () => {
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  const trip = { ...mkTrip(3, 205), mealStyle: { lunch: 'sitdown' } }
+  const target = dailyTargets(205, 'medium').kcal.target
+  const drafts = draftEmptyDays(trip, lib, new Set(), 'usual')
+  for (const d of drafts) {
+    const pouch = d.meals.lunch.map(e => lib.find(f => f.id === e.foodId)).find(f => f.prep === 'cook')
+    assert.ok(pouch, `day ${d.dayIndex} lunch carries a dehydrated pouch`)
+    assert.ok(pouch.favorite, `the catalog never displaces owned core meals: ${pouch.id}`)
+    assert.notEqual(pouch.id, d.meals.dinner[0].foodId, 'lunch pouch differs from the dinner main')
+    const t = dayTotals({ intensity: 'medium', meals: d.meals }, lib)
+    assert.ok(Math.abs(t.kcal - target) <= TOL, `day ${d.dayIndex}: |${t.kcal} - ${target}| <= ${TOL}`)
+  }
+})
+
+test('mobile dinner, real seed: no cook foods; dinner composes toward its share; ±50 still holds', () => {
+  const lib = SEED.foods.map(f => ({ favorite: false, ...f }))
+  const trip = { ...mkTrip(1, 205), mealStyle: { dinner: 'mobile' } }
+  const meals = draftDay(trip, 0, lib, new Set(), 'usual')
+  assert.ok(meals.dinner.length > 0, 'dinner still composes without a pouch')
+  for (const e of meals.dinner) {
+    assert.notEqual(lib.find(f => f.id === e.foodId).prep, 'cook', 'no boiling water on a mobile dinner')
+  }
+  const target = dailyTargets(205, 'medium').kcal.target
+  const t = dayTotals({ intensity: 'medium', meals }, lib)
+  assert.ok(Math.abs(t.kcal - target) <= TOL, `|${t.kcal} - ${target}| <= ${TOL}`)
 })
 
 test('a draft never exceeds 115% even when only oversized candidates remain', () => {

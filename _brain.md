@@ -91,6 +91,14 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   Guidefitter-order meals ship pre-starred so fresh states draft his core meals.
 - **Stale-JS fix:** `_headers` serves HTML with Cache-Control: no-store (module
   chain stays cached via ?v=<sha> stamps); dashboard footer shows the build sha.
+- **Meal Style (issue #18, 2026-07-21):** trip setup + edit ask Mobile vs
+  Sit-down per meal slot. Mobile = cook foods excluded from drafts only (manual
+  adds untouched — Lawrence's rule); sit-down breakfast widens its kcal cap to
+  the dinner share (~25% of day kcal — the Skillet can land, snacks shrink to
+  compensate); sit-down lunch draws the dehydrated catalog (favorites first,
+  never the day's own dinner); mobile dinner composes from ready foods toward
+  its share. Defaults (breakfast/lunch Mobile, dinner Sit-down) reproduce prior
+  drafts exactly, so existing trips are unaffected until the dropdowns move.
 
 ## Key Decisions (UI/UX round 1, 2026-07-20)
 - **Desktop-first for PackOut** — Lawrence's directive, overrides the global

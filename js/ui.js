@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf } from './engine.js'
 import { load, save, newId, corruptInfo } from './store.js'
 import { applySeedMigrations } from './seed.js'
 
@@ -223,6 +223,33 @@ function renderDashboard() {
 
 // ---------- new trip ----------
 
+const STYLE_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
+
+function mealStyleFields(style) {
+  const options = v => `
+    <option value="mobile"${v === 'mobile' ? ' selected' : ''}>Mobile &mdash; grab &amp; go</option>
+    <option value="sitdown"${v === 'sitdown' ? ' selected' : ''}>Sit-down &mdash; cook OK</option>`
+  return `
+    <fieldset class="meal-style">
+      <legend>Meal style</legend>
+      <small>Mobile meals never draft cook foods; sit-down meals welcome dehydrated
+      pouches. You can always add any food to any meal by hand.</small>
+      ${Object.entries(STYLE_LABELS).map(([slot, label]) => `
+        <label>${label}
+          <select name="style-${slot}">${options(style[slot])}</select>
+        </label>`).join('')}
+    </fieldset>`
+}
+
+function mealStyleFromForm(f) {
+  const pick = v => v === 'sitdown' ? 'sitdown' : 'mobile'
+  return {
+    breakfast: pick(f.get('style-breakfast')),
+    lunch: pick(f.get('style-lunch')),
+    dinner: pick(f.get('style-dinner')),
+  }
+}
+
 function renderNewTrip() {
   const last = [...state.trips].sort((a, b) => b.createdAt - a.createdAt)[0]
   app.replaceChildren(el(`
@@ -246,6 +273,7 @@ function renderNewTrip() {
           <input name="weightLbs" type="number" min="50" max="400" required value="${last ? last.weightLbs : ''}">
           <small>Drives your daily calorie and macro targets. Use goal weight if you prefer.</small>
         </label>
+        ${mealStyleFields(mealStyleOf(last))}
         <button class="btn btn-primary" type="submit">Create Trip</button>
       </form>
     </section>
@@ -260,6 +288,7 @@ function renderNewTrip() {
       destination: f.get('destination').trim(),
       startDate: f.get('startDate'),
       weightLbs: Number(f.get('weightLbs')),
+      mealStyle: mealStyleFromForm(f),
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
     state.trips.push(trip)
@@ -292,6 +321,7 @@ function renderEditTrip(trip) {
         <label>Your body weight (lbs)
           <input name="weightLbs" type="number" min="50" max="400" required value="${trip.weightLbs}">
         </label>
+        ${mealStyleFields(mealStyleOf(trip))}
         <button class="btn btn-primary" type="submit">Save</button>
       </form>
     </section>
@@ -317,6 +347,7 @@ function renderEditTrip(trip) {
     trip.destination = f.get('destination').trim()
     trip.startDate = f.get('startDate')
     trip.weightLbs = Number(f.get('weightLbs'))
+    trip.mealStyle = mealStyleFromForm(f)
     persist()
     location.hash = `#/trip/${trip.id}`
   })

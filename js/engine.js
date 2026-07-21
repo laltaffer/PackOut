@@ -250,9 +250,21 @@ const LUNCH_SHARE = 0.27
 // Snacks appear as at most 3 bundles; repeats grow qty inside a bundle.
 const SNACK_BUNDLES = 3
 
-function dinnerMains(library, staples = new Set(), habitTier = false) {
+// Per-trip Meal Style (issue #18): breakfast/lunch/dinner each draft as
+// 'mobile' (grab & go — cook foods never proposed) or 'sitdown' (time to
+// boil water — dehydrated meals welcome). Draft-time only: manual adds are
+// never restricted. Defaults reproduce the pre-#18 hard-coded behavior, so
+// trips without the field draft identically.
+export const MEAL_STYLE_DEFAULTS = { breakfast: 'mobile', lunch: 'mobile', dinner: 'sitdown' }
+
+export function mealStyleOf(trip) {
+  return { ...MEAL_STYLE_DEFAULTS, ...(trip?.mealStyle ?? {}) }
+}
+
+function dinnerMains(library, staples = new Set(), habitTier = false, requireSubstantial = false) {
   const hinted = library.filter(f => f.slotHint === 'dinner')
   const substantial = hinted.filter(f => f.kcal >= MAIN_MIN_KCAL)
+  if (requireSubstantial && substantial.length === 0) return []
   const mains = substantial.length ? substantial : hinted
   if (habitTier) {
     // Usual drafts treat the user's own mains (Favorites/Staples) as the
@@ -280,12 +292,14 @@ function rankByDensity(foods, staples, metric) {
     a.name.localeCompare(b.name))
 }
 
-// Mornings are mobile (Lawrence): breakfast candidates that need hot water
-// (prep === 'cook') sink below ready-to-eat ones. Stable sort keeps the
-// underlying ranking within each group; other slots are untouched.
-function prepRank(list, slot) {
-  if (slot !== 'breakfast') return list
-  return [...list].sort((a, b) => ((a.prep === 'cook') ? 1 : 0) - ((b.prep === 'cook') ? 1 : 0))
+// The dinner-main pool honors the trip's dinner style: a mobile dinner draws
+// only from ready-to-eat foods, and would rather have no main at all (the
+// slot then composes like lunch) than promote an add-on to the big meal.
+function mainsFor(trip, library, staples, strategy) {
+  const mobile = mealStyleOf(trip).dinner === 'mobile'
+  const pool = mobile ? library.filter(f => f.prep !== 'cook') : library
+  const mains = dinnerMains(pool, staples, strategy === 'usual', mobile)
+  return strategy === 'usual' ? rankHabit(mains, staples) : rankByDensity(mains, staples, 'kcal')
 }
 
 function pickMain(mains, avoid) {
@@ -319,7 +333,9 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
   const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium')
   const target = targets.kcal.target
   const dayCeil = target + DAY_KCAL_TOL
-  const bf = slotTargets(targets).breakfast
+  const st = slotTargets(targets)
+  const bf = st.breakfast
+  const style = mealStyleOf(trip)
   const proteinFloor = trip.weightLbs * PROTEIN_FLOOR_G_PER_LB
   const hinted = slot => library.filter(f => f.slotHint === slot)
   let kcal = 0
@@ -347,29 +363,42 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
   }
 
   // Dinner: the one big meal. Rotation/avoidance is the caller's job.
-  const mains = mainsOverride ?? (strategy === 'usual'
-    ? rankHabit(dinnerMains(library, staples, true), staples)
-    : rankByDensity(dinnerMains(library), staples, 'kcal'))
+  const mains = mainsOverride ?? mainsFor(trip, library, staples, strategy)
   const main = pickMain(mains, avoidMains)
   if (main) add('dinner', main)
 
-  // Breakfast fills its hard 200–400 window; lunch grows toward its day
-  // share (capped at 1.5×). Both stack slot-hinted + snack-pool items, stop
-  // when nothing fits, and never spend past the day's +50 ceiling. Protein
-  // steers the picks while the floor is unmet.
+  // Breakfast fills toward 400; a sit-down breakfast may take one big hot
+  // item up to the dinner share (Lawrence: the Skillet can land — the ±50 day
+  // window just means fewer snacks later). Lunch grows toward its day share
+  // (capped at 1.5×); a sit-down lunch also draws from the dehydrated-meal
+  // catalog (never the day's own dinner). A mobile slot never drafts cook
+  // foods — the user can still add them by hand. A mobile dinner with no
+  // ready main composes toward the dinner share like lunch does. All fills
+  // stop when nothing fits and never spend past the day's +50 ceiling.
+  // Protein steers the picks (habits first) while the floor is unmet.
   const lunchGrow = Math.max(LUNCH_MIN_KCAL, LUNCH_SHARE * target)
   const windows = {
-    breakfast: { goal: bf.kcalMax, max: bf.kcalMax },
+    breakfast: { goal: bf.kcalMax, max: style.breakfast === 'sitdown' ? Math.max(bf.kcalMax, st.dinner.kcal) : bf.kcalMax },
     lunch: { goal: lunchGrow, max: lunchGrow * 1.5 },
   }
-  for (const slot of ['breakfast', 'lunch']) {
+  const fillSlots = ['breakfast', 'lunch']
+  if (!main && style.dinner === 'mobile') {
+    fillSlots.push('dinner')
+    windows.dinner = { goal: st.dinner.kcal, max: st.dinner.kcal * 1.5 }
+  }
+  for (const slot of fillSlots) {
     const w = windows[slot]
-    const pool = [...hinted(slot), ...hinted('snack')]
+    let pool = [...hinted(slot), ...hinted('snack')]
+    if (slot === 'lunch' && style.lunch === 'sitdown') {
+      const inPool = new Set(pool.map(f => f.id))
+      pool = [...pool, ...library.filter(f => f.prep === 'cook' && !inPool.has(f.id) && f.id !== main?.id)]
+    }
+    if (style[slot] === 'mobile') pool = pool.filter(f => f.prep !== 'cook')
     const used = new Set()
     while (slotKcal[slot] < w.goal) {
-      const ranked = prepRank(protein < proteinFloor
-        ? [...pool].sort((a, b) => ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
-        : (strategy === 'usual' ? rankSlot(pool, staples, slot) : rankByDensity(pool, staples, 'kcal')), slot)
+      const ranked = protein < proteinFloor
+        ? [...pool].sort((a, b) => ((b.favorite === true) - (a.favorite === true)) || ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
+        : (strategy === 'usual' ? rankSlot(pool, staples, slot) : rankByDensity(pool, staples, 'kcal'))
       const f = ranked.find(x => !used.has(x.id) &&
         slotKcal[slot] + x.kcal <= w.max && kcal + x.kcal <= dayCeil)
       if (!f) break
@@ -435,9 +464,7 @@ export function draftEmptyDays(trip, library, staples, strategy = 'usual') {
     if (prevMain) avoid.add(prevMain)
     // Rotate the starting point through the ranked mains so a week cycles
     // them instead of alternating between the top two.
-    const mains = strategy === 'usual'
-      ? rankHabit(dinnerMains(library, staples, true), staples)
-      : rankByDensity(dinnerMains(library), staples, 'kcal')
+    const mains = mainsFor(trip, library, staples, strategy)
     const rotated = mains.length
       ? [...mains.slice(out.length % mains.length), ...mains.slice(0, out.length % mains.length)]
       : null
@@ -496,6 +523,12 @@ export function validateImport(data) {
     tripIds.add(t.id)
     if (!t.name || !Array.isArray(t.days) || t.days.length === 0 || !num(t.weightLbs) || t.weightLbs <= 0 || !t.startDate) {
       return { ok: false, error: `Trip "${t.name ?? '?'}" is malformed.` }
+    }
+    if (t.mealStyle !== undefined) {
+      const ok = t.mealStyle && typeof t.mealStyle === 'object' &&
+        Object.entries(t.mealStyle).every(([k, v]) =>
+          ['breakfast', 'lunch', 'dinner'].includes(k) && (v === 'mobile' || v === 'sitdown'))
+      if (!ok) return { ok: false, error: `Trip "${t.name}" has an invalid meal style.` }
     }
     for (const [i, day] of t.days.entries()) {
       if (!validDay(day)) return { ok: false, error: `Trip "${t.name}", day ${i + 1} is malformed.` }

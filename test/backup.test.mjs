@@ -81,6 +81,17 @@ test('rejects duplicate ids and zero-day trips', () => {
   assert.equal(validateImport(zeroDays).ok, false)
 })
 
+test('meal style: accepts partial valid values, rejects unknown slots and styles', () => {
+  const sitdown = { ...GOOD, trips: [{ ...GOOD.trips[0], mealStyle: { breakfast: 'sitdown' } }] }
+  assert.equal(validateImport(sitdown).ok, true)
+  const badStyle = { ...GOOD, trips: [{ ...GOOD.trips[0], mealStyle: { breakfast: 'zorp' } }] }
+  assert.equal(validateImport(badStyle).ok, false)
+  const badSlot = { ...GOOD, trips: [{ ...GOOD.trips[0], mealStyle: { brunch: 'mobile' } }] }
+  assert.equal(validateImport(badSlot).ok, false)
+  const notObject = { ...GOOD, trips: [{ ...GOOD.trips[0], mealStyle: 'mobile' }] }
+  assert.equal(validateImport(notObject).ok, false)
+})
+
 test('accepts a valid full day plan with packed quantities', () => {
   const good = withDay({
     intensity: 'medium',
