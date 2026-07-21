@@ -80,6 +80,12 @@ carries years of trips; GIS button UX is acceptable on phones in the field.
 - Auto-deploy: manual per slice for now; GitHub Action (DesignLeaderJobs pattern) deferred
   until a CLOUDFLARE_API_TOKEN repo secret exists — see issue #3
 - Verify: `curl` 200 + `<title>` on production URL, then phone smoke at 390px
+- Accounts API (spec #19): `functions/` deploys as the Pages Functions bundle via the
+  same deploy.sh; bindings live in wrangler.toml (KV PACKOUT_KV id 87c61ede…, var
+  GOOGLE_CLIENT_ID). SESSION_SECRET is a Pages secret (`wrangler pages secret put`,
+  already set 2026-07-21 — rotate by re-running; rotation signs everyone out).
+- Local dev with the API: `npx wrangler pages dev .` (static-only python server
+  still works for everything signed-out)
 
 ## Key Decisions (Draft assistant, 2026-07-20)
 - Usual Draft (habit-replay, nutrition-corrected) is P0; Optimized (nutrition-optimal)
@@ -128,6 +134,11 @@ carries years of trips; GIS button UX is acceptable on phones in the field.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-21 (evening): Accounts milestone (spec #19, tickets #20+#21) shipped at
+844fc6d — Google sign-in (GIS + verified session cookie) with whole-state LWW sync
+to KV; local-first, signed-out unchanged. 105 tests green. Live-verified: API
+auth walls, GIS button renders, clean console. AWAITING Lawrence's real sign-in
+smoke (two devices) — the one path automation can't drive.
 2026-07-21 (later): seed v11 — protein snack is the FATTY Original 2 oz stick
 (fattysmokedmeats.com, Lawrence's brand; USDA FDC label), replacing v10's same-day
 Jack Link's pick (retired by sweep). Additive migration, user libraries untouched;
