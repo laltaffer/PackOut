@@ -58,7 +58,21 @@ parties, offline service worker, weather/mapping integrations.
 **Open bets:** anyone beyond Lawrence wants this (demo publish tests it); deterministic
 gap-closing is "intelligent enough"; localStorage survives real-trip usage patterns.
 
-## Deploy Config
+## Product Brief — Accounts milestone (DEFINE, 2026-07-21)
+**Problem:** progress lives in one browser's localStorage — a new device or a buddy's
+phone starts from zero, and clearing the browser loses everything.
+**Named users:** Lawrence + his hunting buddies, each with their own private profile.
+**Wedge:** optional Google sign-in (Google Identity Services) with whole-state sync:
+a Cloudflare Pages Function verifies the ID token, state blob lives in Cloudflare KV
+keyed by Google account, last-write-wins by updatedAt. Local-first — signed-out
+PackOut is byte-identical to today; first sign-in adopts the existing local data.
+Buddies get the seeded branded library on their first load.
+**Next milestone (after sign-in ships):** lightweight onboarding — new users set
+brand/food preferences (stars) instead of inheriting Lawrence's Guidefitter stars.
+**Non-goals (this milestone):** shared/collaborative trips, read-only share links,
+per-trip merge, offline queue beyond debounce, any non-Google identity.
+**Open bets:** LWW is enough for one-person profiles; a single KV blob per user
+carries years of trips; GIS button UX is acceptable on phones in the field.
 - Platform: Cloudflare Pages, project `packout` (account laltaffer@gmail.com)
 - Production URL: https://packout.pages.dev
 - Deploy: `./deploy.sh` — runs the engine tests first, aborts on red, uploads only app files
@@ -135,7 +149,9 @@ Alaska gear adjustments are his content edits in-app.
 
 ## Open
 - **UI/UX pass (issue #11):** real issues he wants solved — his list, to be captured.
-- Google sign-on / sharing with friends: Lawrence floated 2026-07-19; recommended as
-  post-Alaska milestone (see conversation) — needs his decision.
+- Google sign-on: GO (Lawrence 2026-07-21) — spec #19, tickets #20/#21; local-first
+  so signed-out behavior is untouched pre-Alaska. Blocking: his OAuth Client ID.
+- Onboarding milestone (after sign-in): lightweight brand/food preference setup for
+  new users (Lawrence 2026-07-21) — replaces inheriting his pre-starred meals.
 - Library findability: Lawrence "will think on it" (2026-07-19).
 - GitHub Action auto-deploy: needs a CLOUDFLARE_API_TOKEN repo secret (issue #3).
