@@ -25,6 +25,7 @@ sed -i '' \
   -e "s|from './engine.js'|from './engine.js?v=$V'|g" \
   -e "s|from './store.js'|from './store.js?v=$V'|g" \
   -e "s|from './seed.js'|from './seed.js?v=$V'|g" \
+  -e "s|from './sync.js'|from './sync.js?v=$V'|g" \
   "$DEPLOY_DIR"/js/*.js
 
 npx --yes wrangler@4.112.0 pages deploy "$DEPLOY_DIR" --project-name=packout --commit-dirty=true

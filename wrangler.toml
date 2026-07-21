@@ -1,0 +1,13 @@
+# Cloudflare Pages config for the account API (spec #19). Static assets are
+# unaffected; this exists so `wrangler pages deploy` binds KV + vars to the
+# functions/ directory. SESSION_SECRET is a Pages secret, never committed.
+name = "packout"
+pages_build_output_dir = ".scratch/deploy"
+compatibility_date = "2026-07-01"
+
+[[kv_namespaces]]
+binding = "PACKOUT_KV"
+id = "87c61edec8ea4686a826f92f79048ee7"
+
+[vars]
+GOOGLE_CLIENT_ID = "174203219428-gqpd1eg96se72a133pel20tgd43qv5sh.apps.googleusercontent.com"

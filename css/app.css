@@ -452,6 +452,19 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 
 .form-screen form small { color: var(--ink-soft); }
 
+.account-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 40px;
+  margin: 0.4rem 0 0.8rem;
+  font-size: 0.85rem;
+}
+.account-name { font-weight: 700; }
+.sync-note { font-size: 0.75rem; color: var(--ink-soft); }
+.sync-error { color: var(--flag); }
+.account-note { color: var(--ink-soft); font-size: 0.8rem; }
+
 .meal-style {
   display: grid;
   gap: 0.75rem;

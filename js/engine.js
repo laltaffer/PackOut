@@ -479,6 +479,17 @@ export function draftEmptyDays(trip, library, staples, strategy = 'usual') {
   return out
 }
 
+// Account sync resolution (spec #19). Whole-state last-write-wins: given the
+// local clock and the server copy, decide the one action to take. 'push'
+// covers first-sign-in adoption (local data, empty profile) — same move.
+export function resolveSync(localUpdatedAt, remote) {
+  const local = localUpdatedAt || 0
+  const server = remote?.state ? remote.updatedAt || 0 : 0
+  if (server > local) return 'pull'
+  if (local > server) return 'push'
+  return 'none'
+}
+
 // Backup import validation. Returns {ok:true} or {ok:false, error} — never
 // throws. Deep on purpose: an accepted import replaces the whole state, so
 // anything that could crash a render or reach the DOM as a non-number is

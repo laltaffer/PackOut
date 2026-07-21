@@ -69,6 +69,9 @@ export function load() {
 // return false so callers can warn instead of silently losing edits.
 export function save(state) {
   try {
+    // The sync layer's last-write-wins clock: every durable local change
+    // moves it forward. Harmless extra key for signed-out users.
+    state.updatedAt = Date.now()
     localStorage.setItem(KEY, JSON.stringify(state))
     return true
   } catch {

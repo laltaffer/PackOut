@@ -3,6 +3,7 @@
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf } from './engine.js'
 import { load, save, newId, corruptInfo } from './store.js'
 import { applySeedMigrations } from './seed.js'
+import { configureSync, initAccount, account, syncStatus, signOut, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
 let state = load()
@@ -80,7 +81,10 @@ function updateNav() {
 let warnedSaveFailure = false
 
 function persist() {
-  if (save(state)) return true
+  if (save(state)) {
+    schedulePush()
+    return true
+  }
   if (!warnedSaveFailure) {
     warnedSaveFailure = true
     alert('Saving failed — browser storage is full or blocked. Your latest change may not survive a reload. Export a backup from the Trips screen now.')
@@ -139,6 +143,7 @@ function renderDashboard() {
         <h1>Trips</h1>
         <a class="btn btn-primary" href="#/new">New Trip</a>
       </div>
+      <div id="account-chip" class="account-chip"></div>
       ${trips.length === 0 ? `
         <div class="empty">
           <p><strong>No trips yet.</strong></p>
@@ -157,7 +162,7 @@ function renderDashboard() {
         </ul>`}
       <section class="backup">
         <h2>Backup</h2>
-        <p>Your data lives only in this browser. Export before the trip.</p>
+        <p>${account() ? 'Signed in: your data also syncs to your profile.' : 'Your data lives only in this browser.'} Export before the trip.</p>
         <div class="backup-actions">
           <button class="btn" id="export">Export JSON</button>
           <label class="btn btn-file">Import JSON<input type="file" id="import" accept="application/json,.json"></label>
@@ -217,8 +222,10 @@ function renderDashboard() {
       return
     }
     state = data
+    schedulePush()
     route()
   })
+  renderAccountChip()
 }
 
 // ---------- new trip ----------
@@ -1229,4 +1236,43 @@ function renderFoodForm(food) {
   }
 }
 
+// ---------- account chip (spec #19) ----------
+
+function renderAccountChip() {
+  const chip = document.getElementById('account-chip')
+  if (!chip) return
+  const p = account()
+  if (!p) {
+    chip.replaceChildren(el('<div class="gsi-holder"></div>'))
+    mountSignInButton(chip.firstChild, () => route()).catch(() => {
+      chip.innerHTML = '<span class="mono account-note">Sign-in unavailable offline</span>'
+    })
+    return
+  }
+  const s = syncStatus()
+  const label = { idle: '', syncing: 'syncing…', synced: 'synced', error: 'sync failed' }[s]
+  chip.innerHTML = `
+    <span class="mono account-name">${esc(p.name || 'Signed in')}</span>
+    <span class="mono sync-note sync-${esc(s)}">${label}</span>
+    <button class="btn-quiet" id="sign-out">Sign out</button>`
+  chip.querySelector('#sign-out').addEventListener('click', async () => {
+    await signOut()
+    renderAccountChip()
+  })
+}
+
+configureSync({
+  getState: () => state,
+  replaceState: remote => {
+    // Server blobs were validated on write, but never trust storage more
+    // than an import: same gate, then local migrations catch old seeds.
+    if (!validateImport(remote).ok) return
+    state = applySeedMigrations(remote)
+    save(state)
+    route()
+  },
+  onChange: () => renderAccountChip(),
+})
+
 route()
+initAccount().then(() => renderAccountChip())
