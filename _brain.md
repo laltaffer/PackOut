@@ -111,6 +111,9 @@ gap-closing is "intelligent enough"; localStorage survives real-trip usage patte
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-21: Meal Style (issue #18) shipped at b95dd71 — Mobile/Sit-down dropdowns
+per slot at trip setup + edit; 82 tests green; verified live end-to-end (sit-down
+lunch drafted starred pouches distinct from dinner, days landed ±50).
 2026-07-20 (later): ±50 kcal draft engine + seed v9 wipe + no-store HTML shipped at
 943db15 — 75 tests green; verified live: migration wipes a stale pre-v9 state, week
 drafts within ±48 of target, dinners rotate the 5 ordered mains. Known gap: no
