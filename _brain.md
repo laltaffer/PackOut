@@ -73,6 +73,16 @@ brand/food preferences (stars) instead of inheriting Lawrence's Guidefitter star
 per-trip merge, offline queue beyond debounce, any non-Google identity.
 **Open bets:** LWW is enough for one-person profiles; a single KV blob per user
 carries years of trips; GIS button UX is acceptable on phones in the field.
+**Account-required flip (2026-07-21, Lawrence):** the local-first model was
+superseded the same day it shipped — seeing his trips under a sign-in button
+read as "already signed in", and device-owned data could cross-adopt into the
+next account to sign in on a shared browser. Now sign-in is required: signed
+out shows only a gate, the Profile (KV) is the source of truth, localStorage
+is a per-device cache tagged with its owner's sub (resolveSignIn: unowned
+cache adopts, own cache reuses, another account's cache is discarded), and
+sign-out flushes then clears the device. Offline boot with an owned cache
+still renders (field mode) — a gate nobody can pass without signal would be
+worse than a stale cache.
 - Platform: Cloudflare Pages, project `packout` (account laltaffer@gmail.com)
 - Production URL: https://packout.pages.dev
 - Deploy: `./deploy.sh` — runs the engine tests first, aborts on red, uploads only app files
@@ -134,6 +144,9 @@ carries years of trips; GIS button UX is acceptable on phones in the field.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-21 (night): Account-required flip shipped — sign-in gate, owner-tagged
+device cache (engine resolveSignIn), sign-out flush-then-clear. 106 tests green.
+AWAITING Lawrence's real sign-in smoke (his laptop data adopts on first sign-in).
 2026-07-21 (evening): Accounts milestone (spec #19, tickets #20+#21) shipped at
 844fc6d — Google sign-in (GIS + verified session cookie) with whole-state LWW sync
 to KV; local-first, signed-out unchanged. 105 tests green. Live-verified: API
@@ -160,8 +173,9 @@ Alaska gear adjustments are his content edits in-app.
 
 ## Open
 - **UI/UX pass (issue #11):** real issues he wants solved — his list, to be captured.
-- Google sign-on: GO (Lawrence 2026-07-21) — spec #19, tickets #20/#21; local-first
-  so signed-out behavior is untouched pre-Alaska. Blocking: his OAuth Client ID.
+- Google sign-on: shipped (spec #19) + account-required flip; awaiting Lawrence's
+  two-device sign-in smoke. Consent screen: if the OAuth app is in Testing mode,
+  buddies' emails must be added as test users (or publish to Production).
 - Onboarding milestone (after sign-in): lightweight brand/food preference setup for
   new users (Lawrence 2026-07-21) — replaces inheriting his pre-starred meals.
 - Library findability: Lawrence "will think on it" (2026-07-19).

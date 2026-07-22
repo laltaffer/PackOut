@@ -1,12 +1,15 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf } from './engine.js'
-import { load, save, newId, corruptInfo } from './store.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
+import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
 import { applySeedMigrations } from './seed.js'
-import { configureSync, initAccount, account, syncStatus, signOut, mountSignInButton, schedulePush } from './sync.js'
+import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
-let state = load()
+
+// null until a profile (or field mode) materializes it — route() gates on it,
+// so no trip data ever renders signed out.
+let state = null
 
 // Deploys stamp ?v=<commit> on this module's URL; surfacing it answers
 // "which version is this browser actually running?" at a glance.
@@ -17,6 +20,7 @@ const INTENSITIES = ['easy', 'medium', 'hard']
 // ---------- routing (hash-based so the phone back button works) ----------
 
 function route() {
+  if (!state) return renderGate()
   updateNav()
   const hash = location.hash || '#/'
   const pickMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/add\/([a-z]+(?:-\d+)?)$/)
@@ -162,7 +166,7 @@ function renderDashboard() {
         </ul>`}
       <section class="backup">
         <h2>Backup</h2>
-        <p>${account() ? 'Signed in: your data also syncs to your profile.' : 'Your data lives only in this browser.'} Export before the trip.</p>
+        <p>${account() ? 'Your data syncs to your profile.' : 'Offline — changes wait on this device until you reconnect.'} Export before the trip.</p>
         <div class="backup-actions">
           <button class="btn" id="export">Export JSON</button>
           <label class="btn btn-file">Import JSON<input type="file" id="import" accept="application/json,.json"></label>
@@ -1236,17 +1240,45 @@ function renderFoodForm(food) {
   }
 }
 
-// ---------- account chip (spec #19) ----------
+// ---------- account gate + chip (spec #19, account-required) ----------
+
+function renderGate() {
+  app.replaceChildren(el(`
+    <section class="gate">
+      <h1>Sign in</h1>
+      <p>Your trips live in your Google profile — sign in on any device and they follow.</p>
+      <div class="gsi-holder"></div>
+      <p class="build-stamp mono">build ${esc(BUILD)}</p>
+    </section>
+  `))
+  mountSignInButton(app.querySelector('.gsi-holder'), afterSignIn).catch(() => {
+    app.querySelector('.gsi-holder').innerHTML =
+      '<span class="mono account-note">Sign-in unavailable — check your connection and reload.</span>'
+  })
+}
+
+// Runs once a profile owns the session (boot or fresh sign-in): settle whose
+// data the device cache is, then let resolveSync move the blob.
+async function afterSignIn() {
+  const p = account()
+  if (resolveSignIn(cacheOwner(), p.sub) === 'discard') clearCache()
+  setCacheOwner(p.sub)
+  state = load()
+  await syncNow()
+  // A brand-new profile on a clean device: stamp the seeded state and push
+  // it up so the next device pulls something.
+  if (!state.updatedAt) persist()
+  route()
+}
 
 function renderAccountChip() {
   const chip = document.getElementById('account-chip')
   if (!chip) return
   const p = account()
   if (!p) {
-    chip.replaceChildren(el('<div class="gsi-holder"></div>'))
-    mountSignInButton(chip.firstChild, () => route()).catch(() => {
-      chip.innerHTML = '<span class="mono account-note">Sign-in unavailable offline</span>'
-    })
+    // Field mode: the session couldn't be verified but this device's cache
+    // is owned — render, and sync when connectivity returns.
+    chip.innerHTML = '<span class="mono account-note">Offline — reload when you have signal to sync.</span>'
     return
   }
   const s = syncStatus()
@@ -1256,8 +1288,13 @@ function renderAccountChip() {
     <span class="mono sync-note sync-${esc(s)}">${label}</span>
     <button class="btn-quiet" id="sign-out">Sign out</button>`
   chip.querySelector('#sign-out').addEventListener('click', async () => {
+    const flushed = await flushPush()
+    if (!flushed && !confirm("Couldn't reach the server to save your latest changes. Sign out anyway and leave them behind?")) return
     await signOut()
-    renderAccountChip()
+    // The device is a cache of a profile, not a home: signing out clears it.
+    clearCache()
+    state = null
+    route()
   })
 }
 
@@ -1274,5 +1311,12 @@ configureSync({
   onChange: () => renderAccountChip(),
 })
 
-route()
-initAccount().then(() => renderAccountChip())
+initAccount().then(({ profile, offline }) => {
+  if (profile) return afterSignIn()
+  if (offline && cacheOwner()) {
+    // No network to verify the session, but the cache belongs to a profile —
+    // field mode beats a gate nobody can pass without signal.
+    state = load()
+  }
+  route()
+})

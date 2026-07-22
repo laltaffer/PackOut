@@ -1,5 +1,5 @@
-// Account + sync layer (spec #19). Local-first: localStorage stays the
-// working copy; this module mirrors it to the profile when signed in.
+// Account + sync layer (spec #19; account-required since 2026-07-21). The
+// profile is the source of truth and localStorage is its per-device cache.
 // Whole-state last-write-wins — resolveSync (engine) makes the call, this
 // module just moves the blob. Signed out, nothing here runs a request
 // except the single /api/me probe at boot.
@@ -25,16 +25,19 @@ function setStatus(s) {
 
 const api = (path, opts = {}) => fetch(path, { credentials: 'same-origin', ...opts })
 
+// Distinguishes "the server says signed out" (gate) from "couldn't reach the
+// server" (field mode: an owned cache still renders). Callers orchestrate the
+// resolveSignIn owner check before any sync, so nothing auto-syncs here.
 export async function initAccount() {
   try {
     const res = await api('/api/me')
     const body = res.ok ? await res.json() : null
     profile = body?.sub ? body : null
+    return { profile, offline: false }
   } catch {
     profile = null
+    return { profile: null, offline: true }
   }
-  if (profile) await syncNow()
-  return profile
 }
 
 export async function signInWithCredential(credential) {
@@ -45,12 +48,25 @@ export async function signInWithCredential(credential) {
   })
   if (!res.ok) throw new Error('Sign-in rejected.')
   profile = await res.json()
-  await syncNow()
   return profile
 }
 
+// Push any unpushed changes now. Returns false when the server couldn't be
+// reached — the caller decides whether discarding the cache is still OK.
+export async function flushPush() {
+  clearTimeout(pushTimer)
+  const local = hooks.getState()
+  if (!profile || !local?.updatedAt) return true
+  try {
+    await push(local)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function signOut() {
-  try { await api('/api/logout', { method: 'POST' }) } catch { /* cookie may outlive; next /api/me settles it */ }
+  try { await api('/api/logout', { method: 'POST' }) } catch { /* cookie dies on expiry; the gate returns regardless */ }
   profile = null
   clearTimeout(pushTimer)
   setStatus('idle')

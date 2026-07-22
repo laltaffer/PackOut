@@ -3,6 +3,7 @@
 import { SEED, GEAR_SEED, applySeedMigrations } from './seed.js'
 
 const KEY = 'packout/v1'
+const OWNER_KEY = 'packout/owner'
 
 const DEFAULT_STATE = { schemaVersion: 1, trips: [] }
 
@@ -77,6 +78,23 @@ export function save(state) {
   } catch {
     return false
   }
+}
+
+// The Google sub the cached state belongs to. null = pre-account data (or a
+// browser that never signed in) — resolveSignIn decides what that means.
+export function cacheOwner() {
+  try { return localStorage.getItem(OWNER_KEY) } catch { return null }
+}
+
+export function setCacheOwner(sub) {
+  try { localStorage.setItem(OWNER_KEY, sub) } catch { /* stays unowned; worst case re-adopts */ }
+}
+
+export function clearCache() {
+  try {
+    localStorage.removeItem(KEY)
+    localStorage.removeItem(OWNER_KEY)
+  } catch { /* nothing readable to clear */ }
 }
 
 export function newId() {

@@ -490,6 +490,15 @@ export function resolveSync(localUpdatedAt, remote) {
   return 'none'
 }
 
+// What happens to this device's cached state when <sub> signs in. A cache
+// with no owner predates accounts and is adopted into the profile; a cache
+// owned by a different account is discarded — resolveSync's adoption push
+// must never move one person's data into another's profile.
+export function resolveSignIn(cacheOwner, sub) {
+  if (!cacheOwner) return 'adopt'
+  return cacheOwner === sub ? 'reuse' : 'discard'
+}
+
 // Backup import validation. Returns {ok:true} or {ok:false, error} — never
 // throws. Deep on purpose: an accepted import replaces the whole state, so
 // anything that could crash a render or reach the DOM as a non-number is

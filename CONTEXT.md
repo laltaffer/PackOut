@@ -80,3 +80,9 @@ A food the user has explicitly marked as preferred. Suggestions rank Favorites f
 A food PackOut detects as habitual from usage history (e.g. appears in every Trip, or
 in most Days at the same meal). Detected deterministically — counting, not an LLM.
 Staples are surfaced when planning new Days ("you use this every time").
+
+## Profile
+The Google-account-backed home of a user's whole state (Trips, Library, gear).
+Sign-in is required to use PackOut; the browser's localStorage is only a
+per-device cache of the Profile, cleared on sign-out. One Profile per Google
+account, private to that account — buddies never share a Profile.

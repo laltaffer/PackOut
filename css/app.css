@@ -465,6 +465,16 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible {
 .sync-error { color: var(--flag); }
 .account-note { color: var(--ink-soft); font-size: 0.8rem; }
 
+.gate {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+  padding-block: 3rem 2rem;
+  max-width: 26rem;
+}
+.gate p { color: var(--ink-soft); }
+.gate .gsi-holder { min-height: 40px; }
+
 .meal-style {
   display: grid;
   gap: 0.75rem;
