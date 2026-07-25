@@ -43,10 +43,16 @@ function route() {
       return renderReady(trip)
     }
   }
+  const editDayMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/edit$/)
+  if (editDayMatch) {
+    const trip = state.trips.find(t => t.id === editDayMatch[1])
+    if (trip && trip.days[Number(editDayMatch[2])]) return renderDay(trip, Number(editDayMatch[2]))
+  }
+  // Day summary opens ON the trip surface (unified strip→board morph).
   const dayMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)$/)
   if (dayMatch) {
     const trip = state.trips.find(t => t.id === dayMatch[1])
-    if (trip && trip.days[Number(dayMatch[2])]) return renderDay(trip, Number(dayMatch[2]))
+    if (trip && trip.days[Number(dayMatch[2])]) return renderTrip(trip, Number(dayMatch[2]))
   }
   const editTripMatch = hash.match(/^#\/trip\/(.+)\/edit$/)
   if (editTripMatch) {
@@ -160,6 +166,13 @@ function renderDashboard() {
                 <span class="trip-name">${esc(t.name)}</span>
                 <span class="trip-dest">${esc(t.destination)}</span>
                 <span class="trip-meta mono">${tripDateRange(t)} · ${t.days.length} days</span>
+                ${(() => {
+                  if (!t.days.some(d => dayTotals(d, state.library).kcal > 0)) return ''
+                  const tv = tripVerdict(t, state.library)
+                  return tv.fueled
+                    ? '<span class="trip-rollup rollup-fueled">Outlook · every day Fueled</span>'
+                    : `<span class="trip-rollup rollup-short">Outlook · ${tv.shortDays.length} day${tv.shortDays.length > 1 ? 's' : ''} short</span>`
+                })()}
               </a>
               <button class="btn-quiet" data-del="${t.id}" aria-label="Delete ${esc(t.name)}">Delete</button>
             </li>`).join('')}
@@ -366,19 +379,20 @@ function renderEditTrip(trip) {
 
 // ---------- trip view ----------
 
-function renderTrip(trip) {
-  const anyPlanned = trip.days.some(d => dayTotals(d, state.library).kcal > 0)
-  const tv = tripVerdict(trip, state.library)
-  const rollup = !anyPlanned ? '' : tv.fueled
-    ? `<p class="trip-rollup rollup-fueled">Every day Fueled${tv.heavyDays.length ? ` · ${tv.heavyDays.length} heavy` : ''}</p>`
-    : `<p class="trip-rollup rollup-short">${tv.shortDays.length} day${tv.shortDays.length > 1 ? 's' : ''} short: ${tv.shortDays.map(i => `Day ${i + 1}`).join(', ')}</p>`
+// The unified trip surface (spec: DESIGN.md "unified A→C"): the 7-day outlook
+// strip IS the day navigation. openDay !== null opens the point-forecast board
+// in place; same-surface route changes morph classes instead of re-rendering.
+function renderTrip(trip, openDay = null) {
+  const existing = app.querySelector(`.trip-surface[data-trip="${trip.id}"]`)
+  if (existing) return updateTripSurface(existing, trip, openDay)
+
   app.replaceChildren(el(`
-    <section class="trip">
-      <a href="#/" class="crumb">&larr; Trips</a>
+    <section class="trip-surface${openDay !== null ? ' day-open' : ''}" data-trip="${trip.id}">
+      <a href="${openDay !== null ? `#/trip/${trip.id}` : '#/'}" class="crumb" id="surface-crumb">${openDay !== null ? `&lsaquo; ${esc(trip.name)}` : '&larr; Trips'}</a>
       <div class="trip-head">
         <h1>${esc(trip.name)}</h1>
         <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs · <a class="trip-edit-link" href="#/trip/${trip.id}/edit">Edit trip</a></p>
-        ${rollup}
+        <div id="rollup-slot">${tripRollupHTML(trip)}</div>
       </div>
       <nav class="trip-outputs">
         <a class="btn" href="#/trip/${trip.id}/gear">Gear</a>
@@ -386,78 +400,247 @@ function renderTrip(trip) {
         <a class="btn" href="#/trip/${trip.id}/pack">Pack Plan</a>
         <a class="btn" href="#/trip/${trip.id}/ready">Readiness</a>
       </nav>
-      ${trip.days.length ? (() => {
-        const emptyCount = trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length
-        return `
-      <div class="draft-all-row">
-        <button class="btn btn-primary" id="draft-all">
-          ${emptyCount ? `Draft ${emptyCount} empty day${emptyCount > 1 ? 's' : ''}` : 'Re-draft all days'}
-        </button>
-        <span class="draft-note">${emptyCount ? 'Proposes meals from your usual food; planned days untouched.' : 'Replaces every day’s plan with a fresh proposal.'}</span>
-      </div>`
-      })() : ''}
-      <ol class="days">
-        ${trip.days.map((day, i) => dayCard(trip, day, i)).join('')}
+      <div id="draft-all-slot">${draftAllHTML(trip)}</div>
+      <ol class="strip" style="--days:${trip.days.length}" aria-label="Days — open one for its point forecast">
+        ${trip.days.map((day, i) => `<li>${dayColumn(trip, day, i, openDay)}</li>`).join('')}
       </ol>
+      <div class="board-wrap"><div class="board-inner"><div class="board" id="board"></div></div></div>
     </section>
   `))
-  app.querySelectorAll('[data-day]').forEach(sel => sel.addEventListener('change', () => {
-    trip.days[Number(sel.dataset.day)].intensity = sel.value
-    commit()
-  }))
-  const draftAll = document.getElementById('draft-all')
-  if (draftAll) draftAll.addEventListener('click', () => {
-    const plannedCount = trip.days.filter(d => dayTotals(d, state.library).kcal > 0).length
-    if (plannedCount === trip.days.length && plannedCount > 0) {
-      const ok = confirm(`Re-draft all ${plannedCount} days? Every day's current plan is replaced and packed marks reset.`)
-      if (!ok) return
-      for (const day of trip.days) {
-        delete day.meals
-        delete day.packed
-      }
-    }
-    const staples = stapleIds(state.trips)
-    for (const { dayIndex, meals } of draftEmptyDays(trip, state.library, staples, 'usual')) {
-      trip.days[dayIndex].meals = meals
-      delete trip.days[dayIndex].packed
-    }
-    commit()
-  })
+  if (openDay !== null) {
+    lastOpenDay = openDay
+    fillBoard(trip, openDay, { focus: false })
+  }
+  wireTripSurface(trip)
 }
 
-function dayCard(trip, day, i) {
+function tripRollupHTML(trip) {
+  const anyPlanned = trip.days.some(d => dayTotals(d, state.library).kcal > 0)
+  if (!anyPlanned) return ''
+  const tv = tripVerdict(trip, state.library)
+  return tv.fueled
+    ? `<p class="trip-rollup rollup-fueled">Every day Fueled${tv.heavyDays.length ? ` · ${tv.heavyDays.length} heavy` : ''}</p>`
+    : `<p class="trip-rollup rollup-short">${tv.shortDays.length} day${tv.shortDays.length > 1 ? 's' : ''} short: ${tv.shortDays.map(i => `Day ${i + 1}`).join(', ')}</p>`
+}
+
+// Re-draft-everything is destructive; it only earns the primary treatment
+// while there are empty days to fill (finish review 2026-07-25).
+function draftAllHTML(trip) {
+  if (!trip.days.length) return ''
+  const emptyCount = trip.days.filter(d => dayTotals(d, state.library).kcal === 0).length
+  return `
+    <div class="draft-all-row">
+      <button class="btn ${emptyCount ? 'btn-primary' : ''}" id="draft-all">
+        ${emptyCount ? `Draft ${emptyCount} empty day${emptyCount > 1 ? 's' : ''}` : 'Re-draft all days'}
+      </button>
+      <span class="draft-note">${emptyCount ? 'Proposes meals from your usual food; planned days untouched.' : 'Replaces every day’s plan with a fresh proposal.'}</span>
+    </div>`
+}
+
+function dayColumn(trip, day, i, openDay) {
   const t = dailyTargets(trip.weightLbs, day.intensity)
   const planned = dayTotals(day, state.library)
   const hasPlan = planned.kcal > 0
   const v = hasPlan ? dayVerdict(day, trip.weightLbs, state.library) : null
-  const g = (val) => hasPlan ? `${val} g` : '—'
+  const status = v ? v.status : 'none'
+  const barbs = { easy: 1, medium: 2, hard: 3 }[day.intensity]
   return `
-    <li class="day-card accent-${v ? v.status : 'none'}">
-      <div class="day-head">
-        <span class="day-label">Day ${i + 1}</span>
-        ${v ? verdictBadge(v) : ''}
-        <span class="day-date">${dayDate(trip, i)}</span>
-        <label class="intensity">
-          <span class="intensity-label">Effort</span>
-          <select data-day="${i}" aria-label="Effort for day ${i + 1}">
+    <a class="col" href="#/trip/${trip.id}/day/${i}" data-i="${i}"
+       ${openDay === i ? 'aria-current="true"' : ''}
+       aria-label="Day ${i + 1}, ${dayDate(trip, i)}, ${hasPlan ? `${planned.kcal.toLocaleString()} of ${fmt(t.kcal.target)} kcal, ${VERDICT_LABELS[status] ?? 'not planned'}` : 'not planned'}">
+      <div class="head"><div class="dnum">${i + 1}</div><div class="dow">${dayDate(trip, i)}</div></div>
+      <div class="collapsible"><div>
+        <div class="effort-viz" aria-hidden="true">
+          <div class="barbs">${[1, 2, 3].map(b => `<i class="${b <= barbs ? '' : 'off'}" style="height:${[18, 32, 46][b - 1]}px"></i>`).join('')}</div>
+          <span class="lab">${day.intensity}</span>
+        </div>
+      </div></div>
+      <div class="hilo">
+        <div class="hi mono">${hasPlan ? planned.kcal.toLocaleString() : '—'}</div>
+        <div class="collapse-when-open"><span class="lo mono">of ${fmt(t.kcal.target)} kcal</span></div>
+      </div>
+      <div class="band band-${status}">${hasPlan ? VERDICT_LABELS[status] : 'No plan'}</div>
+    </a>`
+}
+
+// Board content is a day *summary* — always computed from the engine, never
+// constants (audit 2026-07-25). Editing lives one level deeper at /edit.
+function fillBoard(trip, i, { focus = true } = {}) {
+  const day = trip.days[i]
+  const board = document.getElementById('board')
+  if (!board) return
+  // A same-day re-render replaces the board's DOM; if the user was focused on
+  // a control inside it, put focus back on its replacement (finish review).
+  const refocusId = !focus && board.contains(document.activeElement) ? document.activeElement.id : null
+  const t = dailyTargets(trip.weightLbs, day.intensity)
+  const st = slotTargets(t)
+  const planned = dayTotals(day, state.library)
+  const hasPlan = planned.kcal > 0
+  const v = hasPlan ? dayVerdict(day, trip.weightLbs, state.library) : null
+  const delta = planned.kcal - t.kcal.target
+  const slotSub = key => sumEntries(day.meals?.[key] ?? [], state.library)
+  const names = list => list.map(e => {
+    const f = state.library.find(x => x.id === e.foodId)
+    const n = f ? f.name.replace('Peak Refuel ', '').replace(' (2 oz)', '').replace(' (per oz)', '') : '(deleted food)'
+    return e.qty > 1 ? `${esc(n)} ×${e.qty}` : esc(n)
+  }).join(' · ')
+  const b = slotSub('breakfast')
+  const inWin = b.kcal >= st.breakfast.kcalMin && b.kcal <= st.breakfast.kcalMax
+  const snacks = (day.meals?.snacks ?? []).flatMap(s => s.items)
+  const snackSub = sumEntries(snacks, state.library)
+  const din = slotSub('dinner')
+  const slotRow = (label, sub, dd, extra = '') => sub.kcal === 0 && !dd ? '' : `
+    <div class="slotrow"><span class="t">${label}</span><span class="n">${sub.kcal.toLocaleString()}</span>
+    ${dd ? `<span class="dd">${dd}</span>` : ''}${extra}</div>`
+  board.innerHTML = `
+    <div class="fc">
+      <h2 id="board-title" tabindex="-1">Day ${i + 1} — ${dayDate(trip, i)}</h2>
+      <div class="fmeta">
+        <label class="intensity"><span class="intensity-label">Effort</span>
+          <select id="board-intensity" aria-label="Effort for day ${i + 1}">
             ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
           </select>
         </label>
+        <span>TARGET ${fmt(t.kcal.target)} KCAL · PROTEIN FLOOR ${t.proteinG.floor} G</span>
       </div>
-      <table class="macro-table mono">
-        <thead>
-          <tr><th></th><th>Planned</th><th>Target</th></tr>
-        </thead>
-        <tbody>
-          <tr><th>kcal</th><td>${hasPlan ? planned.kcal.toLocaleString() : '—'}</td><td>${fmt(t.kcal.target)}</td></tr>
-          <tr><th>Carbs</th><td>${g(planned.carbsG)}</td><td>${t.carbsG.min}–${t.carbsG.max} g</td></tr>
-          <tr><th>Protein</th><td>${g(planned.proteinG)}</td><td>${t.proteinG.min}–${t.proteinG.max} g</td></tr>
-          <tr><th>Fat</th><td>${g(planned.fatG)}</td><td>${t.fatG.min}–${t.fatG.max} g</td></tr>
-        </tbody>
-      </table>
-      <a class="day-edit" href="#/trip/${trip.id}/day/${i}">${hasPlan ? 'Edit day' : 'Draft or build this day'} &rarr;</a>
-    </li>`
+      ${hasPlan ? `
+      <div class="big"><span class="n">${planned.kcal.toLocaleString()}</span><span class="of">planned / ${fmt(t.kcal.target)} target · Δ ${delta >= 0 ? '+' : '−'}${Math.abs(delta).toLocaleString()}</span></div>
+      <span class="obadge obadge-${v.status}">Outlook · ${VERDICT_LABELS[v.status]}</span>
+      ${v.status !== 'fueled' ? `<p class="gap-line${v.status === 'heavy' ? ' gap-heavy' : ''}">${gapSentence(v)}</p>` : ''}
+      <div class="discussion">
+        <div class="k">Forecast discussion</div>
+        <p>${forecastDiscussion(day, t, st, planned, v, b, din, snackSub)}</p>
+      </div>
+      <div class="editrow">
+        <a class="btn btn-primary" href="#/trip/${trip.id}/day/${i}/edit">Edit this day</a>
+      </div>` : `
+      <div class="big"><span class="n">—</span><span class="of">nothing planned · target ${fmt(t.kcal.target)} kcal</span></div>
+      <span class="obadge obadge-none">No plan yet</span>
+      <div class="editrow">
+        <button class="btn btn-primary" id="board-draft">Draft this day</button>
+        <a class="btn" href="#/trip/${trip.id}/day/${i}/edit">Build by hand</a>
+      </div>`}
+    </div>
+    <div class="board-slots">
+      ${slotRow('Breakfast', b, names(day.meals?.breakfast ?? []),
+        b.kcal ? `<span class="w ${inWin ? 'in' : 'out'}">${inWin ? 'In window' : 'Outside window'} ${st.breakfast.kcalMin}–${st.breakfast.kcalMax}</span>` : '')}
+      ${slotRow('Lunch', slotSub('lunch'), names(day.meals?.lunch ?? []))}
+      ${slotRow('Dinner', din, names(day.meals?.dinner ?? []))}
+      ${snacks.length ? slotRow(`Snacks · ${day.meals.snacks.length} bundle${day.meals.snacks.length > 1 ? 's' : ''}`, snackSub, names(snacks)) : ''}
+      ${slotRow('Electrolytes', slotSub('electrolytes'), names(day.meals?.electrolytes ?? []))}
+    </div>`
+  const sel = document.getElementById('board-intensity')
+  if (sel) sel.addEventListener('change', e => { day.intensity = e.target.value; commit() })
+  const draftBtn = document.getElementById('board-draft')
+  if (draftBtn) draftBtn.addEventListener('click', () => {
+    day.meals = draftDay(trip, i, state.library, stapleIds(state.trips), 'usual')
+    delete day.packed
+    commit()
+  })
+  const announce = document.getElementById('announce')
+  if (announce) announce.textContent = hasPlan
+    ? `Day ${i + 1} — outlook ${VERDICT_LABELS[v.status]}`
+    : `Day ${i + 1} — nothing planned yet`
+  if (focus) document.getElementById('board-title')?.focus()
+  else if (refocusId) document.getElementById(refocusId)?.focus()
 }
+
+function forecastDiscussion(day, t, st, planned, v, b, din, snackSub) {
+  const parts = []
+  parts.push(`${day.intensity === 'easy' ? 'An' : 'A'} ${day.intensity} day ${v.status === 'fueled' ? 'in the window' : v.status === 'short' ? 'running short' : 'running heavy'}.`)
+  if (b.kcal) parts.push(`Breakfast holds ${b.kcal.toLocaleString()} kcal ${b.kcal >= st.breakfast.kcalMin && b.kcal <= st.breakfast.kcalMax ? 'inside' : 'outside'} its ${st.breakfast.kcalMin}–${st.breakfast.kcalMax} band;`)
+  if (din.kcal) {
+    const gap = din.kcal - st.dinner.kcal
+    parts.push(`dinner runs ${Math.abs(gap).toLocaleString()} ${gap < 0 ? 'under' : 'over'} its share${snackSub.kcal ? ` and snacks carry ${snackSub.kcal.toLocaleString()} kcal` : ''}.`)
+  }
+  const pOver = planned.proteinG - t.proteinG.floor
+  parts.push(pOver >= 0 ? `Protein finishes ${pOver} g above the floor.` : `Protein sits ${Math.abs(pOver)} g under the floor.`)
+  parts.push(`Pack weight: ${planned.weightOz} oz logged${planned.missingWeightCount ? `, ${planned.missingWeightCount} item${planned.missingWeightCount > 1 ? 's' : ''} unweighed` : ''}.`)
+  return parts.join(' ')
+}
+
+// Same-surface route change: morph instead of re-render so the strip→scrubber
+// motion actually plays. Column data refreshes (a commit may have changed it).
+function updateTripSurface(surface, trip, openDay) {
+  const wasOpen = surface.classList.contains('day-open')
+  surface.classList.toggle('day-open', openDay !== null)
+  surface.querySelectorAll('.strip li').forEach((li, i) => {
+    li.innerHTML = dayColumn(trip, trip.days[i], i, openDay)
+  })
+  // Headline state must track every commit made on this surface.
+  const rollupSlot = document.getElementById('rollup-slot')
+  if (rollupSlot) rollupSlot.innerHTML = tripRollupHTML(trip)
+  const draftSlot = document.getElementById('draft-all-slot')
+  if (draftSlot) draftSlot.innerHTML = draftAllHTML(trip)
+  // Focus moves only when the day CONTEXT changes — never on a same-day
+  // commit (an effort change must not steal focus from the select).
+  if (openDay !== null) fillBoard(trip, openDay, { focus: !wasOpen || openDay !== lastOpenDay })
+  else {
+    const announce = document.getElementById('announce')
+    if (announce) announce.textContent = ''
+    if (wasOpen) {
+      const target = surface.querySelector(`.col[data-i="${lastOpenDay ?? 0}"]`) || surface.querySelector('.col[data-i]')
+      target?.focus()
+    }
+  }
+  const crumb = document.getElementById('surface-crumb')
+  if (crumb) {
+    crumb.setAttribute('href', openDay !== null ? `#/trip/${trip.id}` : '#/')
+    crumb.innerHTML = openDay !== null ? `&lsaquo; ${esc(trip.name)}` : '&larr; Trips'
+  }
+  if (openDay !== null) lastOpenDay = openDay
+  wireTripSurface(trip)
+}
+
+let lastOpenDay = null
+
+function wireTripSurface(trip) {
+  const draftAll = document.getElementById('draft-all')
+  if (draftAll && !draftAll.dataset.wired) {
+    draftAll.dataset.wired = '1'
+    draftAll.addEventListener('click', () => {
+      const plannedCount = trip.days.filter(d => dayTotals(d, state.library).kcal > 0).length
+      if (plannedCount === trip.days.length && plannedCount > 0) {
+        const ok = confirm(`Re-draft all ${plannedCount} days? Every day's current plan is replaced and packed marks reset.`)
+        if (!ok) return
+        for (const day of trip.days) {
+          delete day.meals
+          delete day.packed
+        }
+      }
+      const staples = stapleIds(state.trips)
+      for (const { dayIndex, meals } of draftEmptyDays(trip, state.library, staples, 'usual')) {
+        trip.days[dayIndex].meals = meals
+        delete trip.days[dayIndex].packed
+      }
+      commit()
+    })
+  }
+}
+
+// The design switcher (static DOM, lives outside route renders): two skins,
+// one app — switching is a token swap, never a re-render of state.
+function syncBrandDock() {
+  const current = document.documentElement.dataset.brand
+  document.querySelectorAll('.brand-dock [data-set-brand]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.setBrand === current))
+  })
+}
+document.querySelectorAll('.brand-dock [data-set-brand]').forEach(b => {
+  b.addEventListener('click', () => {
+    document.documentElement.dataset.brand = b.dataset.setBrand
+    try { localStorage.setItem('packout/brand', b.dataset.setBrand) } catch { /* preference just won't stick */ }
+    syncBrandDock()
+  })
+})
+syncBrandDock()
+
+// Escape backs out of an open day anywhere on the unified surface.
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return
+  const m = (location.hash || '').match(/^#\/trip\/(.+)\/day\/\d+$/)
+  if (m) location.hash = `#/trip/${m[1]}`
+})
 
 // ---------- verdicts ----------
 
@@ -550,7 +733,7 @@ function renderDay(trip, i) {
     </div>`
   app.replaceChildren(el(`
     <section class="day-screen">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <a href="#/trip/${trip.id}/day/${i}" class="crumb">&lsaquo; Day ${i + 1} forecast</a>
       <div class="day-screen-head">
         <h1>Day ${i + 1}</h1>
         <span class="day-date">${dayDate(trip, i)}</span>
@@ -739,7 +922,7 @@ function renderPicker(trip, i, slotKey) {
   const slotLabel = slotKey.startsWith('snack-') ? `Snack ${Number(slotKey.slice(6)) + 1}` : SLOT_LABELS[slotKey]
   app.replaceChildren(el(`
     <section class="picker">
-      <a href="#/trip/${trip.id}/day/${i}" class="crumb">&larr; Day ${i + 1}</a>
+      <a href="#/trip/${trip.id}/day/${i}/edit" class="crumb">&larr; Day ${i + 1}</a>
       <h1>Add to ${slotLabel}</h1>
       <input id="picker-search" type="search" placeholder="Search foods…" value="${esc(pickerSearch)}" aria-label="Search foods">
       <ul class="food-list">
@@ -768,7 +951,7 @@ function renderPicker(trip, i, slotKey) {
     else entries.push({ foodId: btn.dataset.pick, qty: 1 })
     persist()
     pickerSearch = ''
-    location.hash = `#/trip/${trip.id}/day/${i}`
+    location.hash = `#/trip/${trip.id}/day/${i}/edit`
   }))
 }
 

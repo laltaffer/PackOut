@@ -1,25 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-brand="flag">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PackOut — Backcountry Trip Planner</title>
 <meta name="description" content="Plan backcountry trip food against real nutrition targets. Gear, fuel, readiness — one checklist.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2326221c'/%3E%3Cpath d='M4 2h9l-2.5 3L13 8H4v6H2V2z' fill='%23e6007e'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23ffffff'/%3E%3Cpath d='M4 2h9l-2.5 3L13 8H4v6H2V2z' fill='%23e6007e'/%3E%3C/svg%3E">
+<script>
+// Brand boot (spec: DESIGN.md) — ?brand= wins and persists, else stored, else flag.
+(() => {
+  const q = new URLSearchParams(location.search).get('brand')
+  const valid = v => v === 'flag' || v === 'command'
+  let b = valid(q) ? q : null
+  try {
+    if (b) localStorage.setItem('packout/brand', b)
+    else { const s = localStorage.getItem('packout/brand'); if (valid(s)) b = s }
+  } catch { /* storage blocked: default stands */ }
+  document.documentElement.dataset.brand = b || 'flag'
+})()
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:opsz,wght@10..72,700;10..72,900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Martian+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&family=Manrope:wght@500;700;800&family=Chivo+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<svg class="topo" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g fill="none" stroke-width="1.5">
+<path d="M-50,780 C200,700 340,820 560,740 C780,660 900,760 1120,660 C1300,585 1480,660 1700,560"/>
+<path d="M-50,690 C180,610 360,720 580,640 C800,560 920,660 1140,560 C1320,485 1500,560 1700,470"/>
+<path d="M-50,600 C160,520 380,620 600,540 C820,460 940,560 1160,460 C1340,390 1520,460 1700,380"/>
+<path d="M-50,510 C140,435 400,520 620,445 C840,370 960,460 1180,365 C1360,295 1540,365 1700,290"/>
+<path d="M-50,420 C120,350 420,425 640,350 C860,280 980,360 1200,270 C1380,205 1560,270 1700,200"/>
+<path d="M-50,330 C100,265 440,330 660,260 C880,195 1000,265 1220,180 C1400,120 1580,180 1700,115"/>
+</g></svg>
 <header class="masthead">
-  <a href="#/" class="wordmark">PackOut</a>
+  <a href="#/" class="wordmark">Pack<span class="wm-flag">Out</span></a>
+  <span class="svc mono">Fueling Outlook Service</span>
   <nav class="masthead-nav">
     <a href="#/">Trips</a>
     <a href="#/library">Library</a>
   </nav>
 </header>
-<main id="app" aria-live="polite"></main>
+<main id="app" aria-live="off"></main>
+<div id="announce" class="visually-hidden" aria-live="polite"></div>
+<div class="brand-dock" role="group" aria-label="Site design">
+  <button type="button" data-set-brand="flag">One Flag</button>
+  <button type="button" data-set-brand="command">Field Cmd</button>
+</div>
 <script type="module" src="js/ui.js"></script>
 </body>
 </html>

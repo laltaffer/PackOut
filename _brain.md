@@ -144,6 +144,23 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-25: **Fuel Forecast redesign built on branch `redesign/fuel-forecast`**
+(uncommitted; production untouched for the Alaska freeze). Both brands live over
+one codebase (data-brand tokens; `?brand=command` / dashboard toggle): One Flag
+on Snow (default) + Field Command (onX-family, the share-with-onX skin). Unified
+A→C surface in the real app: `#/trip/:id` = outlook strip, `/day/:n` = in-place
+point-forecast board (morph, focus management, Escape, live region), editor
+moved to `/day/:n/edit`. DESIGN.md + PRODUCT.md at root. Independent finish
+review ran: 1 gate + 4 P1 + 6 P2 + 4 P3 findings — all P1/P2 and the gate fixed
+and re-verified live (focus restore, engine-driven rollup refresh, crumb on
+reload, motion grammar, collapsed-band glyphs, dynamic day-count tracks, print
+inks, draft-all demotion, copy fixes); remaining P3s: strip-scroll hint at
+390px, long-trip-name lockup hardening. Ceiling notes for later: outputs
+screens (grocery/pack/ready) still outside the forecast world. 106 engine tests
+green throughout. QA'd both brands, desktop + 390. Typeface registry updated
+(Familjen Grotesk / Manrope / Chivo Mono). NEXT: Lawrence clicks through both
+brands on the branch → design tweaks → /ship-it decision post-Alaska (or behind
+a flag).
 2026-07-21 (night): Account-required flip shipped — sign-in gate, owner-tagged
 device cache (engine resolveSignIn), sign-out flush-then-clear. 106 tests green.
 AWAITING Lawrence's real sign-in smoke (his laptop data adopts on first sign-in).
@@ -173,10 +190,55 @@ Alaska gear adjustments are his content edits in-app.
 
 ## Open
 - **UI/UX pass (issue #11):** real issues he wants solved — his list, to be captured.
+  - Design critique run 2026-07-24 (dual-agent /impeccable): 29/40, 0 P0 / 3 P1 —
+    snapshot in `.impeccable/critique/`, PRODUCT.md written at repo root. Top P1s:
+    desktop is a stretched phone layout (roster-table fix), day-builder verdict
+    scrolls out of view (sticky instrument bar), draft suggestions ignore gap size
+    (engine.js:589 `suggestions()` — /cto fix, not design).
+  - Redesign exploration same day: four mockups (load-sheet, cartographic,
+    expedition dark, field notebook) — **all rejected and erased same day.**
+    Lawrence's ruling: too dense/compact; "the current design on dev gives me a
+    much cleaner view of all the information." Desktop-first ≠ density — the wide
+    canvas buys breathing room for the same information. The shipped card layout
+    is the reference; the critique's roster-table P1 is overruled (pinned in
+    `.impeccable/critique/ignore.md`; PRODUCT.md corrected). Clarified same day:
+    he still wants *completely different* design directions — the ban is density,
+    not novelty; usability/navigation-first, and flows must be judged navigable,
+    not as stacked static comps.
+  - **Redesign round 3 (2026-07-25, converging):** world = "Fuel Forecast"
+    (weather-briefing vernacular: PackOut issues your outlook; verdict = the
+    outlook language). Structure DECIDED: unified A→C — the 7-day outlook strip
+    IS the day nav; clicking a day morphs the columns into a scrubber and
+    unfolds the point-forecast board (working prototype:
+    `.scratch/comps/unified.html`, brand-switchable; regenerate via scratchpad
+    generators if lost). Briefing-board structure (B) killed. Brand narrowed to
+    two candidates, decision pending: **5 · One Flag on Snow** (pure white/ink,
+    hi-vis pink the only color, verdicts as ✓-stamps; Familjen Grotesk + Chivo
+    Mono) vs **7 · Field Command** (onX-Hunt-family: charcoal + tone-on-tone
+    contours, orange data numerals, green verdict chips; Manrope + Chivo Mono).
+    Killed en route: green-chrome + Bevan briefing (v2/v3), 6-treatment fan
+    lanes 1–4 & 6. Design tweaks round next, then committed build.
+  - **Two-brand strategy locked (2026-07-25, Lawrence):** BOTH brands ship
+    intentionally, kept functionally + design-wise in sync forever — one
+    markup/behavior layer, token-only divergence (the unified prototype's CSS
+    custom-property architecture is the model). Reason: he wants to share the
+    Field Command version with people at onX — so that skin is portfolio-grade
+    and must read as a companion to onX Hunt, never a clone (no onX marks or
+    naming in UI). Brand commitment recorded in PRODUCT.md.
 - Google sign-on: shipped (spec #19) + account-required flip; awaiting Lawrence's
   two-device sign-in smoke. Consent screen: if the OAuth app is in Testing mode,
   buddies' emails must be added as test users (or publish to Production).
 - Onboarding milestone (after sign-in): lightweight brand/food preference setup for
   new users (Lawrence 2026-07-21) — replaces inheriting his pre-starred meals.
+  - **pm-lead Stage 0 finding (2026-07-23, escape hatch fired):** the onboarding
+    bet has no demand evidence from any non-builder — the only user is Lawrence, who
+    is also the builder, and that usage is out of scope per the per-bet rule (a buddy
+    is a different population doing a different job than the person who wrote the app).
+    There is also no first-run instrumentation, so there is no way to get such
+    evidence today. The honest gap is "no evidence it works for someone who isn't
+    you," not "onboarding UI is missing." Cheapest next move before building
+    onboarding: instrument first-run (which steps a new user completes vs. abandons)
+    and get one real buddy through the *current* flow. A nine-stage pipeline run was
+    overkill for a solo pre-user bet — the pack's escape hatch is the right call here.
 - Library findability: Lawrence "will think on it" (2026-07-19).
 - GitHub Action auto-deploy: needs a CLOUDFLARE_API_TOKEN repo secret (issue #3).
