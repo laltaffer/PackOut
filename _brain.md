@@ -144,8 +144,17 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-25 (later): **Redesign LIVE on packout.pages.dev** at Lawrence's ask
+(commit 9109667 on `redesign/fuel-forecast`, pushed to origin; promoted to the
+production deployment via `wrangler pages deploy --branch=main` — deploy.sh
+alone produces a preview when run off-main; remember the flag or merge first).
+Lower-left brand dock added (One Flag / Field Cmd, persisted; `?brand=` works
+for share links). Verified live: build stamp 9109667, gate renders in both
+brands, GIS button loads, /api/me 200. Sharing caveat: sign-in required — if
+the Google OAuth consent screen is still in Testing mode, friends must be
+added as test users or the app published to Production.
 2026-07-25: **Fuel Forecast redesign built on branch `redesign/fuel-forecast`**
-(uncommitted; production untouched for the Alaska freeze). Both brands live over
+(now committed and live; main still holds the old design). Both brands live over
 one codebase (data-brand tokens; `?brand=command` / dashboard toggle): One Flag
 on Snow (default) + Field Command (onX-family, the share-with-onX skin). Unified
 A→C surface in the real app: `#/trip/:id` = outlook strip, `/day/:n` = in-place
@@ -226,8 +235,9 @@ Alaska gear adjustments are his content edits in-app.
     and must read as a companion to onX Hunt, never a clone (no onX marks or
     naming in UI). Brand commitment recorded in PRODUCT.md.
 - Google sign-on: shipped (spec #19) + account-required flip; awaiting Lawrence's
-  two-device sign-in smoke. Consent screen: if the OAuth app is in Testing mode,
-  buddies' emails must be added as test users (or publish to Production).
+  two-device sign-in smoke. Consent screen PUBLISHED to Production 2026-07-25
+  (project packout-503121, basic scopes only — no verification needed): any
+  Google account can now sign in.
 - Onboarding milestone (after sign-in): lightweight brand/food preference setup for
   new users (Lawrence 2026-07-21) — replaces inheriting his pre-starred meals.
   - **pm-lead Stage 0 finding (2026-07-23, escape hatch fired):** the onboarding
