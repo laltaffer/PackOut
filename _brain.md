@@ -144,6 +144,12 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-26: **Seed v12 — Stowaway Gourmet + Packit Gourmet catalogs** (51
+single meals: 19 Stowaway, 32 Packit; bundles skipped per Lawrence). Per-pouch
+label values read from nutrition-panel images; sources + exceptions in
+reference/stowaway-gourmet-catalog.md and reference/packit-gourmet-catalog.md.
+Additive migration (prefix-matched, never resurrects deletions). 140 tests
+green; deployed to packout.pages.dev.
 2026-07-25 (shipped): **Product URL + scrape-to-prefill live** (issue #23,
 commits 974c890→3950260 on main; deploy verified — build stamp 3950260, both
 brands, /api/scrape answering). Optional product-URL field on the food form

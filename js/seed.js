@@ -10,7 +10,7 @@
 // (reference/alaska-food-order.md) — his core meals, pre-starred so a fresh
 // state drafts from them with zero setup.
 export const SEED = {
-  version: 11,
+  version: 12,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -44,6 +44,65 @@ export const SEED = {
     { id: 'peak-biscuits-gravy', name: 'Peak Refuel Biscuits & Sausage Gravy', kcal: 1100, carbsG: 51, fatG: 85, proteinG: 34, weightOz: 6.77, slotHint: 'breakfast', prep: 'cook' },
     { id: 'peak-peaches-oats', name: 'Peak Refuel Creamy Peaches and Oats', kcal: 1010, carbsG: 128, fatG: 42, proteinG: 30, weightOz: 7.05, slotHint: 'breakfast', prep: 'cook' },
     { id: 'peak-bison-ranch-mashers', name: 'Peak Refuel Bison Ranch Mashers', kcal: 1120, carbsG: 94, fatG: 66, proteinG: 40, weightOz: 7.40, slotHint: 'dinner', prep: 'cook' },
+
+    // Stowaway Gourmet single meals (reference/stowaway-gourmet-catalog.md).
+    // Per-pouch totals from each label; weightOz = Shopify shipping weight.
+    { id: 'stowaway-comrade-doeganoff', name: 'Stowaway Gourmet Comrade Doeganoff', kcal: 514, carbsG: 48, fatG: 14, proteinG: 42, weightOz: 4.59, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-wild-boar-bacon-bean-stew', name: 'Stowaway Gourmet Wild Boar Bacon Bean Stew', kcal: 544, carbsG: 68, fatG: 14, proteinG: 42, weightOz: 5.19, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-bison-beer-black-bean-chili', name: 'Stowaway Gourmet Bison Beer Black Bean Chili', kcal: 706, carbsG: 70, fatG: 30, proteinG: 42, weightOz: 5.71, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-las-pollos-hermanas', name: 'Stowaway Gourmet Las Pollos Hermanas', kcal: 458, carbsG: 32, fatG: 20, proteinG: 38, weightOz: 5.19, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-lamb-bourguignon', name: 'Stowaway Gourmet Lamb Bourguignon', kcal: 564, carbsG: 40, fatG: 22, proteinG: 36, weightOz: 5.04, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-chana-masala', name: 'Stowaway Gourmet Chana Masala', kcal: 508, carbsG: 70, fatG: 20, proteinG: 18, weightOz: 4.59, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-spiced-creamy-oatmeal-pear', name: 'Stowaway Gourmet Spiced Creamy Oatmeal with Pear', kcal: 588, carbsG: 86, fatG: 22, proteinG: 12, weightOz: 4.30, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'stowaway-miso-salmon-okayu', name: 'Stowaway Gourmet Miso Salmon Okayu', kcal: 436, carbsG: 54, fatG: 12, proteinG: 24, weightOz: 4.23, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-lone-star-chili', name: 'Stowaway Gourmet Lone Star Chili', kcal: 685, carbsG: 12, fatG: 45, proteinG: 62, weightOz: 5.01, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-kimchi-jjigae', name: 'Stowaway Gourmet Kimchi Jjigae', kcal: 749, carbsG: 17, fatG: 69, proteinG: 23, weightOz: 4.66, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-sausage-and-eggs', name: 'Stowaway Gourmet Sausage and Eggs', kcal: 581, carbsG: 2, fatG: 49, proteinG: 33, weightOz: 3.88, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'stowaway-tiramisu-bites', name: 'Stowaway Gourmet Tiramisu Bites', kcal: 642, carbsG: 42, fatG: 51, proteinG: 9, weightOz: 4.37, slotHint: 'snack' },
+    { id: 'stowaway-drunken-noodles', name: 'Stowaway Gourmet Drunken Noodles', kcal: 661, carbsG: 77, fatG: 25, proteinG: 35, weightOz: 6.14, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-butter-chicken', name: 'Stowaway Gourmet Butter Chicken', kcal: 674, carbsG: 68, fatG: 30, proteinG: 36, weightOz: 5.64, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-irish-pub-stew', name: 'Stowaway Gourmet Irish Pub Stew', kcal: 521, carbsG: 38, fatG: 28, proteinG: 34, weightOz: 4.41, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-curry-rice', name: 'Stowaway Gourmet Curry Rice', kcal: 635, carbsG: 88, fatG: 19, proteinG: 33, weightOz: 5.64, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-penne-alla-vodka', name: 'Stowaway Gourmet Penne Alla Vodka', kcal: 707, carbsG: 53, fatG: 47, proteinG: 25, weightOz: 5.29, slotHint: 'dinner', prep: 'cook' },
+    // Jambalaya has no published Nutrition Facts panel; kcal/protein are the
+    // front-of-pouch printed values, carbs/fat stay null (never invented).
+    { id: 'stowaway-andouille-shrimp-jambalaya', name: 'Stowaway Gourmet Andouille and Shrimp Jambalaya', kcal: 633, carbsG: null, fatG: null, proteinG: 30, weightOz: 4.51, slotHint: 'dinner', prep: 'cook' },
+    { id: 'stowaway-cereal-killer', name: 'Stowaway Gourmet Cereal Killer', kcal: 571, carbsG: 81, fatG: 20, proteinG: 25, weightOz: 6.60, slotHint: 'breakfast' },
+
+    // Packit Gourmet single meals (reference/packit-gourmet-catalog.md).
+    // Per-pouch totals from each label; weightOz = product-page meal net weight.
+    { id: 'packit-austintacious-tortilla-soup', name: 'Packit Gourmet Austintacious Tortilla Soup', kcal: 600, carbsG: 72, fatG: 14, proteinG: 51, weightOz: 5.4, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-berry-berry-smoothie', name: 'Packit Gourmet Berry Berry Jump Start Smoothie', kcal: 400, carbsG: 51, fatG: 7, proteinG: 34, weightOz: 3.5, slotHint: 'breakfast' },
+    { id: 'packit-bigun-burrito-bowl', name: "Packit Gourmet Big'un Burrito Bowl with Fajita Chicken", kcal: 530, carbsG: 69, fatG: 16, proteinG: 34, weightOz: 4.8, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-cajun-ranch-chicken-salad', name: 'Packit Gourmet Cajun Ranch Chicken Salad', kcal: 400, carbsG: 18, fatG: 17, proteinG: 47, weightOz: 3.2, slotHint: 'lunch' },
+    { id: 'packit-curry-mango-chicken-salad', name: 'Packit Gourmet Curry Mango Chicken Salad', kcal: 410, carbsG: 20, fatG: 17, proteinG: 46, weightOz: 3.2, slotHint: 'lunch' },
+    { id: 'packit-dabs-smash-burger', name: "Packit Gourmet Dab's Smash Burger with Secret Sauce", kcal: 560, carbsG: 22, fatG: 38, proteinG: 37, weightOz: 3.7, slotHint: 'lunch' },
+    { id: 'packit-diner-deluxe-eggs', name: 'Packit Gourmet Diner Deluxe Eggs with Sausage', kcal: 460, carbsG: 3, fatG: 38, proteinG: 24, weightOz: 2.9, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'packit-dotties-chicken-dumplings', name: "Packit Gourmet Dottie's Chicken and Dumplings", kcal: 500, carbsG: 47, fatG: 10, proteinG: 56, weightOz: 4.8, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-good-day-sunshine-bowl', name: 'Packit Gourmet Good Day Sunshine Bowl', kcal: 530, carbsG: 74, fatG: 23, proteinG: 12, weightOz: 4.4, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'packit-black-bean-dip', name: 'Packit Gourmet Happy Hour Black Bean Dip', kcal: 320, carbsG: 40, fatG: 10, proteinG: 20, weightOz: 2.8, slotHint: 'snack', prep: 'cook' },
+    { id: 'packit-pico-de-gallo', name: 'Packit Gourmet Happy Hour Pico de Gallo', kcal: 70, carbsG: 14, fatG: 0, proteinG: 2, weightOz: 0.7, slotHint: 'snack' },
+    { id: 'packit-queso-rico-dip', name: 'Packit Gourmet Happy Hour Queso Rico Dip', kcal: 440, carbsG: 24, fatG: 26, proteinG: 28, weightOz: 3.5, slotHint: 'snack', prep: 'cook' },
+    { id: 'packit-kickin-chicken-wrap', name: "Packit Gourmet Kickin' Chicken Hot Wings Wrap", kcal: 330, carbsG: 13, fatG: 4.5, proteinG: 59, weightOz: 3.0, slotHint: 'lunch' },
+    { id: 'packit-many-beans-salad', name: 'Packit Gourmet Many Beans Salad', kcal: 670, carbsG: 111, fatG: 15, proteinG: 31, weightOz: 5.9, slotHint: 'lunch' },
+    { id: 'packit-meyer-lemon-cheesecake', name: 'Packit Gourmet Meyer Lemon Cheesecake', kcal: 650, carbsG: 98, fatG: 21, proteinG: 14, weightOz: 5.2, slotHint: 'snack' },
+    { id: 'packit-banana-puddin', name: "Packit Gourmet Mom's Banana Puddin'", kcal: 470, carbsG: 73, fatG: 17, proteinG: 8, weightOz: 3.8, slotHint: 'snack' },
+    { id: 'packit-moonshine-margarita', name: 'Packit Gourmet Moonshine Margarita (4 svg pouch)', kcal: 400, carbsG: 156, fatG: 0, proteinG: 0, weightOz: 4.2, slotHint: 'snack' },
+    { id: 'packit-peach-passion-smoothie', name: 'Packit Gourmet Peach Passion Jump Start Smoothie', kcal: 400, carbsG: 51, fatG: 6, proteinG: 34, weightOz: 3.5, slotHint: 'breakfast' },
+    { id: 'packit-pizza-margherita', name: 'Packit Gourmet Pizza Margherita', kcal: 500, carbsG: 18, fatG: 31, proteinG: 38, weightOz: 3.6, slotHint: 'lunch' },
+    { id: 'packit-polenta-pork-sausage', name: 'Packit Gourmet Polenta with Pork Sausage', kcal: 450, carbsG: 53, fatG: 19, proteinG: 17, weightOz: 3.5, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'packit-ramen-rescue-chicken', name: 'Packit Gourmet Ramen Rescue with Chicken (BYO noodles)', kcal: 60, carbsG: 11, fatG: 0.5, proteinG: 6, weightOz: null, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-santa-fe-corn-pudding', name: 'Packit Gourmet Santa Fe Corn Pudding', kcal: 480, carbsG: 65, fatG: 17, proteinG: 19, weightOz: 4.0, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'packit-southwest-corn-bean-salad', name: 'Packit Gourmet Southwest Corn & Black Bean Salad', kcal: 580, carbsG: 83, fatG: 20, proteinG: 28, weightOz: 5.0, slotHint: 'lunch' },
+    { id: 'packit-strawberry-cheesecake', name: 'Packit Gourmet Strawberry Cheesecake', kcal: 620, carbsG: 93, fatG: 20, proteinG: 14, weightOz: 5.0, slotHint: 'snack' },
+    { id: 'packit-tex-mex-breakfast-tacos', name: 'Packit Gourmet Tex-Mex Breakfast Tacos', kcal: 380, carbsG: 10, fatG: 30, proteinG: 18, weightOz: null, slotHint: 'breakfast', prep: 'cook' },
+    { id: 'packit-texas-mesquite-chicken-salad', name: 'Packit Gourmet Texas Mesquite Chicken Salad', kcal: 410, carbsG: 17, fatG: 21, proteinG: 40, weightOz: 2.9, slotHint: 'lunch' },
+    { id: 'packit-texas-state-fair-chili', name: 'Packit Gourmet Texas State Fair Chili', kcal: 650, carbsG: 68, fatG: 25, proteinG: 41, weightOz: 5.5, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-big-easy-cajun-gumbo', name: "Packit Gourmet The 'Big Easy' Cajun Gumbo", kcal: 510, carbsG: 61, fatG: 13, proteinG: 40, weightOz: 4.4, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-trailside-bean-cheese-burrito', name: 'Packit Gourmet Trailside Bean & Cheese Burrito', kcal: 410, carbsG: 42, fatG: 19, proteinG: 23, weightOz: 3.5, slotHint: 'lunch', prep: 'cook' },
+    { id: 'packit-trailside-beef-bean-burrito', name: 'Packit Gourmet Trailside Beef & Bean Burrito', kcal: 580, carbsG: 49, fatG: 28, proteinG: 36, weightOz: 4.4, slotHint: 'lunch', prep: 'cook' },
+    { id: 'packit-vegetable-ramen-rescue', name: 'Packit Gourmet Vegetable Ramen Rescue (BYO noodles)', kcal: 60, carbsG: 14, fatG: 0.5, proteinG: 2, weightOz: null, slotHint: 'dinner', prep: 'cook' },
+    { id: 'packit-west-memphis-grits-souffle', name: 'Packit Gourmet West Memphis Grits Soufflé', kcal: 440, carbsG: 56, fatG: 18, proteinG: 16, weightOz: 3.5, slotHint: 'breakfast', prep: 'cook' },
 
     // Snacks
     { id: 'pro-bolt-chews', name: 'ProBar Bolt Chews', kcal: 90, carbsG: 23, fatG: null, proteinG: null, weightOz: null, slotHint: 'snack' },
@@ -297,6 +356,16 @@ export function applySeedMigrations(state) {
     // — the protein-dense snack the library lacked.
     if (!state.library.some(f => f.id === 'fatty-original-2oz')) {
       state.library.push({ ...SEED.foods.find(x => x.id === 'fatty-original-2oz'), favorite: false })
+    }
+  }
+  if (from < 12) {
+    // Additive: Stowaway Gourmet + Packit Gourmet single-meal catalogs
+    // (2026-07-26 scrape) — never resurrects foods the user deleted.
+    const have = new Set(state.library.map(f => f.id))
+    for (const f of SEED.foods) {
+      if ((f.id.startsWith('stowaway-') || f.id.startsWith('packit-')) && !have.has(f.id)) {
+        state.library.push({ ...f, favorite: false })
+      }
     }
   }
   return sweepRetired(state, () => { state.seedVersion = SEED.version })
