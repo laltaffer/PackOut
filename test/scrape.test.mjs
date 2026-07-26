@@ -82,6 +82,50 @@ test('scrape: upstream failure is a 502', async () => {
   assert.equal(res2.status, 502)
 })
 
+test('scrape: redirect to a blocked host is refused, not followed', async () => {
+  const redirecting = async () =>
+    new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/admin' } })
+  const res = await handleScrape({ request: await scrapeReq('https://example.com/p'), env: env(), fetcher: redirecting, now: NOW })
+  assert.equal(res.status, 400)
+})
+
+test('scrape: a legitimate redirect is followed to the product page', async () => {
+  let calls = 0
+  const fetcher = async url => {
+    calls++
+    if (calls === 1) return new Response(null, { status: 301, headers: { location: 'https://www.example.com/p' } })
+    assert.equal(url, 'https://www.example.com/p')
+    return new Response(PRODUCT_HTML, { status: 200, headers: { 'content-type': 'text/html' } })
+  }
+  const res = await handleScrape({ request: await scrapeReq('https://example.com/p'), env: env(), fetcher, now: NOW })
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).name, 'Peak Refuel Chicken Teriyaki')
+})
+
+test('scrape: endless redirect chains give up with a 502', async () => {
+  const loop = async () =>
+    new Response(null, { status: 302, headers: { location: 'https://example.com/again' } })
+  const res = await handleScrape({ request: await scrapeReq('https://example.com/p'), env: env(), fetcher: loop, now: NOW })
+  assert.equal(res.status, 502)
+})
+
+test('scrape: oversized chunked bodies are truncated, not buffered whole', async () => {
+  // Product data in the first chunk, then far more filler than the cap —
+  // extraction must still succeed from the truncated prefix.
+  const enc = new TextEncoder()
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(enc.encode(PRODUCT_HTML))
+      for (let i = 0; i < 40; i++) controller.enqueue(enc.encode('x'.repeat(65_536)))
+      controller.close()
+    },
+  })
+  const fetcher = async () => new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })
+  const res = await handleScrape({ request: await scrapeReq('https://example.com/p'), env: env(), fetcher, now: NOW })
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).name, 'Peak Refuel Chicken Teriyaki')
+})
+
 test('scrape: non-HTML content type is refused', async () => {
   const pdf = async () => new Response('%PDF', { status: 200, headers: { 'content-type': 'application/pdf' } })
   const res = await handleScrape({ request: await scrapeReq('https://example.com/f.pdf'), env: env(), fetcher: pdf, now: NOW })

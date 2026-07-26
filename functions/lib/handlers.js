@@ -101,25 +101,53 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   if (target.protocol !== 'https:' && target.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
   if (blockedHost(target.hostname)) return json({ error: 'That host is not allowed.' }, 400)
 
+  // Redirects are followed by hand so EVERY hop passes the same host guard —
+  // redirect: 'follow' would let a public page bounce the fetch to a private
+  // address after the one pre-check.
   let res
-  try {
-    res = await fetcher(target.href, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(8000),
-      headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)', accept: 'text/html' },
-    })
-  } catch {
-    return json({ error: 'Could not reach that page.' }, 502)
+  let href = target.href
+  for (let hop = 0; ; hop++) {
+    try {
+      res = await fetcher(href, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(8000),
+        headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)', accept: 'text/html' },
+      })
+    } catch {
+      return json({ error: 'Could not reach that page.' }, 502)
+    }
+    const location = res.headers.get('location')
+    if (res.status < 300 || res.status >= 400 || !location) break
+    if (hop >= 3) return json({ error: 'Too many redirects.' }, 502)
+    let next
+    try { next = new URL(location, href) } catch { return json({ error: 'Could not reach that page.' }, 502) }
+    if (next.protocol !== 'https:' && next.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
+    if (blockedHost(next.hostname)) return json({ error: 'That host is not allowed.' }, 400)
+    href = next.href
   }
   if (!res.ok) return json({ error: `The page answered ${res.status}.` }, 502)
   if (!(res.headers.get('content-type') ?? '').includes('html')) {
     return json({ error: 'Not an HTML page.' }, 422)
   }
-  const length = Number(res.headers.get('content-length'))
-  if (Number.isFinite(length) && length > MAX_SCRAPE_BYTES) return json({ error: 'Page too large.' }, 422)
-  const html = (await res.text()).slice(0, MAX_SCRAPE_BYTES)
+  const html = await readCapped(res, MAX_SCRAPE_BYTES)
 
   const product = extractProduct(html)
-  const found = Object.values(product).some(v => v !== null && v !== false)
+  const found = ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].some(k => product[k] !== null)
   return json({ found, ...product })
+}
+
+// Read at most `max` characters without buffering the whole body — the cap
+// must hold against chunked responses that never declare content-length.
+async function readCapped(res, max) {
+  if (!res.body?.getReader) return (await res.text()).slice(0, max)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let out = ''
+  while (out.length < max) {
+    const { done, value } = await reader.read()
+    if (done) return out
+    out += decoder.decode(value, { stream: true })
+  }
+  await reader.cancel().catch(() => {})
+  return out.slice(0, max)
 }

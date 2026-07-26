@@ -1345,7 +1345,7 @@ function wireScrape(form, fields) {
       })
       if (res.status === 401) { say('Sign in to fetch product pages.'); return }
       const data = await res.json().catch(() => null)
-      if (!res.ok || !data) { say(data?.error ?? `Couldn't fetch that page (HTTP ${res.status}).`); return }
+      if (!res.ok || !data) { say(data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`); return }
       const filled = fields.filter(name => {
         const input = form.elements[name]
         if (!input || input.value !== '' || data[name] == null) return false
