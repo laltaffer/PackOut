@@ -100,17 +100,51 @@ test('catalog: no weight means nothing is published', async () => {
   assert.equal(kv.store.size, 0)
 })
 
-test('catalog: entries are published with an expiry so stale items refresh', async () => {
-  // A hit short-circuits the scrape, so entries can only refresh by expiring:
-  // publishes must carry a TTL, after which the next paste re-scrapes.
-  const puts = []
-  const kv = {
-    async get() { return null },
-    async put(key, value, opts) { puts.push({ key, value, opts }) },
+const staleEntry = (at = NOW - 30 * 24 * 3600 * 1000) => JSON.stringify({
+  name: 'Old Tent', kcal: null, proteinG: null, carbsG: null, fatG: null,
+  weightOz: 40, perServing: false, sourceUrl: 'https://rei.com/product/9', at,
+})
+
+test('catalog: a stale hit revalidates — a live page overwrites the entry', async () => {
+  const key = 'catalog:' + normalizeProductUrl(new URL('https://rei.com/product/9'))
+  const kv = fakeKV({ [key]: staleEntry() })
+  const res = await handleScrape({ request: await scrapeReq('https://rei.com/product/9'), env: env(kv), fetcher: htmlPage(PRODUCT_WITH_WEIGHT), now: NOW })
+  const body = await res.json()
+  assert.equal(body.name, 'Ultra Tent 2')
+  const stored = JSON.parse(kv.store.get(key))
+  assert.equal(stored.weightOz, 32)
+  assert.equal(stored.at, NOW)
+})
+
+test('catalog: a stale hit survives a dead page — captured facts are the fallback', async () => {
+  const key = 'catalog:' + normalizeProductUrl(new URL('https://rei.com/product/9'))
+  const kv = fakeKV({ [key]: staleEntry() })
+  const res = await handleScrape({ request: await scrapeReq('https://rei.com/product/9'), env: env(kv), fetcher: async () => { throw new Error('gone') }, now: NOW })
+  assert.equal(res.status, 200)
+  const body = await res.json()
+  assert.equal(body.weightOz, 40)
+  assert.equal(body.catalog, true)
+})
+
+test('catalog: a page that lost its structured data falls back to the stale entry', async () => {
+  const key = 'catalog:' + normalizeProductUrl(new URL('https://rei.com/product/9'))
+  const kv = fakeKV({ [key]: staleEntry() })
+  const res = await handleScrape({ request: await scrapeReq('https://rei.com/product/9'), env: env(kv), fetcher: htmlPage('<html><body>nothing here</body></html>'), now: NOW })
+  const body = await res.json()
+  assert.equal(body.found, true)
+  assert.equal(body.weightOz, 40)
+  assert.equal(body.catalog, true)
+})
+
+test('catalog: zero and negative weights are never published', async () => {
+  for (const value of [0, -3]) {
+    const kv = fakeKV()
+    const page = `<html><head><script type="application/ld+json">${JSON.stringify({
+      '@type': 'Product', name: 'Junk', weight: { '@type': 'QuantitativeValue', value, unitCode: 'ONZ' },
+    })}</script></head></html>`
+    await handleScrape({ request: await scrapeReq('https://rei.com/product/junk'), env: env(kv), fetcher: htmlPage(page), now: NOW })
+    assert.equal(kv.store.size, 0, `weight ${value} must not publish`)
   }
-  await handleScrape({ request: await scrapeReq('https://rei.com/product/9'), env: env(kv), fetcher: htmlPage(PRODUCT_WITH_WEIGHT), now: NOW })
-  assert.equal(puts.length, 1)
-  assert.ok(puts[0].opts?.expirationTtl >= 24 * 3600)
 })
 
 test('catalog: KV failures never fail the scrape', async () => {

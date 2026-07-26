@@ -105,8 +105,19 @@ export function normalizeProductUrl(u) {
   return `${u.protocol}//${u.hostname.toLowerCase()}${path}`
 }
 
-// A hit short-circuits the scrape, so entries can only refresh by expiring.
-const CATALOG_TTL_S = 90 * 24 * 3600
+// Stale-while-revalidate: entries never expire (a rotted page keeps its
+// captured facts forever); hits older than the fresh window pay one live
+// re-scrape, falling back to the stored copy when the page has died.
+const CATALOG_FRESH_MS = 7 * 24 * 3600 * 1000
+
+const catalogResponse = hit => {
+  const { sourceUrl, at, ...product } = hit
+  return json({ found: true, ...product, catalog: true })
+}
+
+// Only finite positive weights may enter the shared catalog — schema.org junk
+// (zero, negative) must not become a canonical fact that blocks re-scraping.
+const publishableWeight = w => typeof w === 'number' && Number.isFinite(w) && w > 0
 
 export async function handleScrape({ request, env, fetcher = fetch, now = Date.now() }) {
   const s = await session(request, env, now)
@@ -119,17 +130,20 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   if (blockedHost(target.hostname)) return json({ error: 'That host is not allowed.' }, 400)
   if (blockedPort(target)) return json({ error: 'That port is not allowed.' }, 400)
 
-  // Catalog first: someone already scraped this product — answer from the
-  // shared copy, no re-fetch, and it works even after the page rots.
+  // Catalog first: someone already scraped this product — a fresh entry
+  // answers instantly; a stale one is kept as the fallback if the live
+  // scrape below fails, so link rot never loses captured facts.
   const catalogKey = `catalog:${normalizeProductUrl(target)}`
+  let stale = null
   if (env.PACKOUT_KV) {
     let hit = null
     try { hit = await env.PACKOUT_KV.get(catalogKey, 'json') } catch { /* catalog down ≠ scrape down */ }
     if (hit) {
-      const { sourceUrl, at, ...product } = hit
-      return json({ found: true, ...product, catalog: true })
+      if (now - (hit.at ?? 0) < CATALOG_FRESH_MS) return catalogResponse(hit)
+      stale = hit
     }
   }
+  const fallback = errRes => stale ? catalogResponse(stale) : errRes
 
   // Redirects are followed by hand so EVERY hop passes the same host guard —
   // redirect: 'follow' would let a public page bounce the fetch to a private
@@ -144,21 +158,21 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
         headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)', accept: 'text/html' },
       })
     } catch {
-      return json({ error: 'Could not reach that page.' }, 502)
+      return fallback(json({ error: 'Could not reach that page.' }, 502))
     }
     const location = res.headers.get('location')
     if (res.status < 300 || res.status >= 400 || !location) break
-    if (hop >= 3) return json({ error: 'Too many redirects.' }, 502)
+    if (hop >= 3) return fallback(json({ error: 'Too many redirects.' }, 502))
     let next
-    try { next = new URL(location, href) } catch { return json({ error: 'Could not reach that page.' }, 502) }
-    if (next.protocol !== 'https:' && next.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
-    if (blockedHost(next.hostname)) return json({ error: 'That host is not allowed.' }, 400)
-    if (blockedPort(next)) return json({ error: 'That port is not allowed.' }, 400)
+    try { next = new URL(location, href) } catch { return fallback(json({ error: 'Could not reach that page.' }, 502)) }
+    if (next.protocol !== 'https:' && next.protocol !== 'http:') return fallback(json({ error: 'Only http(s) URLs.' }, 400))
+    if (blockedHost(next.hostname)) return fallback(json({ error: 'That host is not allowed.' }, 400))
+    if (blockedPort(next)) return fallback(json({ error: 'That port is not allowed.' }, 400))
     href = next.href
   }
-  if (!res.ok) return json({ error: `The page answered ${res.status}.` }, 502)
+  if (!res.ok) return fallback(json({ error: `The page answered ${res.status}.` }, 502))
   if (!(res.headers.get('content-type') ?? '').includes('html')) {
-    return json({ error: 'Not an HTML page.' }, 422)
+    return fallback(json({ error: 'Not an HTML page.' }, 422))
   }
   const html = await readCapped(res, MAX_SCRAPE_BYTES)
 
@@ -169,14 +183,16 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
     product = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
   }
   const found = ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].some(k => product[k] !== null)
+  // A page that lost its structured data is a worse answer than the facts
+  // we already captured from it.
+  if (!found && stale) return catalogResponse(stale)
 
   // Publish to the shared catalog only when the scrape answered the question
-  // the catalog exists for (a weight). Failures never fail the scrape.
-  if (env.PACKOUT_KV && product.weightOz !== null) {
+  // the catalog exists for (a real weight). Failures never fail the scrape.
+  if (env.PACKOUT_KV && publishableWeight(product.weightOz)) {
     try {
       await env.PACKOUT_KV.put(catalogKey,
-        JSON.stringify({ ...product, sourceUrl: String(url), at: now }),
-        { expirationTtl: CATALOG_TTL_S })
+        JSON.stringify({ ...product, sourceUrl: String(url), at: now }))
     } catch { /* the user still gets their scrape */ }
   }
   return json({ found, ...product })

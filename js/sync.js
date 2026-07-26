@@ -74,8 +74,11 @@ export async function signOut() {
 
 // Pull-or-push to agreement with the server. Runs at sign-in and boot; the
 // pull path replaces local state wholesale (the UI re-renders and persists).
+// Returns 'empty' only when the server EXPLICITLY answered with no stored
+// state — the one signal that safely distinguishes a brand-new account from
+// a sync failure. Callers must never treat 'error' as new-account.
 export async function syncNow() {
-  if (!profile) return
+  if (!profile) return 'error'
   setStatus('syncing')
   try {
     const res = await api('/api/state')
@@ -86,8 +89,10 @@ export async function syncNow() {
     if (action === 'pull') hooks.replaceState(remote.state)
     else if (action === 'push') await push(local)
     setStatus('synced')
+    return remote?.state ? 'synced' : 'empty'
   } catch {
     setStatus('error')
+    return 'error'
   }
 }
 

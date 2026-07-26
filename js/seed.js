@@ -155,6 +155,7 @@ export const GEAR_TEMPLATES = {
   rifle: [
     { id: 'ob-rifle', name: 'Rifle', category: 'Weapon' },
     { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' },
+    { id: 'ob-shooting-rest', name: 'Shooting rest', category: 'Weapon' },
     ...HUNT_SHARED,
   ],
   bow: [
@@ -179,11 +180,16 @@ export function needsOnboarding(state) {
 }
 
 // Union of the picked types' template rows, TRIP_TYPES order, deduped by id.
+// Backpacking is the base kit: any valid pick implies it — a rifle hunter
+// still sleeps, drinks, and cooks.
 export function onboardingGear(tripTypes) {
+  const picked = TRIP_TYPES.filter(t => tripTypes.includes(t))
+  if (picked.length === 0) return []
+  const wanted = new Set(['backpacking', ...picked])
   const seen = new Set()
   const rows = []
   for (const type of TRIP_TYPES) {
-    if (!tripTypes.includes(type)) continue
+    if (!wanted.has(type)) continue
     for (const row of GEAR_TEMPLATES[type]) {
       if (seen.has(row.id)) continue
       seen.add(row.id)

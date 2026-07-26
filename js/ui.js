@@ -1058,8 +1058,10 @@ const GEAR_CATEGORIES = [
 function renderGear(trip) {
   trip.gear ??= []
   // The gear screen is the only door to the picker — arriving here clears
-  // any category scope a section CTA set on a previous visit.
+  // any category scope a section CTA set on a previous visit, and any
+  // half-open library edit.
   gearNewCategory = null
+  gearEditId = null
   const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
   const stats = gearStats(trip, state.gearLibrary)
   const inKit = new Set(trip.gear.map(e => e.gearId))
@@ -1145,9 +1147,11 @@ function renderGear(trip) {
 
 let gearSearch = ''
 let gearNewCategory = null
+let gearEditId = null
 
 function renderGearPicker(trip) {
   trip.gear ??= []
+  const editing = gearEditId ? state.gearLibrary.find(g => g.id === gearEditId) ?? null : null
   const inKit = new Set(trip.gear.map(e => e.gearId))
   const q = gearSearch.trim().toLowerCase()
   const items = state.gearLibrary
@@ -1166,21 +1170,28 @@ function renderGearPicker(trip) {
               <span class="food-name">${esc(g.name)}</span>
               <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${g.weightOz} oz` : ''}</span>
             </button>
+            <button class="btn-quiet" data-gear-edit="${g.id}" aria-label="Edit ${esc(g.name)}">&#9998;</button>
           </li>`).join('')}
       </ul>
       <form id="gear-new" class="gear-new">
-        <h2>New gear item</h2>
-        <label>Product page URL (optional)<input name="url" type="url" placeholder="https://kifaru.net/products/…"></label>
+        <h2>${editing ? `Edit: ${esc(editing.name)}` : 'New gear item'}</h2>
+        <label>Product page URL (optional)<input name="url" type="url" placeholder="https://kifaru.net/products/…" value="${esc(editing?.url ?? '')}"></label>
         <div class="fetch-row">
           <button class="btn" type="button" id="scrape-btn">Fetch from page</button>
           <span class="fetch-status mono" role="status" id="scrape-status"></span>
         </div>
-        <label>Name<input name="name" required placeholder="Kifaru Woobie"></label>
+        <label>Name<input name="name" required placeholder="Kifaru Woobie" value="${esc(editing?.name ?? '')}"></label>
         <label>Category
-          <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === gearNewCategory ? ' selected' : ''}>${c}</option>`).join('')}</select>
+          <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === (editing ? editing.category : gearNewCategory) ? ' selected' : ''}>${c}</option>`).join('')}</select>
         </label>
-        <label>Weight oz (optional)<input name="weightOz" type="number" min="0.05" step="any"></label>
-        <button class="btn btn-primary" type="submit">Add to library + trip</button>
+        <label>Weight oz (optional)<input name="weightOz" type="number" min="0.05" step="any" value="${editing?.weightOz ?? ''}"></label>
+        ${editing ? `
+        <div class="onboard-actions">
+          <button class="btn btn-primary" type="submit">Save changes</button>
+          <button class="btn-quiet" type="button" id="gear-edit-cancel">Cancel</button>
+          <button class="btn-quiet" type="button" id="gear-edit-delete">Delete from library</button>
+        </div>` : `
+        <button class="btn btn-primary" type="submit">Add to library + trip</button>`}
       </form>
     </section>
   `))
@@ -1198,16 +1209,45 @@ function renderGearPicker(trip) {
     gearSearch = ''
     location.hash = `#/trip/${trip.id}/gear`
   }))
+  app.querySelectorAll('[data-gear-edit]').forEach(btn => btn.addEventListener('click', () => {
+    gearEditId = btn.dataset.gearEdit
+    renderGearPicker(trip)
+  }))
+  if (editing) {
+    document.getElementById('gear-edit-cancel').addEventListener('click', () => {
+      gearEditId = null
+      renderGearPicker(trip)
+    })
+    document.getElementById('gear-edit-delete').addEventListener('click', () => {
+      if (!confirm(`Delete "${editing.name}" from your gear library? It comes off every trip's kit too.`)) return
+      state.gearLibrary = state.gearLibrary.filter(g => g.id !== editing.id)
+      for (const t of state.trips) {
+        if (t.gear) t.gear = t.gear.filter(e => e.gearId !== editing.id)
+      }
+      gearEditId = null
+      persist()
+      renderGearPicker(trip)
+    })
+  }
   document.getElementById('gear-new').addEventListener('submit', e => {
     e.preventDefault()
     const f = new FormData(e.target)
-    const item = {
-      id: newId(),
+    const fields = {
       name: f.get('name').trim(),
       category: f.get('category'),
       weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
       url: f.get('url').trim() || null,
     }
+    if (editing) {
+      // Filling in a blank onboarding slot happens right here: same row id,
+      // real gear on it now — every trip referencing the slot updates free.
+      Object.assign(editing, fields)
+      gearEditId = null
+      persist()
+      renderGearPicker(trip)
+      return
+    }
+    const item = { id: newId(), ...fields }
     state.gearLibrary.push(item)
     trip.gear.push({ gearId: item.id, packed: false })
     persist()
@@ -1540,13 +1580,19 @@ async function afterSignIn() {
   if (resolveSignIn(cacheOwner(), p.sub) === 'discard') clearCache()
   setCacheOwner(p.sub)
   state = load()
-  await syncNow()
-  // A brand-new profile: ask their preferences before anything persists —
-  // completing (or skipping) onboarding stamps and pushes the state.
-  if (needsOnboarding(state)) return renderOnboarding()
-  // A brand-new profile on a clean device: stamp the seeded state and push
-  // it up so the next device pulls something.
-  if (!state.updatedAt) persist()
+  const sync = await syncNow()
+  // Only a server that explicitly answered "no stored state" marks a
+  // brand-new account. A sync ERROR must never look like one: stamping a
+  // seeded state (or onboarding answers) with a fresh clock would overwrite
+  // the real profile the moment connectivity returns.
+  if (sync === 'empty') {
+    // Ask their preferences before anything persists — completing (or
+    // skipping) onboarding stamps and pushes the state.
+    if (needsOnboarding(state)) return renderOnboarding()
+    // A brand-new profile on a clean device: stamp the seeded state and push
+    // it up so the next device pulls something.
+    if (!state.updatedAt) persist()
+  }
   route()
 }
 

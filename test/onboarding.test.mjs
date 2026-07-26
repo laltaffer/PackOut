@@ -60,6 +60,17 @@ test('onboardingGear: rifle and bow union shared optics/kill-kit rows without du
   assert.equal(rows.filter(r => r.category === 'Optics/Bino Pouch' && /binocular/i.test(r.name)).length, 1)
 })
 
+test('onboardingGear: any activity implies the backpacking base kit', () => {
+  for (const type of ['rifle', 'bow', 'fishing']) {
+    const rows = onboardingGear([type])
+    assert.ok(rows.some(r => r.category === 'Shelter/Sleeping'), `${type} has shelter`)
+    assert.ok(rows.some(r => r.category === 'Water'), `${type} has water`)
+    assert.ok(rows.some(r => r.category === 'Food kit'), `${type} has cooking`)
+    assert.ok(rows.some(r => r.category === 'First aid & Safety'), `${type} has first aid`)
+  }
+  assert.ok(onboardingGear(['rifle']).some(r => r.name === 'Shooting rest'))
+})
+
 test('onboardingGear: unknown types are ignored', () => {
   assert.deepEqual(onboardingGear(['snowmobiling']), [])
 })
