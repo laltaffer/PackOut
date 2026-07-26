@@ -144,6 +144,17 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-26 (later): **Onboarding + canonical catalog LIVE** (specs #24/#25,
+commits 82ba27e + 119e65d, build 119e65d verified on the alias). First-sign-in
+flow (trip types → brands → starter gear blanks) runs only when the server
+explicitly answers "no stored state" — Codex P1: a sync error must never look
+like a new account. Gear picker gained library edit/delete (fills blank slots
+in place). Scrape now consults a shared catalog: URL-normalized key, fresh
+hits answer instantly, stale hits revalidate live and fall back to captured
+facts on dead pages, only finite positive weights publish, entries never
+expire. Codex review: 5 findings, all fixed. 168 tests green. AWAITING
+Lawrence's fresh-account onboarding smoke (needs a Google account with no
+PackOut state — his own account will never see the flow).
 2026-07-26: **Seed v12 — Stowaway Gourmet + Packit Gourmet catalogs** (51
 single meals: 19 Stowaway, 32 Packit; bundles skipped per Lawrence). Per-pouch
 label values read from nutrition-panel images; sources + exceptions in
