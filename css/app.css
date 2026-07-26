@@ -502,6 +502,8 @@ main:has(.trip-surface) { max-width: none; }
   padding: 0.6rem 0; display: inline-flex; align-items: center; min-height: 44px;
 }
 .btn-add:hover { text-decoration: underline; }
+/* Section-foot add row on the gear screen: full check-row height target. */
+.gear-add { display: flex; align-items: center; min-height: 44px; }
 
 .slot-sub { color: var(--soft); font-size: var(--text-min); }
 

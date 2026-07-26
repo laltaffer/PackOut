@@ -1050,6 +1050,9 @@ const GEAR_CATEGORIES = [
 
 function renderGear(trip) {
   trip.gear ??= []
+  // The gear screen is the only door to the picker — arriving here clears
+  // any category scope a section CTA set on a previous visit.
+  gearNewCategory = null
   const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
   const stats = gearStats(trip, state.gearLibrary)
   const inKit = new Set(trip.gear.map(e => e.gearId))
@@ -1095,10 +1098,17 @@ function renderGear(trip) {
               </li>`
             }).join('')}
           </ul>
+          <a class="btn-add gear-add" href="#/trip/${trip.id}/gear/add" data-gear-cat="${esc(g.cat)}">+ Add to ${esc(g.cat)}</a>
         </section>`).join('')}
     </section>
   `))
   wirePrint()
+  // Section CTAs open the picker scoped to their category: the search
+  // prefilters the library and the new-item form starts on that category.
+  app.querySelectorAll('[data-gear-cat]').forEach(a => a.addEventListener('click', () => {
+    gearSearch = a.dataset.gearCat
+    gearNewCategory = a.dataset.gearCat
+  }))
   document.getElementById('gear-full-kit').addEventListener('click', () => {
     for (const g of state.gearLibrary) {
       if (!inKit.has(g.id)) trip.gear.push({ gearId: g.id, packed: false })
@@ -1127,6 +1137,7 @@ function renderGear(trip) {
 }
 
 let gearSearch = ''
+let gearNewCategory = null
 
 function renderGearPicker(trip) {
   trip.gear ??= []
@@ -1159,7 +1170,7 @@ function renderGearPicker(trip) {
         </div>
         <label>Name<input name="name" required placeholder="Kifaru Woobie"></label>
         <label>Category
-          <select name="category">${GEAR_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
+          <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === gearNewCategory ? ' selected' : ''}>${c}</option>`).join('')}</select>
         </label>
         <label>Weight oz (optional)<input name="weightOz" type="number" min="0.05" step="any"></label>
         <button class="btn btn-primary" type="submit">Add to library + trip</button>
