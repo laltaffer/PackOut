@@ -144,6 +144,26 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-25 (shipped): **Product URL + scrape-to-prefill live** (issue #23,
+commits 974c890→3950260 on main; deploy verified — build stamp 3950260, both
+brands, /api/scrape answering). Optional product-URL field on the food form
+and gear picker's new-item form; Fetch calls session-gated `POST /api/scrape`
+(SSRF-guarded: per-hop redirect validation, host/port blocklist, streamed
+1.5MB cap, 8s timeout) which extracts JSON-LD Product/NutritionInformation
+with og:title/<title> fallbacks. Prefill fills blank fields only and flags
+per-serving nutrition (PackOut kcal is whole-item-as-packed). Structured
+data only by design — Amazon and unmarked pages fall back to manual entry.
+Reviewed three ways: eng-review (2 fixed), Codex cross-model (10 more fixed:
+parser correctness + endpoint hardening), QA at 390/desktop in both brands.
+Deferred by decision: DNS-alias SSRF (Workers runtime's job — string checks
+can't beat rebinding), per-user rate limits (closed user base), README's
+stale "data lives in localStorage" line (predates accounts ship).
+2026-07-25 (design): **Field Command background is real topography** (commit
+e9610ee, live). Replaced the six parallel waves with a marching-squares
+contour field over summed-Gaussian terrain — nesting loops around implied
+summits, saddle through the content zone, intermediate/index line weights
+(`--topoline` / `--topoline-ix`). Calibrated to the onX branding texture
+(subtle, tone-on-tone), not the dense product map. Flag brand untouched.
 2026-07-25 (later): **Redesign LIVE on packout.pages.dev** at Lawrence's ask
 (commit 9109667 on `redesign/fuel-forecast`, pushed to origin; promoted to the
 production deployment via `wrangler pages deploy --branch=main` — deploy.sh
