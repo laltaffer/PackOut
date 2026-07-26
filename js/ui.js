@@ -1139,6 +1139,11 @@ function renderGearPicker(trip) {
       </ul>
       <form id="gear-new" class="gear-new">
         <h2>New gear item</h2>
+        <label>Product page URL (optional)<input name="url" type="url" placeholder="https://kifaru.net/products/…"></label>
+        <div class="fetch-row">
+          <button class="btn" type="button" id="scrape-btn">Fetch from page</button>
+          <span class="fetch-status mono" role="status" id="scrape-status"></span>
+        </div>
         <label>Name<input name="name" required placeholder="Kifaru Woobie"></label>
         <label>Category
           <select name="category">${GEAR_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
@@ -1170,6 +1175,7 @@ function renderGearPicker(trip) {
       name: f.get('name').trim(),
       category: f.get('category'),
       weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
+      url: f.get('url').trim() || null,
     }
     state.gearLibrary.push(item)
     trip.gear.push({ gearId: item.id, packed: false })
@@ -1177,6 +1183,7 @@ function renderGearPicker(trip) {
     gearSearch = ''
     location.hash = `#/trip/${trip.id}/gear`
   })
+  wireScrape(document.getElementById('gear-new'), ['name', 'weightOz'])
 }
 
 function renderReady(trip) {
@@ -1314,6 +1321,52 @@ function renderLibrary() {
   }))
 }
 
+// Scrape-to-prefill (issue #23): fetch product data for the pasted URL and
+// fill only the still-blank fields — never clobber typed values, never save.
+// JSON-LD nutrition is per serving; PackOut kcal is whole-item-as-packed, so
+// any filled nutrition number carries an explicit scale-it-yourself caution.
+const SCRAPE_LABELS = { name: 'name', kcal: 'calories', carbsG: 'carbs', fatG: 'fat', proteinG: 'protein', weightOz: 'weight' }
+
+function wireScrape(form, fields) {
+  const btn = form.querySelector('#scrape-btn')
+  const status = form.querySelector('#scrape-status')
+  const say = msg => { status.textContent = msg }
+  btn.addEventListener('click', async () => {
+    const url = form.elements['url'].value.trim()
+    if (!url) { say('Paste a product URL first.'); return }
+    btn.disabled = true
+    say('Fetching…')
+    try {
+      const res = await fetch('/api/scrape', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      if (res.status === 401) { say('Sign in to fetch product pages.'); return }
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data) { say(data?.error ?? `Couldn't fetch that page (HTTP ${res.status}).`); return }
+      const filled = fields.filter(name => {
+        const input = form.elements[name]
+        if (!input || input.value !== '' || data[name] == null) return false
+        input.value = data[name]
+        return true
+      })
+      if (!filled.length) {
+        say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
+        return
+      }
+      const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))
+      say(`Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
+        (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : ''))
+    } catch {
+      say('Couldn’t reach the fetch service — offline or local dev.')
+    } finally {
+      btn.disabled = false
+    }
+  })
+}
+
 function renderFoodForm(food) {
   const isNew = food === null
   const numOrBlank = v => v === null || v === undefined ? '' : v
@@ -1322,6 +1375,13 @@ function renderFoodForm(food) {
       <a href="#/library" class="crumb">&larr; Library</a>
       <h1>${isNew ? 'Add Food' : 'Edit Food'}</h1>
       <form id="food-form">
+        <label>Product page URL (optional)
+          <input name="url" type="url" value="${isNew ? '' : esc(food.url ?? '')}" placeholder="https://peakrefuel.com/products/…">
+        </label>
+        <div class="fetch-row">
+          <button class="btn" type="button" id="scrape-btn">Fetch from page</button>
+          <span class="fetch-status mono" role="status" id="scrape-status"></span>
+        </div>
         <label>Name
           <input name="name" required value="${isNew ? '' : esc(food.name)}" placeholder="Peak Chicken Teriyaki">
         </label>
@@ -1373,6 +1433,7 @@ function renderFoodForm(food) {
       weightOz: num('weightOz'),
       slotHint: f.get('slotHint'),
       prep: f.get('prep') === 'cook' ? 'cook' : undefined,
+      url: f.get('url').trim() || null,
     }
     if (isNew) {
       state.library.push({ id: newId(), favorite: false, ...values })
@@ -1382,6 +1443,7 @@ function renderFoodForm(food) {
     persist()
     location.hash = '#/library'
   })
+  wireScrape(document.getElementById('food-form'), ['name', 'kcal', 'carbsG', 'fatG', 'proteinG', 'weightOz'])
   if (!isNew) {
     document.getElementById('food-delete').addEventListener('click', () => {
       // Impact-aware cascade: never leave ghost entries that silently drop
