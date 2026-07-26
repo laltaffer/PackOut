@@ -1044,7 +1044,7 @@ function renderPack(trip) {
 // ---------- gear ----------
 
 const GEAR_CATEGORIES = [
-  'Pack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
+  'Backpack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
   'Kill kit', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
 ]
 

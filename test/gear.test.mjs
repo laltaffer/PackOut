@@ -69,7 +69,7 @@ test('trips without gear or actions keep the food-only readiness behavior', () =
 
 test('gear seed honors its contract: unique ids, named items, known categories', () => {
   const CATEGORIES = [
-    'Pack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
+    'Backpack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
     'Kill kit', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
   ]
   assert.ok(GEAR_SEED.items.length >= 60)

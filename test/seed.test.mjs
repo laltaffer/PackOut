@@ -173,3 +173,37 @@ test('sheet-recorded staples keep the sheet values verbatim', () => {
   const granola = SEED.foods.find(f => f.id === 'peak-strawberry-granola')
   assert.deepEqual([granola.kcal, granola.carbsG, granola.fatG, granola.proteinG], [530, 87, 9, 23])
 })
+
+// Gear v2 (2026-07-25, Lawrence): 'Pack' becomes 'Backpack'; the trekking
+// poles are a luxury, not pack hardware. Every Pack item moves — custom ones
+// too — because the gear screen only renders known categories.
+test('gear v2: Pack renames to Backpack and the poles move to Luxuries', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [],
+    gearSeedVersion: 1,
+    gearLibrary: [
+      { id: 'pack-maduece', name: 'MaDuece', category: 'Pack', weightOz: null },
+      { id: 'trekking-poles', name: 'Alpine Carbon Cork Trekking Poles', category: 'Pack', weightOz: null },
+      { id: 'custom-1', name: 'My Pack Cover', category: 'Pack', weightOz: 3 },
+      { id: 'tent', name: 'Kifaru SuperTarp', category: 'Shelter/Sleeping', weightOz: null },
+    ],
+  })
+  assert.equal(s.gearLibrary.find(g => g.id === 'pack-maduece').category, 'Backpack')
+  assert.equal(s.gearLibrary.find(g => g.id === 'custom-1').category, 'Backpack', 'custom Pack items move too')
+  assert.equal(s.gearLibrary.find(g => g.id === 'trekking-poles').category, 'Luxuries')
+  assert.equal(s.gearLibrary.find(g => g.id === 'tent').category, 'Shelter/Sleeping', 'other categories untouched')
+  assert.equal(s.gearSeedVersion, 2)
+})
+
+test('gear v2 runs even when the food seed is already current, and only once', () => {
+  const once = applySeedMigrations({
+    schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [],
+    gearSeedVersion: 1,
+    gearLibrary: [{ id: 'trekking-poles', name: 'Poles', category: 'Pack', weightOz: null }],
+  })
+  assert.equal(once.gearLibrary[0].category, 'Luxuries', 'gear migration not gated behind food-seed staleness')
+  // A post-migration state where Lawrence moved the poles back stays his way.
+  once.gearLibrary[0].category = 'Backpack'
+  const twice = applySeedMigrations(once)
+  assert.equal(twice.gearLibrary[0].category, 'Backpack', 'version gate makes the move a one-time event')
+})

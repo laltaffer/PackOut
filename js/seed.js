@@ -70,10 +70,10 @@ export const SEED = {
 // they stay null until weighed. name = the sheet's item (brand/model) when
 // present, else its slot label.
 export const GEAR_SEED = {
-  version: 1,
+  version: 2,
   items: [
-    { id: 'pack-maduece', name: 'MaDuece', category: 'Pack', weightOz: null },
-    { id: 'trekking-poles', name: 'Alpine Carbon Cork Trekking Poles', category: 'Pack', weightOz: null },
+    { id: 'pack-maduece', name: 'MaDuece', category: 'Backpack', weightOz: null },
+    { id: 'trekking-poles', name: 'Alpine Carbon Cork Trekking Poles', category: 'Luxuries', weightOz: null },
     { id: 'tent', name: 'Kifaru SuperTarp with annex', category: 'Shelter/Sleeping', weightOz: null },
     { id: 'stakes', name: '12 DAC V-Best stakes', category: 'Shelter/Sleeping', weightOz: null },
     { id: 'ground-tarp', name: 'Tyvek ground tarp', category: 'Shelter/Sleeping', weightOz: null },
@@ -175,7 +175,26 @@ const KILLED_V2 = [
   'landjaeger-sticks',
 ]
 
+// Gear migrations run on their own version gate, ahead of the food seed's
+// early return — a current food library must never park a stale gear one.
+function migrateGear(state) {
+  if (!Array.isArray(state.gearLibrary)) return
+  const from = state.gearSeedVersion ?? 1
+  if (from >= GEAR_SEED.version) return
+  if (from < 2) {
+    // Gear v2 (2026-07-25, Lawrence): 'Pack' → 'Backpack'; trekking poles
+    // are a luxury. Every Pack item moves, custom ones included — the gear
+    // screen renders only known categories, so strays would vanish.
+    for (const g of state.gearLibrary) {
+      if (g.category === 'Pack') g.category = 'Backpack'
+      if (g.id === 'trekking-poles' && g.category === 'Backpack') g.category = 'Luxuries'
+    }
+  }
+  state.gearSeedVersion = GEAR_SEED.version
+}
+
 export function applySeedMigrations(state) {
+  migrateGear(state)
   const from = state.seedVersion ?? 1
   if (from >= SEED.version) return sweepRetired(state)
   if (from < 2) {
