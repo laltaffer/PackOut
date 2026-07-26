@@ -45,6 +45,7 @@
   --wm-track: -0.02em;
   --h-case: uppercase;
   --topoline: transparent;
+  --topoline-ix: transparent;
   --text-min: 12px;
   --stamp-ok: "✓ ";
   --obadge-ok-fg: oklch(0.17 0 0);
@@ -83,7 +84,8 @@
   --ui: "Manrope", system-ui, sans-serif;
   --wm-track: -0.01em;
   --h-case: none;
-  --topoline: oklch(0.29 0.005 260);
+  --topoline: oklch(0.3 0.005 260);
+  --topoline-ix: oklch(0.335 0.006 260);
   --text-min: 12px;
   --stamp-ok: "";
   --obadge-ok-fg: oklch(0.78 0.13 150);
@@ -104,7 +106,9 @@ body {
 .mono { font-family: "Chivo Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: max(0.8em, var(--text-min)); }
 
 .topo { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.topo g { stroke: var(--topoline); }
+.topo path { fill: none; vector-effect: non-scaling-stroke; }
+.topo .in { stroke: var(--topoline); stroke-width: 1; }
+.topo .ix { stroke: var(--topoline-ix); stroke-width: 1.6; }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px;
