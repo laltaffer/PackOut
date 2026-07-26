@@ -97,6 +97,17 @@ function blockedHost(hostname) {
 // Default ports only — anything else turns the endpoint into a port scanner.
 const blockedPort = url => url.port !== '' && url.port !== '80' && url.port !== '443'
 
+// Canonical catalog key (spec #25): one key per product regardless of share
+// tracking noise — lowercase host, path only, no query/fragment, no trailing
+// slash. Values are objective facts (name, weight, macros), safe to share.
+export function normalizeProductUrl(u) {
+  const path = u.pathname.length > 1 ? u.pathname.replace(/\/+$/, '') : u.pathname
+  return `${u.protocol}//${u.hostname.toLowerCase()}${path}`
+}
+
+// A hit short-circuits the scrape, so entries can only refresh by expiring.
+const CATALOG_TTL_S = 90 * 24 * 3600
+
 export async function handleScrape({ request, env, fetcher = fetch, now = Date.now() }) {
   const s = await session(request, env, now)
   if (!s) return json({ error: 'Signed out.' }, 401)
@@ -107,6 +118,18 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   if (target.protocol !== 'https:' && target.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
   if (blockedHost(target.hostname)) return json({ error: 'That host is not allowed.' }, 400)
   if (blockedPort(target)) return json({ error: 'That port is not allowed.' }, 400)
+
+  // Catalog first: someone already scraped this product — answer from the
+  // shared copy, no re-fetch, and it works even after the page rots.
+  const catalogKey = `catalog:${normalizeProductUrl(target)}`
+  if (env.PACKOUT_KV) {
+    let hit = null
+    try { hit = await env.PACKOUT_KV.get(catalogKey, 'json') } catch { /* catalog down ≠ scrape down */ }
+    if (hit) {
+      const { sourceUrl, at, ...product } = hit
+      return json({ found: true, ...product, catalog: true })
+    }
+  }
 
   // Redirects are followed by hand so EVERY hop passes the same host guard —
   // redirect: 'follow' would let a public page bounce the fetch to a private
@@ -146,6 +169,16 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
     product = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
   }
   const found = ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].some(k => product[k] !== null)
+
+  // Publish to the shared catalog only when the scrape answered the question
+  // the catalog exists for (a weight). Failures never fail the scrape.
+  if (env.PACKOUT_KV && product.weightOz !== null) {
+    try {
+      await env.PACKOUT_KV.put(catalogKey,
+        JSON.stringify({ ...product, sourceUrl: String(url), at: now }),
+        { expirationTtl: CATALOG_TTL_S })
+    } catch { /* the user still gets their scrape */ }
+  }
   return json({ found, ...product })
 }
 

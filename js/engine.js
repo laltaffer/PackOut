@@ -548,6 +548,9 @@ export function validateImport(data) {
     if (!t.name || !Array.isArray(t.days) || t.days.length === 0 || !num(t.weightLbs) || t.weightLbs <= 0 || !t.startDate) {
       return { ok: false, error: `Trip "${t.name ?? '?'}" is malformed.` }
     }
+    if (t.type !== undefined && !['backpacking', 'rifle', 'bow', 'fishing'].includes(t.type)) {
+      return { ok: false, error: `Trip "${t.name}" has an unknown trip type.` }
+    }
     if (t.mealStyle !== undefined) {
       const ok = t.mealStyle && typeof t.mealStyle === 'object' &&
         Object.entries(t.mealStyle).every(([k, v]) =>
@@ -571,6 +574,13 @@ export function validateImport(data) {
     }
     if (f.prep !== undefined && f.prep !== 'ready' && f.prep !== 'cook') {
       return { ok: false, error: `Food "${f.name}" has an invalid prep value.` }
+    }
+  }
+  if (data.onboarding !== undefined) {
+    const o = data.onboarding
+    const strArr = a => Array.isArray(a) && a.every(s => typeof s === 'string' && SAFE_ID.test(s))
+    if (!o || typeof o !== 'object' || !num(o.at) || !num(o.step) || !strArr(o.tripTypes) || !strArr(o.brands)) {
+      return { ok: false, error: 'Onboarding record is malformed.' }
     }
   }
   return { ok: true }

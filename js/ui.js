@@ -2,7 +2,7 @@
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations } from './seed.js'
+import { applySeedMigrations, needsOnboarding, onboardingGear, applyOnboarding, TRIP_TYPES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -287,6 +287,12 @@ function renderNewTrip() {
         <label>Destination
           <input name="destination" required placeholder="Brooks Range, AK">
         </label>
+        <label>Trip type
+          <select name="type">
+            <option value="">&mdash; optional &mdash;</option>
+            ${TRIP_TYPES.map(t => `<option value="${t}">${TRIP_TYPE_LABELS[t]}</option>`).join('')}
+          </select>
+        </label>
         <label>Start date
           <input name="startDate" type="date" required>
         </label>
@@ -315,6 +321,7 @@ function renderNewTrip() {
       mealStyle: mealStyleFromForm(f),
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
+    if (f.get('type')) trip.type = f.get('type')
     state.trips.push(trip)
     persist()
     location.hash = `#/trip/${trip.id}`
@@ -1045,7 +1052,7 @@ function renderPack(trip) {
 
 const GEAR_CATEGORIES = [
   'Backpack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
-  'Kill kit', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
+  'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
 ]
 
 function renderGear(trip) {
@@ -1534,10 +1541,78 @@ async function afterSignIn() {
   setCacheOwner(p.sub)
   state = load()
   await syncNow()
+  // A brand-new profile: ask their preferences before anything persists —
+  // completing (or skipping) onboarding stamps and pushes the state.
+  if (needsOnboarding(state)) return renderOnboarding()
   // A brand-new profile on a clean device: stamp the seeded state and push
   // it up so the next device pulls something.
   if (!state.updatedAt) persist()
   route()
+}
+
+// ---------- onboarding (spec #24, first sign-in only) ----------
+
+const TRIP_TYPE_LABELS = { backpacking: 'Backpacking', rifle: 'Rifle hunt', bow: 'Bow hunt', fishing: 'Fishing' }
+const BRAND_LABELS = { peak: 'Peak Refuel', stowaway: 'Stowaway Gourmet', packit: 'Packit Gourmet' }
+
+// Three screens, in order: trip types → brands → starter gear (built from the
+// trip-type picks, pre-checked). Next with nothing selected is a valid neutral
+// answer; "Skip setup" bails and applies only the steps already completed.
+function renderOnboarding() {
+  const answers = { tripTypes: [], brands: [], gearIds: null }
+
+  const finish = step => {
+    applyOnboarding(state, { ...answers, step, at: Date.now() })
+    persist()
+    route()
+  }
+
+  const checklist = (name, items, checked) => items.map(([value, label]) => `
+    <label class="onboard-option">
+      <input type="checkbox" name="${name}" value="${esc(value)}"${checked ? ' checked' : ''}> ${esc(label)}
+    </label>`).join('')
+
+  const screen = (step, title, hint, body, onNext) => {
+    app.replaceChildren(el(`
+      <section class="gate onboard">
+        <h1>${esc(title)}</h1>
+        <p>${esc(hint)}</p>
+        <form id="onboard-form">
+          ${body}
+          <div class="onboard-actions">
+            <button class="btn btn-primary" type="submit">${step === 2 ? 'Finish' : 'Next'}</button>
+            <button class="btn-quiet" type="button" id="onboard-skip">Skip setup</button>
+          </div>
+        </form>
+        <p class="mono onboard-progress">Step ${step + 1} of 3</p>
+      </section>
+    `))
+    document.getElementById('onboard-skip').addEventListener('click', () => finish(step))
+    document.getElementById('onboard-form').addEventListener('submit', e => {
+      e.preventDefault()
+      onNext(new FormData(e.target))
+    })
+  }
+
+  const stepTrips = () => screen(0, 'What kind of trips do you take?',
+    'Pick all that apply — this builds your starter gear checklist.',
+    checklist('type', TRIP_TYPES.map(t => [t, TRIP_TYPE_LABELS[t]]), false),
+    f => { answers.tripTypes = f.getAll('type'); stepBrands() })
+
+  const stepBrands = () => screen(1, 'Which meal brands do you like?',
+    'Their meals get starred, and drafting reaches for starred foods first.',
+    checklist('brand', Object.entries(BRAND_LABELS), false),
+    f => { answers.brands = f.getAll('brand'); stepGear() })
+
+  const stepGear = () => {
+    const rows = onboardingGear(answers.tripTypes.length ? answers.tripTypes : ['backpacking'])
+    screen(2, 'Your starter gear list',
+    'Uncheck anything you don’t carry. Each item is a blank slot — add your specific gear and weights later.',
+    checklist('gear', rows.map(r => [r.id, `${r.name} — ${r.category}`]), true),
+    f => { answers.gearIds = f.getAll('gear'); finish(3) })
+  }
+
+  stepTrips()
 }
 
 function renderAccountChip() {

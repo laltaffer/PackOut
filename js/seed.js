@@ -124,6 +124,101 @@ export const SEED = {
   ],
 }
 
+// Onboarding (spec #24): starter gear templates per trip type. Rows are blank
+// slots — generic name, real category, no weight — the user fills in with
+// their specific gear later. Rifle and bow share optics/kill-kit rows by id,
+// so picking both unions cleanly.
+export const TRIP_TYPES = ['backpacking', 'rifle', 'bow', 'fishing']
+
+const HUNT_SHARED = [
+  { id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch' },
+  { id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch' },
+  { id: 'ob-knife', name: 'Knife', category: 'Kill kit' },
+  { id: 'ob-game-bags', name: 'Game bags', category: 'Kill kit' },
+]
+
+export const GEAR_TEMPLATES = {
+  backpacking: [
+    { id: 'ob-backpack', name: 'Backpack', category: 'Backpack' },
+    { id: 'ob-shelter', name: 'Tent / shelter', category: 'Shelter/Sleeping' },
+    { id: 'ob-sleeping-bag', name: 'Sleeping bag', category: 'Shelter/Sleeping' },
+    { id: 'ob-sleeping-pad', name: 'Sleeping pad', category: 'Shelter/Sleeping' },
+    { id: 'ob-water-treatment', name: 'Water treatment', category: 'Water' },
+    { id: 'ob-water-container', name: 'Water container', category: 'Water' },
+    { id: 'ob-stove', name: 'Stove', category: 'Food kit' },
+    { id: 'ob-fuel', name: 'Stove fuel', category: 'Food kit' },
+    { id: 'ob-cook-pot', name: 'Cook pot', category: 'Food kit' },
+    { id: 'ob-utensil', name: 'Utensil', category: 'Food kit' },
+    { id: 'ob-headlamp', name: 'Headlamp', category: 'First aid & Safety' },
+    { id: 'ob-first-aid', name: 'First aid kit', category: 'First aid & Safety' },
+  ],
+  rifle: [
+    { id: 'ob-rifle', name: 'Rifle', category: 'Weapon' },
+    { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' },
+    ...HUNT_SHARED,
+  ],
+  bow: [
+    { id: 'ob-bow', name: 'Bow', category: 'Weapon' },
+    { id: 'ob-release', name: 'Release', category: 'Weapon' },
+    { id: 'ob-arrows', name: 'Arrows', category: 'Weapon' },
+    { id: 'ob-broadheads', name: 'Broadheads', category: 'Weapon' },
+    ...HUNT_SHARED,
+  ],
+  fishing: [
+    { id: 'ob-rod', name: 'Rod', category: 'Fishing' },
+    { id: 'ob-reel', name: 'Reel', category: 'Fishing' },
+    { id: 'ob-tackle', name: 'Tackle', category: 'Fishing' },
+    { id: 'ob-waders', name: 'Waders', category: 'Fishing' },
+  ],
+}
+
+// Runs exactly once: a state that has never synced (no updatedAt stamp) and
+// carries no onboarding record belongs to a brand-new account.
+export function needsOnboarding(state) {
+  return !state.updatedAt && !state.onboarding
+}
+
+// Union of the picked types' template rows, TRIP_TYPES order, deduped by id.
+export function onboardingGear(tripTypes) {
+  const seen = new Set()
+  const rows = []
+  for (const type of TRIP_TYPES) {
+    if (!tripTypes.includes(type)) continue
+    for (const row of GEAR_TEMPLATES[type]) {
+      if (seen.has(row.id)) continue
+      seen.add(row.id)
+      rows.push(row)
+    }
+  }
+  return rows
+}
+
+// Applies the answers a user actually gave. step counts completed steps
+// (0 = skipped everything, 1 = trips, 2 = +brands, 3 = +gear); gearIds null
+// = never reached/skipped the gear step. Completing the brands step always
+// resets stars so the library reflects the user's brands, not Lawrence's
+// pre-starred order — an empty pick is neutral.
+export function applyOnboarding(state, { tripTypes, brands, gearIds, step, at }) {
+  if (step >= 2) {
+    const prefixes = brands.map(b => `${b}-`)
+    for (const f of state.library) {
+      f.favorite = prefixes.some(p => f.id.startsWith(p))
+    }
+  }
+  if (gearIds !== null) {
+    // Filter the union of ALL templates: gearIds only ever come from rows the
+    // user was shown, and this keeps the answer valid even when the trip-type
+    // step was skipped.
+    const keep = new Set(gearIds)
+    state.gearLibrary = onboardingGear(TRIP_TYPES)
+      .filter(r => keep.has(r.id))
+      .map(r => ({ id: r.id, name: r.name, category: r.category, weightOz: null }))
+    state.gearSeedVersion = GEAR_SEED.version
+  }
+  state.onboarding = { at, step, tripTypes, brands }
+  return state
+}
+
 // Gear library seed — verbatim from Lawrence's Montana hunt sheet
 // (reference/montana-gear-sheet-export.md). Weights were unfilled in the sheet;
 // they stay null until weighed. name = the sheet's item (brand/model) when
