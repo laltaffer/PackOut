@@ -3,6 +3,7 @@
 // verifier. The thin files under functions/api/ wire these to Pages routes.
 
 import { createSession, verifySession, sessionCookie, clearedCookie, readCookie, COOKIE_NAME } from './session.js'
+import { extractProduct } from './extract.js'
 import { validateImport } from '../../js/engine.js'
 
 const TOKENINFO = 'https://oauth2.googleapis.com/tokeninfo?id_token='
@@ -74,4 +75,51 @@ export async function handleStatePut({ request, env, now = Date.now() }) {
   }
   await env.PACKOUT_KV.put(`state:${s.sub}`, serialized)
   return json({ ok: true, updatedAt })
+}
+
+// Product-page fetch cap: enough for any real product page's <head>.
+const MAX_SCRAPE_BYTES = 1_500_000
+
+// Session-gated so the endpoint can't be used as an open fetch proxy, and
+// host-guarded so it can't reach anything private (SSRF). IP-literal hosts
+// are refused wholesale — no real product page lives at a bare IP.
+function blockedHost(hostname) {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h.endsWith('.local')) return true
+  if (/^\d+(\.\d+){3}$/.test(h)) return true       // IPv4 literal
+  if (h.includes(':') || h.startsWith('[')) return true // IPv6 literal
+  return false
+}
+
+export async function handleScrape({ request, env, fetcher = fetch, now = Date.now() }) {
+  const s = await session(request, env, now)
+  if (!s) return json({ error: 'Signed out.' }, 401)
+  let url
+  try { ({ url } = await request.json()) } catch { return json({ error: 'Bad request.' }, 400) }
+  let target
+  try { target = new URL(String(url ?? '')) } catch { return json({ error: 'Not a valid URL.' }, 400) }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
+  if (blockedHost(target.hostname)) return json({ error: 'That host is not allowed.' }, 400)
+
+  let res
+  try {
+    res = await fetcher(target.href, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+      headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)', accept: 'text/html' },
+    })
+  } catch {
+    return json({ error: 'Could not reach that page.' }, 502)
+  }
+  if (!res.ok) return json({ error: `The page answered ${res.status}.` }, 502)
+  if (!(res.headers.get('content-type') ?? '').includes('html')) {
+    return json({ error: 'Not an HTML page.' }, 422)
+  }
+  const length = Number(res.headers.get('content-length'))
+  if (Number.isFinite(length) && length > MAX_SCRAPE_BYTES) return json({ error: 'Page too large.' }, 422)
+  const html = (await res.text()).slice(0, MAX_SCRAPE_BYTES)
+
+  const product = extractProduct(html)
+  const found = Object.values(product).some(v => v !== null && v !== false)
+  return json({ found, ...product })
 }
