@@ -563,10 +563,23 @@ function forecastDiscussion(day, t, st, planned, v, b, din, snackSub) {
 // motion actually plays. Column data refreshes (a commit may have changed it).
 function updateTripSurface(surface, trip, openDay) {
   const wasOpen = surface.classList.contains('day-open')
+  // Navigation (open/close/switch) must morph the EXISTING columns — a
+  // rebuilt node has no prior state, so its collapse transition can't run
+  // and the strip pops instead of folding (regression from the stale-rollup
+  // fix, 2026-07-25). Data commits keep the rebuild for fresh numbers; the
+  // swap is invisible because collapsed state is ancestor-class-driven.
+  const contextChanged = (openDay !== null) !== wasOpen || (openDay !== null && openDay !== lastOpenDay)
   surface.classList.toggle('day-open', openDay !== null)
-  surface.querySelectorAll('.strip li').forEach((li, i) => {
-    li.innerHTML = dayColumn(trip, trip.days[i], i, openDay)
-  })
+  if (contextChanged) {
+    surface.querySelectorAll('.col').forEach(col => {
+      if (Number(col.dataset.i) === openDay) col.setAttribute('aria-current', 'true')
+      else col.removeAttribute('aria-current')
+    })
+  } else {
+    surface.querySelectorAll('.strip li').forEach((li, i) => {
+      li.innerHTML = dayColumn(trip, trip.days[i], i, openDay)
+    })
+  }
   // Headline state must track every commit made on this surface.
   const rollupSlot = document.getElementById('rollup-slot')
   if (rollupSlot) rollupSlot.innerHTML = tripRollupHTML(trip)
