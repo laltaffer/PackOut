@@ -63,6 +63,8 @@ test('scrape: malformed body and non-URLs are 400s', async () => {
 test('scrape: localhost, .local, and IP-literal hosts are refused', async () => {
   for (const url of [
     'http://localhost/admin',
+    'http://localhost./admin',
+    'http://foo.localhost/x',
     'http://foo.local/x',
     'http://127.0.0.1/x',
     'http://10.0.0.5/x',
@@ -72,6 +74,13 @@ test('scrape: localhost, .local, and IP-literal hosts are refused', async () => 
     const res = await handleScrape({ request: await scrapeReq(url), env: env(), fetcher: htmlPage(''), now: NOW })
     assert.equal(res.status, 400, `${url} should be refused`)
   }
+})
+
+test('scrape: non-default ports are refused (no port-scan oracle)', async () => {
+  const res = await handleScrape({ request: await scrapeReq('https://example.com:8080/x'), env: env(), fetcher: htmlPage(''), now: NOW })
+  assert.equal(res.status, 400)
+  const ok = await handleScrape({ request: await scrapeReq('https://example.com:443/x'), env: env(), fetcher: htmlPage(PRODUCT_HTML), now: NOW })
+  assert.equal(ok.status, 200)
 })
 
 test('scrape: upstream failure is a 502', async () => {

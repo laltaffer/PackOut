@@ -107,3 +107,61 @@ test('extract: html entities in og:title are decoded', () => {
   const p = extractProduct(`<head><meta property="og:title" content="Mac &amp; Cheese &#8212; 2 Pack"></head>`)
   assert.equal(p.name, 'Mac & Cheese — 2 Pack')
 })
+
+test('extract: grouped thousands parse whole, not truncated at the comma', () => {
+  const p = extractProduct(ldPage({
+    '@type': 'Product', name: 'Big Meal',
+    nutrition: { '@type': 'NutritionInformation', calories: '1,200 calories' },
+  }))
+  assert.equal(p.kcal, 1200)
+})
+
+test('extract: compound weights sum their parts', () => {
+  const p = extractProduct(ldPage({ '@type': 'Product', name: 'Tent', weight: '1 lb 8 oz' }))
+  assert.equal(p.weightOz, 24)
+})
+
+test('extract: product reachable through WebPage mainEntity', () => {
+  const p = extractProduct(ldPage({
+    '@type': 'WebPage',
+    mainEntity: { '@type': 'Product', name: 'Nested Bar', weight: { value: 2, unitText: 'oz' } },
+  }))
+  assert.equal(p.name, 'Nested Bar')
+  assert.equal(p.weightOz, 2)
+})
+
+test('extract: expanded schema.org type IRIs count as products', () => {
+  const p = extractProduct(ldPage({ '@type': 'https://schema.org/Product', name: 'IRI Product' }))
+  assert.equal(p.name, 'IRI Product')
+})
+
+test('extract: the richest product wins over an earlier stub', () => {
+  const html = `<head>
+    <script type="application/ld+json">${JSON.stringify({ '@type': 'Product', name: 'Stub' })}</script>
+    <script type="application/ld+json">${JSON.stringify({
+    '@type': 'Product', name: 'Full Product', weight: { value: 4, unitText: 'oz' },
+    nutrition: { '@type': 'NutritionInformation', calories: '400 calories' },
+  })}</script>
+  </head>`
+  const p = extractProduct(html)
+  assert.equal(p.name, 'Full Product')
+  assert.equal(p.kcal, 400)
+})
+
+test('extract: whitespace and unquoted type attributes still match', () => {
+  const spaced = extractProduct(`<script type = "application/ld+json">${JSON.stringify({ '@type': 'Product', name: 'Spaced' })}</script>`)
+  assert.equal(spaced.name, 'Spaced')
+  const unquoted = extractProduct(`<script type=application/ld+json>${JSON.stringify({ '@type': 'Product', name: 'Unquoted' })}</script>`)
+  assert.equal(unquoted.name, 'Unquoted')
+})
+
+test('extract: apostrophes inside double-quoted content survive', () => {
+  const p = extractProduct(`<head><meta property="og:title" content="Bob's Energy Bar"></head>`)
+  assert.equal(p.name, "Bob's Energy Bar")
+})
+
+test('extract: out-of-range numeric entities degrade instead of throwing', () => {
+  const p = extractProduct(`<head><meta property="og:title" content="Bad &#1114112; Entity"></head>`)
+  assert.equal(typeof p.name, 'string')
+  assert.ok(p.name.includes('Bad'))
+})

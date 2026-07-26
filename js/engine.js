@@ -566,6 +566,9 @@ export function validateImport(data) {
     if (![f.carbsG, f.fatG, f.proteinG, f.weightOz].every(numOrNull)) {
       return { ok: false, error: `Food "${f.name}" has non-numeric macros.` }
     }
+    if (f.url !== undefined && f.url !== null && typeof f.url !== 'string') {
+      return { ok: false, error: `Food "${f.name}" has an invalid url.` }
+    }
     if (f.prep !== undefined && f.prep !== 'ready' && f.prep !== 'cook') {
       return { ok: false, error: `Food "${f.name}" has an invalid prep value.` }
     }

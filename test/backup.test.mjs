@@ -53,6 +53,15 @@ test('rejects malformed entries, quantities, intensities, and packed maps', () =
   assert.equal(validateImport(withDay({ intensity: 'easy', packed: { f1: 'yes' } })).ok, false)
 })
 
+test('rejects non-string food urls (objects would crash the edit form)', () => {
+  const evil = { ...GOOD, library: [{ ...GOOD.library[0], url: { toString: null } }] }
+  assert.equal(validateImport(evil).ok, false)
+  const fine = { ...GOOD, library: [{ ...GOOD.library[0], url: 'https://example.com/p' }] }
+  assert.equal(validateImport(fine).ok, true)
+  const alsoFine = { ...GOOD, library: [{ ...GOOD.library[0], url: null }] }
+  assert.equal(validateImport(alsoFine).ok, true)
+})
+
 test('rejects non-numeric macros (markup cannot reach the DOM through numbers)', () => {
   const evil = { ...GOOD, library: [{ ...GOOD.library[0], kcal: '<img onerror=1>' }] }
   assert.equal(validateImport(evil).ok, false)

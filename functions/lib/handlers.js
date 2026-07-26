@@ -82,14 +82,20 @@ const MAX_SCRAPE_BYTES = 1_500_000
 
 // Session-gated so the endpoint can't be used as an open fetch proxy, and
 // host-guarded so it can't reach anything private (SSRF). IP-literal hosts
-// are refused wholesale — no real product page lives at a bare IP.
+// are refused wholesale — no real product page lives at a bare IP. Hostname
+// checks can't beat DNS tricks (127.0.0.1.nip.io); keeping fetches off
+// private networks in production is the Workers runtime's job — this guard
+// is for what strings CAN catch, and for wrangler pages dev.
 function blockedHost(hostname) {
-  const h = hostname.toLowerCase()
-  if (h === 'localhost' || h.endsWith('.local')) return true
+  const h = hostname.toLowerCase().replace(/\.+$/, '') // localhost. == localhost
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return true
   if (/^\d+(\.\d+){3}$/.test(h)) return true       // IPv4 literal
   if (h.includes(':') || h.startsWith('[')) return true // IPv6 literal
   return false
 }
+
+// Default ports only — anything else turns the endpoint into a port scanner.
+const blockedPort = url => url.port !== '' && url.port !== '80' && url.port !== '443'
 
 export async function handleScrape({ request, env, fetcher = fetch, now = Date.now() }) {
   const s = await session(request, env, now)
@@ -100,6 +106,7 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   try { target = new URL(String(url ?? '')) } catch { return json({ error: 'Not a valid URL.' }, 400) }
   if (target.protocol !== 'https:' && target.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
   if (blockedHost(target.hostname)) return json({ error: 'That host is not allowed.' }, 400)
+  if (blockedPort(target)) return json({ error: 'That port is not allowed.' }, 400)
 
   // Redirects are followed by hand so EVERY hop passes the same host guard —
   // redirect: 'follow' would let a public page bounce the fetch to a private
@@ -123,6 +130,7 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
     try { next = new URL(location, href) } catch { return json({ error: 'Could not reach that page.' }, 502) }
     if (next.protocol !== 'https:' && next.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
     if (blockedHost(next.hostname)) return json({ error: 'That host is not allowed.' }, 400)
+    if (blockedPort(next)) return json({ error: 'That port is not allowed.' }, 400)
     href = next.href
   }
   if (!res.ok) return json({ error: `The page answered ${res.status}.` }, 502)
@@ -131,7 +139,12 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   }
   const html = await readCapped(res, MAX_SCRAPE_BYTES)
 
-  const product = extractProduct(html)
+  // Hostile markup must never escape as a Worker exception — an extraction
+  // failure is just "nothing found".
+  let product
+  try { product = extractProduct(html) } catch {
+    product = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
+  }
   const found = ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].some(k => product[k] !== null)
   return json({ found, ...product })
 }
