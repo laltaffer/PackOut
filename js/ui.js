@@ -1345,7 +1345,7 @@ function wireScrape(form, fields) {
       })
       if (res.status === 401) { say('Sign in to fetch product pages.'); return }
       const data = await res.json().catch(() => null)
-      if (!res.ok || !data) { say(data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`); return }
+      if (!res.ok || !data) { say(`${data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`} Enter it by hand.`); return }
       const filled = fields.filter(name => {
         const input = form.elements[name]
         if (!input || input.value !== '' || data[name] == null) return false
@@ -1360,7 +1360,7 @@ function wireScrape(form, fields) {
       say(`Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
         (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : ''))
     } catch {
-      say('Couldn’t reach the fetch service — offline or local dev.')
+      say('Couldn’t reach the fetch service — enter it by hand.')
     } finally {
       btn.disabled = false
     }
