@@ -573,12 +573,15 @@ main:has(.trip-surface) { max-width: none; }
 
 /* ---------- account / gate ---------- */
 
+/* Rides in the masthead nav so sign-out is one tap from any screen. */
 .account-chip {
-  display: flex; align-items: center; gap: 0.7rem;
-  min-height: 44px; margin: 0.4rem 0 0.8rem;
+  display: flex; align-items: center; gap: 0.6rem;
+  min-height: 44px;
   font-size: 0.9rem;
 }
-.account-name { font-weight: 700; color: var(--head); }
+.account-chip:not(:empty) { padding-left: 0.4rem; border-left: 1px solid color-mix(in oklch, var(--mast-ink) 25%, transparent); }
+.account-chip .btn-quiet { color: var(--mast-ink); }
+.account-name { font-weight: 700; color: var(--mast-ink); }
 .sync-note { font-size: var(--text-min); color: var(--soft); }
 .sync-error { color: var(--v-short); }
 .account-note { color: var(--soft); font-size: 0.85rem; }
@@ -701,6 +704,11 @@ main:has(.trip-surface) { max-width: none; }
 /* ---------- narrow screens ---------- */
 
 @media (max-width: 700px) {
+  /* The masthead keeps navigation and sign-out; the tagline and the account
+     name are the first things to go when the row gets tight. */
+  .svc, .account-name { display: none; }
+  .masthead { gap: 0.8rem; }
+  .masthead-nav { gap: 0.9rem; }
   .strip { grid-template-columns: repeat(7, minmax(86px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
   .board { grid-template-columns: 1fr; gap: 1.6rem; }
   .big .n { font-size: 2.8rem; }

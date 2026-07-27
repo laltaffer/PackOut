@@ -20,6 +20,9 @@ const INTENSITIES = ['easy', 'medium', 'hard']
 // ---------- routing (hash-based so the phone back button works) ----------
 
 function route() {
+  // The account chip lives in the masthead, so signing out is reachable from
+  // every screen — not just the dashboard.
+  renderAccountChip()
   if (!state) return renderGate()
   updateNav()
   const hash = location.hash || '#/'
@@ -153,7 +156,6 @@ function renderDashboard() {
         <h1>Trips</h1>
         <a class="btn btn-primary" href="#/new">New Trip</a>
       </div>
-      <div id="account-chip" class="account-chip"></div>
       ${trips.length === 0 ? `
         <div class="empty">
           <p><strong>No trips yet.</strong></p>
@@ -242,7 +244,6 @@ function renderDashboard() {
     schedulePush()
     route()
   })
-  renderAccountChip()
 }
 
 // ---------- new trip ----------
@@ -1664,6 +1665,8 @@ function renderOnboarding() {
 function renderAccountChip() {
   const chip = document.getElementById('account-chip')
   if (!chip) return
+  // Signed out (the gate): the masthead carries nothing but navigation.
+  if (!state) { chip.replaceChildren(); return }
   const p = account()
   if (!p) {
     // Field mode: the session couldn't be verified but this device's cache
