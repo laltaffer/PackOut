@@ -1,0 +1,1 @@
+## [2026-07-27] shipped | PackOut 17-note feedback round (a8d3e16..e545f28) — live at packout.pages.dev, build e545f28; 243 tests green, 4 Codex review rounds clean; production verified (200, API auth-walled, gate renders both brands at 390px, console clean)
