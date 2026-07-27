@@ -360,11 +360,15 @@ function wireDestination(form, onPlace) {
   // a since-edited destination — or while a lookup is still in flight — must
   // not attach the previous place to this trip (Codex, 2026-07-27), so the
   // answer carries its inputs and the caller re-checks them at save time.
-  const snapshot = () => JSON.stringify([
-    dest.value.trim().toLowerCase(),
-    form.elements['startDate']?.value ?? '',
-    form.elements['days']?.value ?? '',
-  ])
+  //
+  // The two halves are kept apart on purpose: WHERE decides whether the label,
+  // coordinates and elevation are still true, WHEN decides whether the
+  // conditions are. Moving a trip a week later must not throw away the
+  // mountain — only its forecast.
+  const snapshot = () => ({
+    where: dest.value.trim().toLowerCase(),
+    when: `${form.elements['startDate']?.value ?? ''}|${form.elements['days']?.value ?? ''}`,
+  })
   let seq = 0
   const say = (msg, isError) => {
     line.textContent = msg
@@ -374,7 +378,7 @@ function wireDestination(form, onPlace) {
     const mine = ++seq
     const asked = snapshot()
     // Any change invalidates the old answer immediately, before the network.
-    onPlace(null)
+    onPlace(null, asked)
     if (!dest.value.trim()) { say(''); return }
     say('Looking it up…')
     const days = Number(form.elements['days']?.value) || null
@@ -434,6 +438,8 @@ function renderNewTrip() {
   `))
   let found = null
   const snapshot = wireDestination(document.getElementById('new-trip'), (place, asked) => { found = place && { place, asked } })
+  // A new trip has nothing to preserve: it takes the lookup that answered
+  // exactly this form, or nothing at all.
   document.getElementById('new-trip').addEventListener('submit', e => {
     e.preventDefault()
     const f = new FormData(e.target)
@@ -448,8 +454,12 @@ function renderNewTrip() {
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
     trip.types = f.getAll('tripType')
-    // Only a lookup that answered THIS destination and window rides along.
-    if (found && found.asked === snapshot()) trip.place = found.place
+    const asked = snapshot()
+    if (found && found.asked.where === asked.where) {
+      trip.place = found.asked.when === asked.when
+        ? found.place
+        : { ...found.place, climate: null } // right mountain, wrong week
+    }
     state.trips.push(trip)
     persist()
     // A new trip's kit is the next question, so land on the gear screen — it
@@ -521,9 +531,16 @@ function renderEditTrip(trip) {
     trip.flying = f.get('flying') === 'on'
     trip.mealStyle = mealStyleFromForm(f)
     // A destination that changed without a matching lookup has no place data
-    // any more — keeping the old one would describe the wrong mountain.
-    if (found && found.asked === snapshot()) trip.place = found.place
-    else if (snapshot() !== wasAsked) delete trip.place
+    // any more — keeping the old one would describe the wrong mountain. A
+    // window that changed only invalidates the conditions.
+    const asked = snapshot()
+    if (found && found.asked.where === asked.where) {
+      trip.place = found.asked.when === asked.when ? found.place : { ...found.place, climate: null }
+    } else if (asked.where !== wasAsked.where) {
+      delete trip.place
+    } else if (asked.when !== wasAsked.when && trip.place) {
+      trip.place = { ...trip.place, climate: null }
+    }
     persist()
     location.hash = `#/trip/${trip.id}`
   })
