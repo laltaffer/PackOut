@@ -138,3 +138,15 @@ test('validateImport: a destination must be numbers and plain text, or nothing',
   assert.equal(withPlace({ ...good, label: 'x'.repeat(400) }), false)
   assert.equal(withPlace({ ...good, climate: { tempLoF: 'cold' } }), false)
 })
+
+test('a day planned entirely with declined food is NOT treated as empty', () => {
+  // Codex 2026-07-27: draftEmptyDays judged emptiness against the filtered
+  // library, so a day whose only food was declined read as empty and got
+  // silently overwritten — the opposite of "planned days untouched".
+  const trip = mkTrip(3, { declined: ['pico'] })
+  trip.days[1].meals = {
+    electrolytes: [], breakfast: [], lunch: [], dinner: [{ foodId: 'pico', qty: 1 }], snacks: [],
+  }
+  const drafted = draftEmptyDays(trip, LIB, NONE, 'usual').map(d => d.dayIndex)
+  assert.deepEqual(drafted, [0, 2], 'day 1 already has a plan, declined or not')
+})

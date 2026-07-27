@@ -133,14 +133,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   box-shadow: 0 0 0 6px var(--focus-halo);
 }
 
-/* The one error treatment: a ring in the error hue AND a warning glyph AND a
-   sentence. Never any one of the three alone. */
-[aria-invalid="true"] { outline: 2px solid var(--err); outline-offset: 1px; }
-.field-error {
-  display: flex; align-items: center; gap: 0.4rem;
-  color: var(--err); font-weight: 700; font-size: 0.85rem;
-}
-.field-error::before { content: "⚠"; }
+/* The one error treatment: the error hue AND a warning glyph AND a sentence,
+   never any one of the three alone — which is what keeps it distinguishable
+   from focus. Layers onto whatever element carries the message, so it does
+   not fight that element's own display. */
+.field-error { color: var(--err); font-weight: 700; }
+.field-error::before { content: "⚠ "; }
 
 /* ---------- masthead ---------- */
 

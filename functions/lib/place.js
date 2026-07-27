@@ -146,10 +146,15 @@ export async function lookupPlace({ query, startDate, days, fetcher = fetch, kv 
     climate: await conditionsFor(hit, startDate, days, fetcher, now),
     at: now,
   }
-  if (kv) {
+  // A missing climate means the weather host was down, not that this window
+  // has no weather — caching that for a month would suppress conditions (and
+  // the gear suggestions built on them) long after the outage (Codex,
+  // 2026-07-27). Only a real answer is worth storing, and only settled
+  // history earns the long TTL.
+  if (kv && place.climate) {
     try {
       await kv.put(key, JSON.stringify(place),
-        { expirationTtl: place.climate?.source === 'forecast' ? FORECAST_TTL_S : HISTORY_TTL_S })
+        { expirationTtl: place.climate.source === 'forecast' ? FORECAST_TTL_S : HISTORY_TTL_S })
     } catch { /* the caller still gets their answer */ }
   }
   return { ok: true, status: 200, body: place }

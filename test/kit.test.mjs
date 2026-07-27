@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit } from '../js/seed.js'
+import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName } from '../js/seed.js'
 
 const CATEGORIES = new Set(['Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon',
   'Optics/Bino Pouch', 'Kill kit', 'Fishing', 'First aid & Safety',
@@ -275,4 +275,20 @@ test('naming a slot you already own updates it rather than forking a second row'
   assert.equal(state.gearLibrary.length, 1)
   assert.equal(state.gearLibrary[0].name, 'Seek Outside Cimarron')
   assert.equal(state.gearLibrary[0].weightOz, 38)
+})
+
+test('genericGearName knows a slot label from a real one', () => {
+  assert.equal(genericGearName('ob-tent'), 'Tent')
+  assert.equal(genericGearName('ob-multiday-pack'), 'Multi-day pack')
+  assert.equal(genericGearName('some-user-item'), null)
+})
+
+test('every question row can be recognised by its generic name', () => {
+  // isBlankSlot leans on this: a row still wearing its catalog label has not
+  // been told what it actually is.
+  for (const q of GEAR_QUESTIONS) {
+    for (const row of [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)]) {
+      assert.equal(genericGearName(row.id), row.name)
+    }
+  }
 })

@@ -109,3 +109,30 @@ test('accepts a valid full day plan with packed quantities', () => {
   })
   assert.equal(validateImport(good).ok, true)
 })
+
+test('validateImport: the gear library is gated like everything else that renders', () => {
+  // Codex 2026-07-27 (high): gearLibrary went unvalidated, and a gear weight
+  // is interpolated into innerHTML — a crafted backup could carry markup.
+  const base = {
+    schemaVersion: 1, library: [], trips: [{
+      id: 't', name: 'T', startDate: '2026-08-01', weightLbs: 200, days: [{ intensity: 'medium' }],
+    }],
+  }
+  const withGear = gearLibrary => validateImport({ ...base, gearLibrary })
+  const ok = { id: 'ob-tent', name: 'Kifaru SuperTarp', category: 'Shelter/Sleeping', weightOz: 40 }
+  assert.equal(withGear([ok]).ok, true)
+  assert.equal(withGear([{ ...ok, weightOz: null }]).ok, true)
+  assert.equal(withGear(undefined).ok, true, 'a backup predating gear still imports')
+  assert.equal(withGear([]).ok, true)
+
+  assert.equal(withGear([{ ...ok, weightOz: '<img src=x onerror=alert(1)>' }]).ok, false)
+  assert.equal(withGear([{ ...ok, weightOz: 'heavy' }]).ok, false)
+  assert.equal(withGear([{ ...ok, name: '<script>x</script>'.padEnd(300, 'y') }]).ok, false)
+  assert.equal(withGear([{ ...ok, name: '' }]).ok, false)
+  assert.equal(withGear([{ ...ok, category: 42 }]).ok, false)
+  assert.equal(withGear([{ ...ok, id: 'has spaces' }]).ok, false)
+  assert.equal(withGear([ok, ok]).ok, false, 'duplicate ids')
+  assert.equal(withGear([{ ...ok, url: 5 }]).ok, false)
+  assert.equal(withGear('nope').ok, false)
+  assert.equal(withGear([null]).ok, false)
+})

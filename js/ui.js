@@ -2,7 +2,7 @@
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, flyIssues, declinedIds, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, BRANDS, TRIP_TYPES } from './seed.js'
+import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, BRANDS, TRIP_TYPES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -356,18 +356,33 @@ function wireDestination(form, onPlace) {
   const line = form.querySelector('#place-line')
   const dest = form.elements['destination']
   if (!line || !dest) return
+  // A result belongs to the exact question that produced it. Submitting with
+  // a since-edited destination — or while a lookup is still in flight — must
+  // not attach the previous place to this trip (Codex, 2026-07-27), so the
+  // answer carries its inputs and the caller re-checks them at save time.
+  const snapshot = () => JSON.stringify([
+    dest.value.trim().toLowerCase(),
+    form.elements['startDate']?.value ?? '',
+    form.elements['days']?.value ?? '',
+  ])
   let seq = 0
+  const say = (msg, isError) => {
+    line.textContent = msg
+    line.classList.toggle('field-error', !!isError)
+  }
   const run = async () => {
-    const query = dest.value.trim()
-    if (!query) { onPlace(null); line.textContent = ''; return }
     const mine = ++seq
-    line.textContent = 'Looking it up…'
+    const asked = snapshot()
+    // Any change invalidates the old answer immediately, before the network.
+    onPlace(null)
+    if (!dest.value.trim()) { say(''); return }
+    say('Looking it up…')
     const days = Number(form.elements['days']?.value) || null
-    const res = await lookupDestination(query, form.elements['startDate']?.value || null, days)
+    const res = await lookupDestination(dest.value.trim(), form.elements['startDate']?.value || null, days)
     if (mine !== seq) return
-    if (!res.ok) { onPlace(null); line.textContent = res.error; return }
-    onPlace(res.place)
-    line.textContent = conditionsLine({ place: res.place })
+    if (!res.ok) { say(res.error, true); return }
+    onPlace(res.place, asked)
+    say(conditionsLine({ place: res.place }))
   }
   dest.addEventListener('change', run)
   for (const name of ['startDate', 'days']) {
@@ -375,6 +390,7 @@ function wireDestination(form, onPlace) {
     // once a destination is actually on the form.
     form.elements[name]?.addEventListener('change', () => { if (dest.value.trim()) run() })
   }
+  return snapshot
 }
 
 function mealStyleFromForm(f) {
@@ -416,8 +432,8 @@ function renderNewTrip() {
       </form>
     </section>
   `))
-  let foundPlace = null
-  wireDestination(document.getElementById('new-trip'), p => { foundPlace = p })
+  let found = null
+  const snapshot = wireDestination(document.getElementById('new-trip'), (place, asked) => { found = place && { place, asked } })
   document.getElementById('new-trip').addEventListener('submit', e => {
     e.preventDefault()
     const f = new FormData(e.target)
@@ -432,7 +448,8 @@ function renderNewTrip() {
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
     trip.types = f.getAll('tripType')
-    if (foundPlace) trip.place = foundPlace
+    // Only a lookup that answered THIS destination and window rides along.
+    if (found && found.asked === snapshot()) trip.place = found.place
     state.trips.push(trip)
     persist()
     // A new trip's kit is the next question, so land on the gear screen — it
@@ -476,8 +493,9 @@ function renderEditTrip(trip) {
       </form>
     </section>
   `))
-  let foundPlace = null
-  wireDestination(document.getElementById('edit-trip'), p => { foundPlace = p })
+  let found = null
+  const snapshot = wireDestination(document.getElementById('edit-trip'), (place, asked) => { found = place && { place, asked } })
+  const wasAsked = snapshot()
   document.getElementById('edit-trip').addEventListener('submit', e => {
     e.preventDefault()
     const f = new FormData(e.target)
@@ -502,7 +520,10 @@ function renderEditTrip(trip) {
     trip.types = f.getAll('tripType')
     trip.flying = f.get('flying') === 'on'
     trip.mealStyle = mealStyleFromForm(f)
-    if (foundPlace) trip.place = foundPlace
+    // A destination that changed without a matching lookup has no place data
+    // any more — keeping the old one would describe the wrong mountain.
+    if (found && found.asked === snapshot()) trip.place = found.place
+    else if (snapshot() !== wasAsked) delete trip.place
     persist()
     location.hash = `#/trip/${trip.id}`
   })
@@ -961,9 +982,15 @@ function wireBoard(trip, i, day) {
   }))
   document.querySelectorAll('#board [data-rm]').forEach(btn => btn.addEventListener('click', () => {
     const [key, j] = btn.dataset.rm.split(':')
-    const [removed] = resolveEntries(day, key).splice(Number(j), 1)
+    const entries = resolveEntries(day, key)
+    const [removed] = entries.splice(Number(j), 1)
     if (removed) decline(trip, removed.foodId)
     commit()
+    // The button that was focused no longer exists, and its id now belongs to
+    // a different food. Land on the neighbour, or on the slot's own Add.
+    const idx = Math.min(Number(j), entries.length - 1)
+    const next = idx >= 0 ? document.getElementById(`rm-${key}-${idx}`) : null
+    ;(next ?? document.querySelector(`[data-slot="${CSS.escape(key.replace(/^snack-\d+$/, 'snacks'))}"] .btn-add`))?.focus()
   }))
   document.querySelectorAll('#board [data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
     const [bundle] = day.meals.snacks.splice(Number(btn.dataset.rmSnack), 1)
@@ -1227,7 +1254,10 @@ function renderGear(trip) {
 // slot, not a decision. Saying so is the whole point of the note: "there is
 // nothing that lets me specify what I'm actually bringing."
 function isBlankSlot(item) {
-  return item.id.startsWith('ob-') && item.weightOz === null && !item.url
+  if (!item.id.startsWith('ob-') || item.weightOz !== null || item.url) return false
+  // Naming it is answering the question, even without a weight yet (Codex,
+  // 2026-07-27) — only a row still wearing its catalog label is a slot.
+  return item.name === genericGearName(item.id)
 }
 
 // The gear list edits in place (Lawrence 2026-07-27) — name it, paste the
@@ -1241,7 +1271,7 @@ function gearRow(item, entry) {
     <li class="gear-item">
       <div class="check-row gear-row${blank ? ' is-blank' : ''}">
         <label class="check-name ${entry.packed ? 'is-done' : ''}" for="${cb}">${esc(item.name)}</label>
-        <span class="check-meta mono">${item.weightOz !== null ? `${item.weightOz} oz` : 'no weight'}</span>
+        <span class="check-meta mono">${item.weightOz !== null ? `${esc(item.weightOz)} oz` : 'no weight'}</span>
         <button class="btn-quiet" data-gear-edit-row="${esc(item.id)}" aria-expanded="${open}">${blank ? 'Specify' : 'Edit'}</button>
         <button class="btn-quiet gear-rm" data-gear-rm="${esc(item.id)}" aria-label="Remove ${esc(item.name)} from this trip">&times;</button>
         <input id="${cb}" type="checkbox" data-gear-pack="${esc(item.id)}" ${entry.packed ? 'checked' : ''}>
@@ -1259,7 +1289,7 @@ function gearRow(item, entry) {
           <span class="fetch-status mono" role="status" id="scrape-status"></span>
         </div>
         <div class="macro-grid">
-          <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${item.weightOz ?? ''}"></label>
+          <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${esc(item.weightOz ?? '')}"></label>
           <label>Category
             <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === item.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
           </label>
@@ -1351,9 +1381,12 @@ let kitAnswers = {}
 let kitDetails = {}
 let kitTripId = null
 
+// Clearing the answers clears the trip they belonged to, so the next render
+// re-seeds from the trip instead of finding a half-empty answer set.
 function kitReset() {
   kitAnswers = {}
   kitDetails = {}
+  kitTripId = null
 }
 
 // Everything the answers currently imply, for the foot tally.
@@ -1404,12 +1437,19 @@ function renderKitQuestions(trip) {
   trip.gear ??= []
   // Answers belong to the trip that was asked. Opening another trip's kit
   // starts clean; re-rendering this one (every chip does) keeps them.
-  if (kitTripId !== trip.id) { kitReset(); kitTripId = trip.id }
+  if (kitTripId !== trip.id) {
+    kitReset()
+    kitTripId = trip.id
+    // Seed from the trip, not from nothing: submitting writes both fields
+    // back, so an uninitialised chip would silently clear a flag the trip
+    // already carries (Codex, 2026-07-27).
+    kitAnswers.tripTypes = tripTypes(trip)
+    kitAnswers.flying = !!trip.flying
+  }
   // The trip's own types are an answer on this screen now (Lawrence: "we
   // should ask if this trip is a rifle hunt, bow hunt, or fishing trip, and
   // that will simplify some of the follow-up questions"). They are read live
   // from kitAnswers so the dependent blocks appear the moment they're picked.
-  if (kitAnswers.tripTypes === undefined) kitAnswers.tripTypes = tripTypes(trip)
   const asked = { ...trip, types: kitAnswers.tripTypes }
   const questions = tripGearQuestions(asked, state.gearLibrary)
   const source = [...state.trips]
@@ -1521,8 +1561,17 @@ function renderKitQuestions(trip) {
     }
     if (typeof data.weightOz === 'number') {
       kitDetails[rowId] = { ...kitDetails[rowId], weightOz: data.weightOz }
+      // The foot tally counts this weight now, so the board has to redraw —
+      // otherwise the screen shows a weight and calls the item unweighed
+      // in the same breath (Codex, 2026-07-27).
+      renderKitQuestions(trip)
+      const again = app.querySelector(`[data-fetch="${CSS.escape(rowId)}"]`)
+      again?.focus()
+      const said = document.getElementById(`fetch-${rowId}`)
+      if (said) said.textContent = `${data.weightOz} oz`
+      return
     }
-    status.textContent = data.weightOz ? `${data.weightOz} oz` : 'No weight on that page — type it later.'
+    status.textContent = 'No weight on that page — type it later.'
   }))
 
   const copy = document.getElementById('kit-copy')
@@ -1569,7 +1618,7 @@ function renderGearPicker(trip) {
           <li class="food-row">
             <button class="food-pick" data-gear-pick="${g.id}">
               <span class="food-name">${esc(g.name)}</span>
-              <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${g.weightOz} oz` : ''}</span>
+              <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${esc(g.weightOz)} oz` : ''}</span>
             </button>
             <button class="btn-quiet" data-gear-edit="${g.id}" aria-label="Edit ${esc(g.name)}">&#9998;</button>
           </li>`).join('')}
@@ -1585,7 +1634,7 @@ function renderGearPicker(trip) {
         <label>Category
           <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === (editing ? editing.category : gearNewCategory) ? ' selected' : ''}>${c}</option>`).join('')}</select>
         </label>
-        <label>Weight oz (optional)<input name="weightOz" type="number" min="0.05" step="any" value="${editing?.weightOz ?? ''}"></label>
+        <label>Weight oz (optional)<input name="weightOz" type="number" min="0.05" step="any" value="${esc(editing?.weightOz ?? '')}"></label>
         ${editing ? `
         <div class="onboard-actions">
           <button class="btn btn-primary" type="submit">Save changes</button>

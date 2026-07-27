@@ -182,3 +182,17 @@ test('a nonsense date or length simply yields no conditions', async () => {
   }
   assert.equal(s.calls.length, 3, 'geocode only, never a weather call')
 })
+
+test('a weather outage is not cached — the next ask tries again', async () => {
+  // Codex 2026-07-27: null climate fell into the 30-day history TTL, so one
+  // upstream blip suppressed conditions for a month.
+  const kv = memKv()
+  const s = stub({ 'geocoding-api': GEO, 'api.open-meteo.com/v1/forecast': new Error('down') })
+  const args = { query: 'Brooks Range', startDate: '2026-08-01', days: 5, kv, now: NOW }
+  const first = await lookupPlace({ ...args, fetcher: s.fetcher })
+  assert.equal(first.body.climate, null)
+  assert.equal(kv.m.size, 0, 'nothing worth remembering')
+  const healthy = stub({ 'geocoding-api': GEO, 'api.open-meteo.com/v1/forecast': daily(5) })
+  const second = await lookupPlace({ ...args, fetcher: healthy.fetcher })
+  assert.equal(second.body.climate.source, 'forecast')
+})

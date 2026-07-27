@@ -346,6 +346,17 @@ export const GEAR_QUESTIONS = [
   },
 ]
 
+// The label a question row is born with. A gear item still wearing it has not
+// been told what it actually is — which is what the gear screen means by a
+// blank slot. Built once from the catalog so the two can never drift.
+const GENERIC_NAMES = new Map(
+  GEAR_QUESTIONS.flatMap(q => [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)])
+    .map(r => [r.id, r.name]))
+
+export function genericGearName(id) {
+  return GENERIC_NAMES.get(id) ?? null
+}
+
 // What to ask about THIS trip: the camp questions always, activity questions
 // only for what the trip is. Each block carries the gear you already own in
 // its categories, so the questions read with your own kit ("Kifaru SuperTarp",

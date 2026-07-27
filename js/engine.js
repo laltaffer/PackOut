@@ -304,19 +304,19 @@ export function mealStyleOf(trip) {
   return { ...MEAL_STYLE_DEFAULTS, ...(trip?.mealStyle ?? {}) }
 }
 
-function dinnerMains(library, staples = new Set(), habitTier = false, requireSubstantial = false) {
+function dinnerMains(library, staples = new Set(), requireSubstantial = false) {
   const hinted = library.filter(f => f.slotHint === 'dinner')
   const substantial = hinted.filter(f => f.kcal >= MAIN_MIN_KCAL)
   if (requireSubstantial && substantial.length === 0) return []
   const mains = substantial.length ? substantial : hinted
-  if (habitTier) {
-    // Usual drafts treat the user's own mains (Favorites/Staples) as the
-    // rotation pool when there are enough for variety — the catalog never
-    // displaces owned core meals.
-    const own = mains.filter(f => f.favorite || staples.has(f.id))
-    if (own.length >= 2) return own
-  }
-  return mains
+  // The user's own mains (Favorites/Staples) ARE the rotation pool whenever
+  // there are enough of them for variety — the catalog never displaces owned
+  // core meals. This holds for 'optimized' too (Codex, 2026-07-27): optimized
+  // means the most efficient meal among the ones you actually like, not the
+  // most efficient meal in the catalog. Two is the floor because one starred
+  // main is not a rotation, and dinners rotate across the week.
+  const own = mains.filter(f => f.favorite || staples.has(f.id))
+  return own.length >= 2 ? own : mains
 }
 
 function rankHabit(foods, staples) {
@@ -341,7 +341,7 @@ function rankByDensity(foods, staples, metric) {
 function mainsFor(trip, library, staples, strategy) {
   const mobile = mealStyleOf(trip).dinner === 'mobile'
   const pool = mobile ? library.filter(f => f.prep !== 'cook') : library
-  const mains = dinnerMains(pool, staples, strategy === 'usual', mobile)
+  const mains = dinnerMains(pool, staples, mobile)
   return strategy === 'usual' ? rankHabit(mains, staples) : rankByDensity(mains, staples, 'kcal')
 }
 
@@ -525,7 +525,11 @@ export function draftEmptyDays(trip, fullLibrary, staples, strategy = 'usual') {
   let prevMain = null
   trip.days.forEach((day, dayIndex) => {
     const existingMain = day.meals?.dinner?.[0]?.foodId
-    if (dayTotals(day, library).kcal > 0) {
+    // "Is this day already planned?" is asked of the WHOLE library. Asking the
+    // decline-filtered one would read a day whose only food is declined as
+    // empty and overwrite it — the opposite of "planned days untouched"
+    // (Codex, 2026-07-27). Only the replacement draft honors the declines.
+    if (dayTotals(day, fullLibrary).kcal > 0) {
       prevMain = existingMain ?? prevMain
       return
     }
@@ -675,6 +679,28 @@ export function validateImport(data) {
     }
     if (f.prep !== undefined && f.prep !== 'ready' && f.prep !== 'cook') {
       return { ok: false, error: `Food "${f.name}" has an invalid prep value.` }
+    }
+  }
+  // The gear library reaches the DOM the same way food does — names, weights
+  // and categories are all interpolated — so it gets the same gate. It went
+  // unvalidated until Codex found it (2026-07-27): a crafted backup could put
+  // markup in a weight, which the gear screen would then execute.
+  if (data.gearLibrary !== undefined) {
+    if (!Array.isArray(data.gearLibrary)) return { ok: false, error: 'Backup gear library is malformed.' }
+    const gearIds = new Set()
+    for (const g of data.gearLibrary) {
+      if (!g || !validId(g.id) || gearIds.has(g.id)) return { ok: false, error: 'Gear ids must be unique, plain identifiers.' }
+      gearIds.add(g.id)
+      if (typeof g.name !== 'string' || !g.name.trim() || g.name.length > 200) {
+        return { ok: false, error: `Gear item "${g.id}" has a malformed name.` }
+      }
+      if (typeof g.category !== 'string' || !g.category.trim() || g.category.length > 80) {
+        return { ok: false, error: `Gear item "${g.name}" has a malformed category.` }
+      }
+      if (!numOrNull(g.weightOz)) return { ok: false, error: `Gear item "${g.name}" has a non-numeric weight.` }
+      if (g.url !== undefined && g.url !== null && typeof g.url !== 'string') {
+        return { ok: false, error: `Gear item "${g.name}" has an invalid url.` }
+      }
     }
   }
   if (data.profile !== undefined) {

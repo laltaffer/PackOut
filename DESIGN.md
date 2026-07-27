@@ -104,8 +104,10 @@ row, the name flexes, and the checkbox is the last child on every screen
 - **Focus is not the action color** (2026-07-27). `--act` at 3px around a text
   field read as a form error — pink in `flag` is a hair from the error red
   every web form uses. Focus owns `--focus` (cool blue) plus a `--focus-halo`
-  ring; errors own `--err` plus a ⚠ glyph plus a sentence. Neither state is
-  ever carried by hue alone.
+  ring; errors own `.field-error` — `--err` plus a ⚠ glyph plus a sentence.
+  Neither state is ever carried by hue alone. Form-field validity itself is
+  native (`required`, `type`, `min`/`max`); `.field-error` is for failures the
+  browser cannot describe, like a destination lookup that did not resolve.
 
 ## Print
 
