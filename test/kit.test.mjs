@@ -179,3 +179,100 @@ test('kitRows: once a question lists gear you own, nothing rides along uninvited
   assert.deepEqual(rows.map(r => r.id), ['ob-tarp'],
     'leaving the bag unchecked has to mean leaving the bag')
 })
+
+// ---------- 2026-07-27 evening round ----------
+
+test('optics is its own question, shared by both hunt types', () => {
+  const rifle = tripGearQuestions(trip(['rifle'])).find(q => q.id === 'optics')
+  const bow = tripGearQuestions(trip(['bow'])).find(q => q.id === 'optics')
+  assert.ok(rifle && bow, 'both hunts ask about glass')
+  assert.deepEqual(rifle.options.map(o => o.value).sort(),
+    ['binos', 'harness', 'range-finder', 'spotter', 'tripod'])
+  // It is not a weapon footnote any more.
+  const weapons = tripGearQuestions(trip(['rifle'])).find(q => q.id === 'rifle')
+  assert.ok(!weapons.options.some(o => o.value === 'optics'))
+  // And a backpacking trip is not asked about glass.
+  assert.ok(!tripGearQuestions(trip([])).some(q => q.id === 'optics'))
+})
+
+test('a pack is one object — no separate bag and frame to add up', () => {
+  const pack = tripGearQuestions(trip([])).find(q => q.id === 'pack')
+  assert.ok(!pack.options.some(o => o.value === 'frame'))
+  for (const o of pack.options) {
+    assert.equal(o.rows.length, 1, `${o.value} should build exactly one row`)
+  }
+  assert.deepEqual(kitRows({ pack: ['hauler'] }).map(r => r.name), ['Meat hauler'])
+})
+
+test('safety covers bear defense', () => {
+  const safety = tripGearQuestions(trip([])).find(q => q.id === 'safety')
+  const values = safety.options.map(o => o.value)
+  assert.ok(values.includes('bear-spray') && values.includes('sidearm'))
+  // Both live with the first aid kit, so a trip that asks no weapon question
+  // can still declare them.
+  assert.ok(kitRows({ safety: ['sidearm', 'bear-spray'] })
+    .every(r => r.category === 'First aid & Safety'))
+})
+
+test('rain gear can be worn as well as packed, and they are different rows', () => {
+  const rows = kitRows({ worn: ['rain-worn'], packed: ['rain'] })
+  const ids = rows.map(r => r.id)
+  assert.ok(ids.includes('ob-rain-shell-worn') && ids.includes('ob-rain-shell'))
+  assert.equal(rows.find(r => r.id === 'ob-rain-shell-worn').category, 'Clothing worn')
+  assert.equal(rows.find(r => r.id === 'ob-rain-shell').category, 'Clothing packed')
+})
+
+test('a wet forecast suggests rain gear; it never checks it', () => {
+  const wet = { ...trip([]), place: { climate: { precipDays: 5, days: 7, tempLoF: 55 } } }
+  const worn = tripGearQuestions(wet).find(q => q.id === 'worn')
+  assert.equal(worn.options.find(o => o.value === 'rain-worn').suggested, 'likely wet')
+  assert.equal(worn.options.find(o => o.value === 'boots').suggested, null)
+  // Suggestion is not selection: the answer set is still empty.
+  assert.deepEqual(kitRows({}, tripGearQuestions(wet)), [])
+})
+
+test('a cold forecast suggests insulation; a mild one suggests nothing', () => {
+  const cold = { ...trip([]), place: { climate: { precipDays: 0, days: 7, tempLoF: 28 } } }
+  const packed = tripGearQuestions(cold).find(q => q.id === 'packed')
+  assert.equal(packed.options.find(o => o.value === 'puffy').suggested, 'likely cold')
+  const mild = { ...trip([]), place: { climate: { precipDays: 0, days: 7, tempLoF: 60 } } }
+  const mildPacked = tripGearQuestions(mild).find(q => q.id === 'packed')
+  assert.ok(mildPacked.options.every(o => o.suggested === null))
+  // No lookup at all is simply no suggestions.
+  assert.ok(tripGearQuestions(trip([])).every(q => q.options.every(o => o.suggested === null)))
+})
+
+test('naming the product while answering lands on the gear row', () => {
+  const state = { gearLibrary: [] }
+  const t = trip([])
+  applyTripKit(state, t, { pack: ['multiday'] }, undefined, {
+    'ob-multiday-pack': { name: 'Kifaru Reckoning', url: 'https://kifaru.net/x', weightOz: 96 },
+  })
+  const row = state.gearLibrary.find(g => g.id === 'ob-multiday-pack')
+  assert.equal(row.name, 'Kifaru Reckoning')
+  assert.equal(row.weightOz, 96)
+  assert.equal(row.url, 'https://kifaru.net/x')
+})
+
+test('an empty or junk detail leaves the blank slot exactly as it was', () => {
+  const state = { gearLibrary: [] }
+  applyTripKit(state, trip([]), { pack: ['daypack'] }, undefined, {
+    'ob-daypack': { name: '   ', url: '', weightOz: 0 },
+  })
+  const row = state.gearLibrary[0]
+  assert.equal(row.name, 'Day pack')
+  assert.equal(row.weightOz, null)
+  assert.equal(row.url, undefined)
+})
+
+test('naming a slot you already own updates it rather than forking a second row', () => {
+  const state = { gearLibrary: [owned('ob-tent', 'Tent', 'Shelter/Sleeping')] }
+  const t = trip([])
+  const questions = tripGearQuestions(t, state.gearLibrary)
+  applyTripKit(state, t, { sleep: ['ob-tent'] }, questions, {
+    'ob-tent': { name: 'Seek Outside Cimarron', weightOz: 38 },
+  })
+  assert.equal(state.gearLibrary.length, 1)
+  assert.equal(state.gearLibrary[0].name, 'Seek Outside Cimarron')
+  assert.equal(state.gearLibrary[0].weightOz, 38)
+})

@@ -50,6 +50,13 @@
   --stamp-ok: "✓ ";
   --obadge-ok-fg: oklch(0.17 0 0);
   --add-link: oklch(0.5 0.24 356);
+  /* Focus is not the action color. Pink at 3px around a text field is the
+     same shape and nearly the same hue every form on the web uses for an
+     error (Lawrence 2026-07-27) — focus gets its own cool hue, and error
+     states carry a glyph and a sentence so neither depends on color. */
+  --focus: oklch(0.5 0.19 255);
+  --focus-halo: oklch(0.5 0.19 255 / 0.22);
+  --err: oklch(0.5 0.19 27);
 }
 
 :root[data-brand="command"] {
@@ -90,6 +97,9 @@
   --stamp-ok: "";
   --obadge-ok-fg: oklch(0.78 0.13 150);
   --add-link: oklch(0.66 0.21 35);
+  --focus: oklch(0.82 0.13 225);
+  --focus-halo: oklch(0.82 0.13 225 / 0.25);
+  --err: oklch(0.7 0.19 27);
 }
 
 * { box-sizing: border-box; margin: 0; }
@@ -118,9 +128,19 @@ body {
 h1, h2, h3 { text-wrap: balance; color: var(--head); }
 
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
-  outline: 3px solid var(--act);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus-halo);
 }
+
+/* The one error treatment: a ring in the error hue AND a warning glyph AND a
+   sentence. Never any one of the three alone. */
+[aria-invalid="true"] { outline: 2px solid var(--err); outline-offset: 1px; }
+.field-error {
+  display: flex; align-items: center; gap: 0.4rem;
+  color: var(--err); font-weight: 700; font-size: 0.85rem;
+}
+.field-error::before { content: "⚠"; }
 
 /* ---------- masthead ---------- */
 
@@ -190,13 +210,20 @@ h1 {
   padding: 0.5rem; min-height: 44px;
 }
 
-.crumb {
-  display: inline-flex; align-items: center; gap: 0.35rem;
-  font-weight: 600; font-size: 0.95rem; color: var(--soft); text-decoration: none;
-  padding: 0.35rem 0; margin-bottom: 0.9rem; border: none; background: none;
-  cursor: pointer; font-family: var(--ui); min-height: 44px;
+/* Going back is a control, not a whisper (Lawrence 2026-07-27: "the UI to go
+   backwards is really hard to find"). One affordance, one shape, top-left of
+   every screen, always naming where it lands. */
+.back {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-family: var(--ui); font-weight: 700; font-size: 0.9rem;
+  color: var(--head); text-decoration: none;
+  border: var(--panel-b); border-radius: var(--r-btn);
+  background: var(--panel);
+  padding: 0.45rem 0.9rem; min-height: 44px;
+  margin-bottom: 1.1rem; cursor: pointer;
 }
-.crumb:hover, .btn-quiet:hover { color: var(--act); }
+.back:hover { border-color: var(--act); color: var(--act); }
+.btn-quiet:hover { color: var(--act); }
 
 /* ---------- dashboard ---------- */
 
@@ -357,7 +384,7 @@ main:has(.trip-surface) { max-width: none; }
 .board-inner { overflow: hidden; min-height: 0; }
 
 .board {
-  display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.4rem; align-items: start;
+  display: grid; grid-template-columns: 1fr 1.15fr; gap: 2.4rem; align-items: start;
   padding-top: 2rem;
   opacity: 0; translate: 0 14px;
   transition: opacity 320ms 160ms, translate 380ms 160ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -365,7 +392,9 @@ main:has(.trip-surface) { max-width: none; }
 .day-open .board { opacity: 1; translate: 0 0; }
 
 .board h2 { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; text-transform: var(--h-case); }
-.board h2:focus { outline: none; }
+/* The heading is focused to move the reader, not because it is a control —
+   it must not wear the interactive focus ring. */
+.board h2:focus, .board h2:focus-visible { outline: none; box-shadow: none; }
 
 .fmeta { font-size: var(--text-min); font-family: "Chivo Mono", monospace; opacity: 0.8; margin: 0.55rem 0 1.4rem; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .fmeta select { min-height: 44px; padding: 0.3rem 0.5rem; font-size: var(--text-min); }
@@ -398,31 +427,38 @@ main:has(.trip-surface) { max-width: none; }
 
 .editrow { margin-top: 1.5rem; display: flex; gap: 0.7rem; flex-wrap: wrap; }
 
+/* The board's right column is the day's real food list, editable in place —
+   there is no separate editor screen to click into (Lawrence 2026-07-27). */
 .board-slots { display: grid; gap: 0.8rem; }
 .slotrow {
   background: var(--panel); border: var(--panel-b); border-radius: var(--r);
-  padding: 0.95rem 1.2rem;
-  display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 1rem; align-items: baseline;
+  padding: 0.9rem 1.1rem 0.5rem;
+  display: grid; gap: 0.25rem;
 }
-.slotrow .t { font-weight: 700; font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--head); }
-.slotrow .n { font-weight: var(--data-w); font-size: 1.05rem; text-align: right; color: var(--data); font-family: var(--data-face); font-variant-numeric: tabular-nums; }
-.slotrow .dd { grid-column: 1 / -1; font-size: 0.9rem; color: var(--soft); }
-.slotrow .w { font-size: var(--text-min); font-family: "Chivo Mono", monospace; letter-spacing: 0.1em; font-weight: 600; }
+.slotrow-head { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+.slotrow .t { flex: 1; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--head); }
+.slotrow .n { font-weight: var(--data-w); font-size: 1.05rem; color: var(--data); font-family: var(--data-face); font-variant-numeric: tabular-nums; }
+.slotrow .w { flex-basis: 100%; font-size: var(--text-min); font-family: "Chivo Mono", monospace; letter-spacing: 0.1em; font-weight: 600; }
 .slotrow .w.in { color: var(--v-ok); }
 .slotrow .w.out { color: var(--v-heavy); }
+.slotrow .entries { margin: 0.2rem 0 0; }
+.slotrow .btn-add { font-size: 0.85rem; }
 
-/* ---------- verdict panels (day editor) ---------- */
-
-.verdict {
-  border: var(--panel-b); border-radius: var(--r);
-  background: var(--panel);
-  padding: 0.8rem 1rem; margin-bottom: 1rem;
-  display: grid; gap: 0.5rem; justify-items: start;
+.targets.day-macros {
+  margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: 0.8rem;
+  grid-template-columns: repeat(2, 1fr);
 }
-.verdict-fueled { border-color: var(--v-ok); }
-.verdict-short { border-color: var(--v-short); }
-.verdict-heavy { border-color: var(--v-heavy); }
-.verdict .gap { font-weight: 700; }
+.targets.day-macros div { flex-direction: column; align-items: start; }
+.targets.day-macros dd { text-align: left; }
+.day-transfer { margin-top: 1.2rem; }
+.day-transfer summary {
+  cursor: pointer; font-weight: 700; font-size: 0.9rem; color: var(--soft);
+  padding: 0.5rem 0; min-height: 44px; display: flex; align-items: center;
+}
+.day-transfer summary:hover { color: var(--act); }
+.transfer-row { display: flex; align-items: end; gap: 0.75rem; flex-wrap: wrap; padding: 0.4rem 0 0.8rem; }
+.transfer-row label { flex: 1; min-width: 13rem; font-size: 0.9rem; }
+.declined-note { margin-top: 1rem; color: var(--soft); font-size: 0.9rem; }
 
 .suggs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
@@ -451,15 +487,6 @@ main:has(.trip-surface) { max-width: none; }
 }
 .intensity select { min-height: 44px; padding: 0.35rem 0.5rem; }
 
-.day-screen-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
-.day-screen-head h1 { font-size: 1.8rem; }
-.day-screen-head .day-date { flex: 1; font-family: "Chivo Mono", monospace; font-size: var(--text-min); color: var(--soft); }
-
-.day-totals {
-  position: sticky; top: 0; z-index: 5;
-  background: var(--panel); border: var(--panel-b); border-radius: var(--r);
-  padding: 0.7rem 1rem 0.8rem; margin-bottom: 1rem;
-}
 .targets {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem 1rem;
 }
@@ -467,16 +494,6 @@ main:has(.trip-surface) { max-width: none; }
 .targets dt { text-transform: uppercase; font-size: var(--text-min); letter-spacing: 0.08em; color: var(--soft); font-family: "Chivo Mono", monospace; }
 .targets dd { font-size: 0.85rem; font-weight: 700; text-align: right; white-space: nowrap; font-family: var(--data-face); font-variant-numeric: tabular-nums; }
 .targets .floor { display: block; font-weight: 400; color: var(--soft); font-size: 0.85em; }
-.day-totals .totals-legend { flex-direction: row; justify-content: flex-end; }
-.day-totals .totals-legend dd { font-size: var(--text-min); text-transform: uppercase; letter-spacing: 0.1em; color: var(--soft); font-weight: 400; }
-.day-totals div { flex-direction: column; align-items: start; }
-.day-totals dd { text-align: left; }
-
-.slot { border-top: 3px solid var(--head); padding: 0.7rem 0 1rem; }
-.slot-head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
-.slot-head h2 { font-weight: 800; text-transform: var(--h-case); font-size: 1.15rem; }
-.slot-target { color: var(--soft); font-size: var(--text-min); }
-
 .entries { list-style: none; padding: 0; margin: 0.35rem 0; display: grid; }
 .entry {
   display: flex; align-items: center; gap: 0.5rem;
@@ -495,11 +512,11 @@ main:has(.trip-surface) { max-width: none; }
 .entry-ctl .qty { min-width: 1.6rem; text-align: center; font-weight: 700; }
 .entry-ctl [data-rm], .snack-head [data-rm-snack] { border-color: var(--line); color: var(--soft); }
 
-.slot-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-
 .btn-add {
   font-weight: 700; font-size: 0.92rem; color: var(--add-link); text-decoration: none;
   padding: 0.6rem 0; display: inline-flex; align-items: center; min-height: 44px;
+  /* Some add affordances are buttons, some are links — same face either way. */
+  background: none; border: none; font-family: var(--ui); cursor: pointer; text-align: left;
 }
 .btn-add:hover { text-decoration: underline; }
 /* Section-foot add row on the gear screen: full check-row height target. */
@@ -516,22 +533,6 @@ main:has(.trip-surface) { max-width: none; }
   background: var(--panel); color: var(--soft); cursor: pointer;
 }
 #add-snack { margin-top: 0.5rem; }
-
-.copy-day {
-  border-top: 3px solid var(--head); padding: 1rem 0;
-  display: flex; align-items: end; gap: 0.75rem; flex-wrap: wrap;
-}
-.copy-day label { flex: 1; min-width: 14rem; }
-
-.draft-panel {
-  border: var(--panel-b); border-radius: var(--r);
-  background: var(--panel);
-  padding: 0.9rem 1rem; margin-bottom: 1rem;
-  display: grid; gap: 0.6rem; justify-items: start;
-}
-.draft-lead { font-weight: 700; color: var(--head); }
-.draft-redo { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.draft-redo .btn { font-size: 0.85rem; padding: 0.35rem 0.7rem; }
 
 .picker input[type="search"] { width: 100%; max-width: none; margin-bottom: 0.9rem; }
 
@@ -595,10 +596,87 @@ main:has(.trip-surface) { max-width: none; }
 .gate .gsi-holder { min-height: 44px; }
 
 .onboard { max-width: 30rem; }
-/* The kit questions carry your own gear names, so they need room the profile
-   doesn't — and the heading stays on one line. */
-.kit-ask { max-width: 44rem; }
-.kit-or { color: var(--soft); margin: 0.5rem 0 1.2rem; }
+
+/* ---------- the kit question board ----------
+   A long single column made a wide screen scroll for no reason (Lawrence
+   2026-07-27). The questions lay out as cards across the canvas and the
+   answers are chips. This buys COLUMNS, not smaller type or tighter spacing —
+   the four dense redesigns he erased are the standing warning. */
+
+.kit-ask { max-width: 76rem; margin-inline: auto; }
+main:has(.kit-ask) { max-width: none; }
+.kit-lead { color: var(--soft); max-width: 44rem; }
+.kit-conditions { margin-top: 0.4rem; }
+.kit-shortcut { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin: 1.3rem 0 0.2rem; }
+
+.q-grid {
+  display: grid; gap: 1.2rem; align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  margin-top: 1.6rem;
+}
+.q-card {
+  border: var(--panel-b); border-radius: var(--r); background: var(--panel);
+  padding: 1.1rem 1.2rem 1.2rem; margin: 0;
+}
+/* Float takes the legend out of the border notch so the card reads as a card
+   in both brands, while the fieldset/legend semantics stay intact. */
+.q-card > legend { float: left; width: 100%; padding: 0; font-weight: 800; font-size: 1.05rem; color: var(--head); }
+.q-card > legend ~ * { clear: both; }
+.q-card .onboard-q-hint { margin-bottom: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.chip { display: inline-flex; margin: 0; font-weight: 400; }
+.chip input {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; margin: 0;
+}
+.chip-face {
+  display: inline-flex; flex-direction: column; justify-content: center; gap: 0.05rem;
+  border: 1px solid var(--line); border-radius: var(--r-btn);
+  background: var(--panel); color: var(--ink);
+  padding: 0.45rem 0.8rem; min-height: 44px; cursor: pointer;
+  transition: border-color 140ms, background-color 140ms, color 140ms;
+}
+.chip:hover .chip-face { border-color: var(--act); }
+/* Selection is never color alone — the check mark carries it too. */
+.chip:has(:checked) .chip-face { background: var(--act); border-color: var(--act); color: var(--act-ink); }
+.chip:has(:checked) .chip-label::before { content: "✓ "; }
+.chip:has(:checked) .chip-meta, .chip:has(:checked) .chip-note, .chip:has(:checked) .chip-flag { color: var(--act-ink); opacity: 0.85; }
+.chip:has(:focus-visible) .chip-face { outline: 3px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 6px var(--focus-halo); }
+.chip-label { font-weight: 700; font-size: 0.92rem; }
+.chip-meta, .chip-note { font-size: var(--text-min); color: var(--soft); }
+.chip-meta { font-family: "Chivo Mono", monospace; }
+.chip-flag {
+  font-size: var(--text-min); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--v-heavy); font-weight: 600;
+}
+.chip-flag::before { content: "◆ "; }
+
+/* Say what you're actually bringing, while you're picking it. */
+.chip-detail {
+  display: grid; gap: 0.6rem; margin-top: 0.9rem;
+  padding: 0.8rem 0.9rem; border: 1px dashed var(--line); border-radius: var(--r);
+}
+.chip-detail label { font-size: 0.85rem; }
+.chip-detail input { max-width: none; width: 100%; }
+.chip-detail-fetch { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.chip-detail-fetch input { flex: 1; min-width: 11rem; }
+
+/* The meal-style question needs three selects side by side, so it spans. */
+.q-card-wide { grid-column: 1 / -1; }
+.style-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.7rem; }
+.style-row label { flex: 1; min-width: 13rem; font-size: 0.9rem; }
+.style-row select { width: 100%; max-width: none; }
+.q-field { margin-top: 0.7rem; font-size: 0.9rem; }
+.q-field input { width: 100%; max-width: none; }
+
+.kit-foot {
+  position: sticky; bottom: 0; z-index: 4;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  margin-top: 1.8rem; padding: 0.9rem 0;
+  background: var(--bg); border-top: 3px solid var(--head);
+}
+.kit-tally { color: var(--soft); margin-right: auto; }
 .onboard form { display: grid; gap: 0.35rem; justify-items: start; width: 100%; }
 .onboard-option { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; min-height: 32px; }
 
@@ -618,10 +696,12 @@ main:has(.trip-surface) { max-width: none; }
 .onboard-q legend + .onboard-opts { margin-top: 0.2rem; }
 .onboard-note { color: var(--soft); font-size: 0.85rem; font-weight: 400; }
 .onboard-actions { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
-.onboard-progress { color: var(--soft); font-size: 0.8rem; }
 
 /* ---------- outputs ---------- */
 
+/* Count first, box last (Lawrence 2026-07-27: "bring the number of items to
+   the left … it'll make it more scannable"). The box is the last thing in
+   every check row on every screen, so the tap target never moves. */
 .check-list { list-style: none; padding: 0; display: grid; }
 
 .check-row {
@@ -631,11 +711,15 @@ main:has(.trip-surface) { max-width: none; }
 }
 .check-row input[type="checkbox"] {
   width: 22px; height: 22px; min-height: 22px;
-  accent-color: var(--act); flex-shrink: 0;
+  accent-color: var(--act); flex-shrink: 0; order: 99;
 }
-.check-name { flex: 1; }
+.check-lead {
+  color: var(--soft); font-size: var(--text-min); font-family: "Chivo Mono", monospace;
+  min-width: 2.6rem; font-weight: 600;
+}
+.check-name { flex: 1; cursor: pointer; }
 .check-name.is-done { text-decoration: line-through; color: var(--soft); }
-.check-qty { color: var(--soft); font-size: var(--text-min); font-family: "Chivo Mono", monospace; }
+.check-meta, .check-qty { color: var(--soft); font-size: var(--text-min); font-family: "Chivo Mono", monospace; }
 
 .pack-day { margin-bottom: 1.2rem; }
 .pack-day h2 {
@@ -664,6 +748,45 @@ main:has(.trip-surface) { max-width: none; }
 /* ---------- gear ---------- */
 
 .gear-stats { color: var(--soft); margin-bottom: 0.6rem; }
+
+/* Gear rows say what you're actually bringing, or admit they don't yet. */
+.gear-item { border-bottom: 1px solid var(--line); }
+.gear-item .check-row { border-bottom: none; }
+.gear-row.is-blank .check-name { color: var(--soft); font-style: italic; }
+.gear-row.is-blank .check-meta { color: var(--v-heavy); }
+.gear-row .btn-quiet { padding: 0.5rem 0.4rem; }
+.gear-rm { font-size: 1.1rem; text-decoration: none; min-width: 44px; }
+.gear-inline {
+  display: grid; gap: 0.7rem;
+  padding: 0.9rem 1rem 1rem; margin-bottom: 0.8rem;
+  border: 1px dashed var(--line); border-radius: var(--r);
+}
+.gear-inline input, .gear-inline select { max-width: none; width: 100%; }
+.gear-inline label { font-size: 0.9rem; }
+
+/* Flying (Lawrence 2026-07-27): what won't make it through an airport. */
+.fly-toggle, .fly-toggle-inline {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-weight: 700; color: var(--head); min-height: 44px; margin-bottom: 0.6rem;
+}
+.fly-toggle input, .fly-toggle-inline input {
+  width: 22px; height: 22px; min-height: 22px; accent-color: var(--act); flex-shrink: 0;
+}
+.fly-clear { color: var(--soft); margin-bottom: 1rem; }
+.fly-note { display: grid; gap: 1rem; margin-bottom: 1.4rem; }
+.fly-group { border-left: 4px solid var(--line); padding-left: 0.9rem; }
+.fly-group h3 { font-size: 1rem; font-weight: 800; text-transform: var(--h-case); }
+.fly-group h3 .mono { font-weight: 400; color: var(--soft); text-transform: none; margin-left: 0.4rem; }
+.fly-group ul { list-style: none; padding: 0.3rem 0 0; display: grid; gap: 0.3rem; font-size: 0.9rem; color: var(--soft); }
+.fly-banned { border-left-color: var(--v-short); }
+.fly-checked { border-left-color: var(--v-heavy); }
+.fly-carryon { border-left-color: var(--v-ok); }
+.fly-banned h3::before { content: "✕ "; color: var(--v-short); }
+.fly-checked h3::before { content: "▲ "; color: var(--v-heavy); }
+.fly-carryon h3::before { content: "↑ "; color: var(--v-ok); }
+
+.trip-conditions, .place-line, .kit-conditions { color: var(--soft); }
+.place-line { display: block; font-family: "Chivo Mono", monospace; font-size: var(--text-min); }
 .gear-actions { margin-bottom: 1rem; align-items: end; }
 .gear-import-label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 0.85rem; color: var(--head); }
 .gear-new { display: grid; gap: 0.75rem; border-top: 3px solid var(--head); margin-top: 1.25rem; padding-top: 0.8rem; }
@@ -713,8 +836,9 @@ main:has(.trip-surface) { max-width: none; }
     --soft: oklch(0.35 0 0); --line: #999; --head: #000; --ink: #000;
     --data: #000; --bg: #fff; --panel: #fff;
   }
-  .masthead, .crumb, .btn, .btn-quiet, .btn-add, .topo, .brand-dock,
-  .fav, .intensity, .draft-panel, .draft-redo { display: none !important; }
+  .masthead, .back, .btn, .btn-quiet, .btn-add, .topo, .brand-dock,
+  .fav, .intensity, .fly-toggle,
+  .day-transfer, .gear-inline, .entry-ctl, .kit-foot { display: none !important; }
   body { background: #fff; color: #000; }
   h1, h2, h3, .check-name { color: #000; }
   .check-row, .food-row, .entry { border-color: #999; }
@@ -731,6 +855,15 @@ main:has(.trip-surface) { max-width: none; }
   .masthead-nav { gap: 0.9rem; }
   .strip { grid-template-columns: repeat(7, minmax(86px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
   .board { grid-template-columns: 1fr; gap: 1.6rem; }
+  .q-grid { grid-template-columns: 1fr; }
+  /* A food name and a full qty stepper do not share 390px. The name takes the
+     line; the number and its controls take the next one. */
+  .entry { flex-wrap: wrap; }
+  .entry-name { flex: 1 1 100%; }
+  .entry-kcal { margin-right: auto; }
+  .gear-row { flex-wrap: wrap; }
+  .gear-row .check-name { flex: 1 1 100%; }
+  .gear-row .check-meta { margin-right: auto; }
   .big .n { font-size: 2.8rem; }
   h1 { font-size: 1.7rem; }
   .targets { grid-template-columns: repeat(2, 1fr); }
@@ -741,7 +874,6 @@ main:has(.trip-surface) { max-width: none; }
   .targets { grid-template-columns: repeat(4, auto); }
   .targets div { flex-direction: column; }
   .targets dd { text-align: left; }
-  .day-totals .totals-legend { grid-column: 1 / -1; }
 }
 
 /* Desktop is the primary experience: room to breathe, never density. */

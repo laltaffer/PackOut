@@ -162,10 +162,6 @@ export function brandOf(foodId) {
 // some trips and cold on others. Options that genuinely name the same object
 // share a row id (stakes, optics, kill kit, utensil), so answering twice never
 // duplicates a slot.
-const OPTICS = [
-  { id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch' },
-  { id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch' },
-]
 const KILL_KIT = [
   { id: 'ob-knife', name: 'Knife', category: 'Kill kit' },
   { id: 'ob-game-bags', name: 'Game bags', category: 'Kill kit' },
@@ -175,12 +171,15 @@ export const GEAR_QUESTIONS = [
   {
     id: 'pack',
     categories: ['Backpack'],
+    // A pack is one object with one brand and one weight (Lawrence
+    // 2026-07-27). Frame-and-bag systems exist, but almost nobody mixes them
+    // across trips, and splitting the row made the user do the arithmetic.
     prompt: 'Which pack are you taking?',
     options: [
       { value: 'daypack', label: 'Day pack', rows: [{ id: 'ob-daypack', name: 'Day pack', category: 'Backpack' }] },
       { value: 'multiday', label: 'Multi-day pack', rows: [{ id: 'ob-multiday-pack', name: 'Multi-day pack', category: 'Backpack' }] },
-      { value: 'frame', label: 'Pack frame + bag', note: 'meat hauler',
-        rows: [{ id: 'ob-pack-bag', name: 'Pack bag', category: 'Backpack' }, { id: 'ob-pack-frame', name: 'Pack frame', category: 'Backpack' }] },
+      { value: 'hauler', label: 'Meat hauler', note: 'frame pack, one item',
+        rows: [{ id: 'ob-hauler', name: 'Meat hauler', category: 'Backpack' }] },
     ],
   },
   {
@@ -231,34 +230,48 @@ export const GEAR_QUESTIONS = [
   },
   {
     id: 'rifle',
-    when: 'rifle',
-    categories: ['Weapon', 'Optics/Bino Pouch', 'Kill kit'],
+    when: ['rifle'],
+    categories: ['Weapon', 'Kill kit'],
     prompt: 'Rifle hunt — what is going with you?',
     options: [
       { value: 'rifle', label: 'Rifle and ammunition',
         rows: [{ id: 'ob-rifle', name: 'Rifle', category: 'Weapon' }, { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' }] },
       { value: 'rest', label: 'Shooting rest', rows: [{ id: 'ob-shooting-rest', name: 'Shooting rest', category: 'Weapon' }] },
-      { value: 'optics', label: 'Binoculars and range finder', rows: OPTICS },
       { value: 'kill-kit', label: 'Kill kit', note: 'knife, game bags', rows: KILL_KIT },
     ],
   },
   {
     id: 'bow',
-    when: 'bow',
-    categories: ['Weapon', 'Optics/Bino Pouch', 'Kill kit'],
+    when: ['bow'],
+    categories: ['Weapon', 'Kill kit'],
     prompt: 'Bow hunt — what is going with you?',
     options: [
       { value: 'bow', label: 'Bow and release',
         rows: [{ id: 'ob-bow', name: 'Bow', category: 'Weapon' }, { id: 'ob-release', name: 'Release', category: 'Weapon' }] },
       { value: 'arrows', label: 'Arrows and broadheads',
         rows: [{ id: 'ob-arrows', name: 'Arrows', category: 'Weapon' }, { id: 'ob-broadheads', name: 'Broadheads', category: 'Weapon' }] },
-      { value: 'optics', label: 'Binoculars and range finder', rows: OPTICS },
       { value: 'kill-kit', label: 'Kill kit', note: 'knife, game bags', rows: KILL_KIT },
     ],
   },
   {
+    // Optics are their own question (Lawrence 2026-07-27) — a spotting scope
+    // and the tripod under it are decisions in their own right, not a
+    // footnote on "what weapon". Shared by both hunt types, one row set.
+    id: 'optics',
+    when: ['rifle', 'bow'],
+    categories: ['Optics/Bino Pouch'],
+    prompt: 'What optics are you glassing with?',
+    options: [
+      { value: 'binos', label: 'Binoculars', rows: [{ id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch' }] },
+      { value: 'spotter', label: 'Spotting scope', rows: [{ id: 'ob-spotting-scope', name: 'Spotting scope', category: 'Optics/Bino Pouch' }] },
+      { value: 'tripod', label: 'Tripod', rows: [{ id: 'ob-tripod', name: 'Tripod', category: 'Optics/Bino Pouch' }] },
+      { value: 'range-finder', label: 'Range finder', rows: [{ id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch' }] },
+      { value: 'harness', label: 'Bino harness', rows: [{ id: 'ob-bino-harness', name: 'Bino harness', category: 'Optics/Bino Pouch' }] },
+    ],
+  },
+  {
     id: 'fishing',
-    when: 'fishing',
+    when: ['fishing'],
     categories: ['Fishing'],
     prompt: 'Fishing — what is going with you?',
     options: [
@@ -281,6 +294,13 @@ export const GEAR_QUESTIONS = [
       { value: 'pants', label: 'Pants', rows: [{ id: 'ob-pants', name: 'Pants', category: 'Clothing worn' }] },
       { value: 'hoody', label: 'Sun hoody or shirt', rows: [{ id: 'ob-hoody', name: 'Sun hoody', category: 'Clothing worn' }] },
       { value: 'cap', label: 'Cap or brimmed hat', rows: [{ id: 'ob-cap', name: 'Cap', category: 'Clothing worn' }] },
+      // Alaska rains the whole week: the shell is worn, not packed (Lawrence
+      // 2026-07-27). Worn rain gear is its own row — the same jacket in the
+      // pack and on your back are different numbers in the weight rollup.
+      { value: 'rain-worn', label: 'Rain shell', wet: true,
+        rows: [{ id: 'ob-rain-shell-worn', name: 'Rain shell (worn)', category: 'Clothing worn' }] },
+      { value: 'rain-pants-worn', label: 'Rain pants', wet: true,
+        rows: [{ id: 'ob-rain-pants-worn', name: 'Rain pants (worn)', category: 'Clothing worn' }] },
     ],
   },
   {
@@ -288,12 +308,12 @@ export const GEAR_QUESTIONS = [
     categories: ['Clothing packed'],
     prompt: 'What clothing is going in the pack?',
     options: [
-      { value: 'rain', label: 'Rain shell', rows: [{ id: 'ob-rain-shell', name: 'Rain shell', category: 'Clothing packed' }] },
-      { value: 'rain-pants', label: 'Rain pants', rows: [{ id: 'ob-rain-pants', name: 'Rain pants', category: 'Clothing packed' }] },
-      { value: 'puffy', label: 'Puffy or insulation', rows: [{ id: 'ob-puffy', name: 'Puffy', category: 'Clothing packed' }] },
+      { value: 'rain', label: 'Rain shell', wet: true, rows: [{ id: 'ob-rain-shell', name: 'Rain shell', category: 'Clothing packed' }] },
+      { value: 'rain-pants', label: 'Rain pants', wet: true, rows: [{ id: 'ob-rain-pants', name: 'Rain pants', category: 'Clothing packed' }] },
+      { value: 'puffy', label: 'Puffy or insulation', cold: true, rows: [{ id: 'ob-puffy', name: 'Puffy', category: 'Clothing packed' }] },
       { value: 'spare-socks', label: 'Spare socks', rows: [{ id: 'ob-spare-socks', name: 'Spare socks', category: 'Clothing packed' }] },
-      { value: 'gloves', label: 'Gloves', rows: [{ id: 'ob-gloves', name: 'Gloves', category: 'Clothing packed' }] },
-      { value: 'beanie', label: 'Beanie', rows: [{ id: 'ob-beanie', name: 'Beanie', category: 'Clothing packed' }] },
+      { value: 'gloves', label: 'Gloves', cold: true, rows: [{ id: 'ob-gloves', name: 'Gloves', category: 'Clothing packed' }] },
+      { value: 'beanie', label: 'Beanie', cold: true, rows: [{ id: 'ob-beanie', name: 'Beanie', category: 'Clothing packed' }] },
     ],
   },
   {
@@ -304,6 +324,13 @@ export const GEAR_QUESTIONS = [
       { value: 'headlamp', label: 'Headlamp', rows: [{ id: 'ob-headlamp', name: 'Headlamp', category: 'First aid & Safety' }] },
       { value: 'first-aid', label: 'First aid kit', rows: [{ id: 'ob-first-aid', name: 'First aid kit', category: 'First aid & Safety' }] },
       { value: 'sat-comm', label: 'Satellite communicator', rows: [{ id: 'ob-sat-comm', name: 'Satellite communicator', category: 'First aid & Safety' }] },
+      // Bear defense is safety gear, not weaponry — it lives with the first
+      // aid kit so a backpacking trip (which asks no weapon question) can
+      // still declare it. Both fly badly; flyIssues catches them by name.
+      { value: 'bear-spray', label: 'Bear spray', rows: [{ id: 'ob-bear-spray', name: 'Bear spray', category: 'First aid & Safety' }] },
+      { value: 'sidearm', label: 'Pistol', note: 'bear defense',
+        rows: [{ id: 'ob-pistol', name: 'Pistol', category: 'First aid & Safety' }] },
+      { value: 'fire', label: 'Fire starter', rows: [{ id: 'ob-fire-starter', name: 'Fire starter', category: 'First aid & Safety' }] },
     ],
   },
   {
@@ -325,15 +352,36 @@ export const GEAR_QUESTIONS = [
 // not "Tent"), plus the generic options for gear you have never logged. An
 // option whose slots all exist already is dropped — it would be a duplicate of
 // an item listed right above it.
+// What the looked-up destination implies about clothing. Deliberately two
+// coarse flags — the lookup informs the question, it never answers it, so a
+// wrong guess costs the user nothing but an unchecked suggestion.
+const WET_DAY_SHARE = 0.4
+const COLD_LOW_F = 40
+
+export function climateHints(trip) {
+  const c = trip?.place?.climate
+  if (!c) return { wet: false, cold: false }
+  const days = c.days ?? 0
+  return {
+    wet: days > 0 && typeof c.precipDays === 'number' && c.precipDays / days >= WET_DAY_SHARE,
+    cold: typeof c.tempLoF === 'number' && c.tempLoF <= COLD_LOW_F,
+  }
+}
+
 export function tripGearQuestions(trip, gearLibrary = []) {
   const types = tripTypes(trip)
   const owned = new Set(gearLibrary.map(g => g.id))
+  const hints = climateHints(trip)
+  const suggestion = o =>
+    (o.wet && hints.wet) ? 'likely wet' : (o.cold && hints.cold) ? 'likely cold' : null
   return GEAR_QUESTIONS
-    .filter(q => !q.when || types.includes(q.when))
+    .filter(q => !q.when || q.when.some(t => types.includes(t)))
     .map(q => ({
       ...q,
       items: gearLibrary.filter(g => q.categories.includes(g.category)),
-      options: q.options.filter(o => !o.rows.every(r => owned.has(r.id))),
+      options: q.options
+        .filter(o => !o.rows.every(r => owned.has(r.id)))
+        .map(o => ({ ...o, suggested: suggestion(o) })),
     }))
     .filter(q => q.items.length > 0 || q.options.length > 0)
 }
@@ -377,16 +425,32 @@ export function kitRows(answers, questions = GEAR_QUESTIONS) {
 // Answering builds the trip's kit AND grows the closet: slots that do not
 // exist yet are added to the gear library as blank rows (name, category, no
 // weight) and everything picked joins the trip, unpacked.
-export function applyTripKit(state, trip, answers, questions) {
+// `details` maps a row id to what the user said about the actual product
+// while answering — a name, a product URL, a weight the page gave up. Only
+// non-empty fields land, so leaving the detail row alone still produces the
+// blank slot it always did.
+function detailFields(d) {
+  const out = {}
+  if (d?.name?.trim?.()) out.name = d.name.trim()
+  if (d?.url?.trim?.()) out.url = d.url.trim()
+  if (typeof d?.weightOz === 'number' && Number.isFinite(d.weightOz) && d.weightOz > 0) out.weightOz = d.weightOz
+  return out
+}
+
+export function applyTripKit(state, trip, answers, questions, details = {}) {
   const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
   const rows = kitRows(answers, questions)
   trip.gear ??= []
   const inKit = new Set(trip.gear.map(e => e.gearId))
   for (const row of rows) {
+    const fields = detailFields(details[row.id])
     if (!byId.has(row.id)) {
-      const item = { id: row.id, name: row.name, category: row.category, weightOz: null }
+      const item = { id: row.id, name: row.name, category: row.category, weightOz: null, ...fields }
       state.gearLibrary.push(item)
       byId.set(row.id, item)
+    } else if (Object.keys(fields).length) {
+      // Naming it here is the same act as naming it on the gear screen.
+      Object.assign(byId.get(row.id), fields)
     }
     if (!inKit.has(row.id)) {
       trip.gear.push({ gearId: row.id })

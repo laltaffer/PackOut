@@ -1,8 +1,8 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, flyIssues, declinedIds, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, applyTripKit, copyKit, BRANDS, TRIP_TYPES } from './seed.js'
+import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, BRANDS, TRIP_TYPES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -47,14 +47,16 @@ function route() {
     if (trip) {
       if (outMatch[2] === 'grocery') return renderGrocery(trip)
       if (outMatch[2] === 'pack') return renderPack(trip)
-      if (outMatch[2] === 'gear') return renderGear(trip)
+      if (outMatch[2] === 'gear') { gearRowEditId = null; return renderGear(trip) }
       return renderReady(trip)
     }
   }
+  // The separate day editor retired into the board (Lawrence 2026-07-27) —
+  // old links and bookmarks land on the surface that now does its job.
   const editDayMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/edit$/)
   if (editDayMatch) {
-    const trip = state.trips.find(t => t.id === editDayMatch[1])
-    if (trip && trip.days[Number(editDayMatch[2])]) return renderDay(trip, Number(editDayMatch[2]))
+    location.replace(`#/trip/${editDayMatch[1]}/day/${editDayMatch[2]}`)
+    return
   }
   // Day summary opens ON the trip surface (unified strip→board morph).
   const dayMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)$/)
@@ -140,6 +142,62 @@ function tripDateRange(trip) {
 
 function fmt(n) {
   return Math.round(n).toLocaleString()
+}
+
+// What the destination lookup found, as one line. `last-year` is labelled as
+// history so nothing here reads as a promise about the week ahead.
+function conditionsLine(trip) {
+  const p = trip.place
+  if (!p) return ''
+  const bits = [p.label]
+  if (p.elevationFt !== null) bits.push(`${p.elevationFt.toLocaleString()} ft`)
+  const c = p.climate
+  if (c) {
+    if (c.tempLoF !== null && c.tempHiF !== null) bits.push(`${c.tempLoF}–${c.tempHiF}°F`)
+    if (c.precipDays !== null) bits.push(`rain ${c.precipDays} of ${c.days} days`)
+    bits.push(c.source === 'forecast' ? 'forecast' : 'last year, same week')
+  }
+  return bits.join(' · ')
+}
+
+// One caller for the product-page endpoint, shared by the food form, the gear
+// picker and the kit questions. Never throws — a dead fetch service is a
+// message, not a broken screen.
+async function fetchProduct(url) {
+  try {
+    const res = await fetch('/api/scrape', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    if (res.status === 401) return { ok: false, error: 'Sign in to fetch product pages.' }
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data) {
+      return { ok: false, error: `${data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`} Enter it by hand.` }
+    }
+    return { ok: true, ...data }
+  } catch {
+    return { ok: false, error: 'Couldn’t reach the fetch service — enter it by hand.' }
+  }
+}
+
+// Destination lookup (Lawrence 2026-07-27). Advisory: a miss leaves the typed
+// destination exactly as typed and the trip saves anyway.
+async function lookupDestination(query, startDate, days) {
+  try {
+    const res = await fetch('/api/place', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query, startDate, days }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data) return { ok: false, error: data?.error ?? 'Lookup unavailable.' }
+    return { ok: true, place: data }
+  } catch {
+    return { ok: false, error: 'Lookup unavailable — the trip keeps what you typed.' }
+  }
 }
 
 // ---------- dashboard ----------
@@ -291,6 +349,34 @@ function tripTypeFields(selected) {
     </fieldset>`
 }
 
+// The destination resolves while the form is still open (Lawrence 2026-07-27:
+// "on-the-fly lookup"). Advisory throughout — the trip saves with or without
+// it, and a stale in-flight answer never overwrites a newer one.
+function wireDestination(form, onPlace) {
+  const line = form.querySelector('#place-line')
+  const dest = form.elements['destination']
+  if (!line || !dest) return
+  let seq = 0
+  const run = async () => {
+    const query = dest.value.trim()
+    if (!query) { onPlace(null); line.textContent = ''; return }
+    const mine = ++seq
+    line.textContent = 'Looking it up…'
+    const days = Number(form.elements['days']?.value) || null
+    const res = await lookupDestination(query, form.elements['startDate']?.value || null, days)
+    if (mine !== seq) return
+    if (!res.ok) { onPlace(null); line.textContent = res.error; return }
+    onPlace(res.place)
+    line.textContent = conditionsLine({ place: res.place })
+  }
+  dest.addEventListener('change', run)
+  for (const name of ['startDate', 'days']) {
+    // Dates and length change the conditions, not the place — re-ask only
+    // once a destination is actually on the form.
+    form.elements[name]?.addEventListener('change', () => { if (dest.value.trim()) run() })
+  }
+}
+
 function mealStyleFromForm(f) {
   const pick = v => v === 'sitdown' ? 'sitdown' : 'mobile'
   return {
@@ -304,7 +390,7 @@ function renderNewTrip() {
   const last = [...state.trips].sort((a, b) => b.createdAt - a.createdAt)[0]
   app.replaceChildren(el(`
     <section class="form-screen">
-      <a href="#/" class="crumb">&larr; Trips</a>
+      <a href="#/" class="back">&larr; Trips</a>
       <h1>New Trip</h1>
       <form id="new-trip">
         <label>Trip name
@@ -312,6 +398,7 @@ function renderNewTrip() {
         </label>
         <label>Destination
           <input name="destination" required placeholder="Brooks Range, AK">
+          <small class="place-line" id="place-line">PackOut looks it up as you go — elevation and the week's conditions.</small>
         </label>
         ${tripTypeFields(state.profile?.tripTypes ?? [])}
         <label>Start date
@@ -329,6 +416,8 @@ function renderNewTrip() {
       </form>
     </section>
   `))
+  let foundPlace = null
+  wireDestination(document.getElementById('new-trip'), p => { foundPlace = p })
   document.getElementById('new-trip').addEventListener('submit', e => {
     e.preventDefault()
     const f = new FormData(e.target)
@@ -343,6 +432,7 @@ function renderNewTrip() {
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
     trip.types = f.getAll('tripType')
+    if (foundPlace) trip.place = foundPlace
     state.trips.push(trip)
     persist()
     // A new trip's kit is the next question, so land on the gear screen — it
@@ -356,7 +446,7 @@ function renderNewTrip() {
 function renderEditTrip(trip) {
   app.replaceChildren(el(`
     <section class="form-screen">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <h1>Edit Trip</h1>
       <form id="edit-trip">
         <label>Trip name
@@ -364,6 +454,11 @@ function renderEditTrip(trip) {
         </label>
         <label>Destination
           <input name="destination" required value="${esc(trip.destination)}">
+          <small class="place-line" id="place-line">${esc(conditionsLine(trip))}</small>
+        </label>
+        <label class="fly-toggle-inline">
+          <input type="checkbox" name="flying" ${trip.flying ? 'checked' : ''}>
+          <span>I'm flying to this trip</span>
         </label>
         <label>Start date
           <input name="startDate" type="date" required value="${trip.startDate}">
@@ -381,6 +476,8 @@ function renderEditTrip(trip) {
       </form>
     </section>
   `))
+  let foundPlace = null
+  wireDestination(document.getElementById('edit-trip'), p => { foundPlace = p })
   document.getElementById('edit-trip').addEventListener('submit', e => {
     e.preventDefault()
     const f = new FormData(e.target)
@@ -403,7 +500,9 @@ function renderEditTrip(trip) {
     trip.startDate = f.get('startDate')
     trip.weightLbs = Number(f.get('weightLbs'))
     trip.types = f.getAll('tripType')
+    trip.flying = f.get('flying') === 'on'
     trip.mealStyle = mealStyleFromForm(f)
+    if (foundPlace) trip.place = foundPlace
     persist()
     location.hash = `#/trip/${trip.id}`
   })
@@ -420,10 +519,11 @@ function renderTrip(trip, openDay = null) {
 
   app.replaceChildren(el(`
     <section class="trip-surface${openDay !== null ? ' day-open' : ''}" data-trip="${trip.id}">
-      <a href="${openDay !== null ? `#/trip/${trip.id}` : '#/'}" class="crumb" id="surface-crumb">${openDay !== null ? `&lsaquo; ${esc(trip.name)}` : '&larr; Trips'}</a>
+      <a href="${openDay !== null ? `#/trip/${trip.id}` : '#/'}" class="back" id="surface-back">${openDay !== null ? `&larr; ${esc(trip.name)}` : '&larr; Trips'}</a>
       <div class="trip-head">
         <h1>${esc(trip.name)}</h1>
         <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs · <a class="trip-edit-link" href="#/trip/${trip.id}/edit">Edit trip</a></p>
+        ${trip.place ? `<p class="trip-conditions mono">${esc(conditionsLine(trip))}</p>` : ''}
         <div id="rollup-slot">${tripRollupHTML(trip)}</div>
       </div>
       <nav class="trip-outputs">
@@ -495,35 +595,37 @@ function dayColumn(trip, day, i, openDay) {
     </a>`
 }
 
-// Board content is a day *summary* — always computed from the engine, never
-// constants (audit 2026-07-25). Editing lives one level deeper at /edit.
+// The board IS the day (Lawrence 2026-07-27: "it forces me to click into edit
+// this day"). Summary on the left, the real food list on the right with its
+// controls inline — one surface, nothing to navigate to in order to see or
+// change what you're eating. Always computed from the engine, never constants.
 function fillBoard(trip, i, { focus = true } = {}) {
   const day = trip.days[i]
   const board = document.getElementById('board')
   if (!board) return
   // A same-day re-render replaces the board's DOM; if the user was focused on
   // a control inside it, put focus back on its replacement (finish review).
+  // Every inline control carries a stable id so a qty tap keeps its button.
   const refocusId = !focus && board.contains(document.activeElement) ? document.activeElement.id : null
+  day.meals ??= emptyMeals()
   const t = dailyTargets(trip.weightLbs, day.intensity)
   const st = slotTargets(t)
   const planned = dayTotals(day, state.library)
   const hasPlan = planned.kcal > 0
   const v = hasPlan ? dayVerdict(day, trip.weightLbs, state.library) : null
   const delta = planned.kcal - t.kcal.target
-  const slotSub = key => sumEntries(day.meals?.[key] ?? [], state.library)
-  const names = list => list.map(e => {
-    const f = state.library.find(x => x.id === e.foodId)
-    const n = f ? f.name.replace('Peak Refuel ', '').replace(' (2 oz)', '').replace(' (per oz)', '') : '(deleted food)'
-    return e.qty > 1 ? `${esc(n)} ×${e.qty}` : esc(n)
-  }).join(' · ')
+  const slotSub = key => sumEntries(day.meals[key], state.library)
   const b = slotSub('breakfast')
   const inWin = b.kcal >= st.breakfast.kcalMin && b.kcal <= st.breakfast.kcalMax
-  const snacks = (day.meals?.snacks ?? []).flatMap(s => s.items)
+  const snacks = day.meals.snacks.flatMap(s => s.items)
   const snackSub = sumEntries(snacks, state.library)
   const din = slotSub('dinner')
-  const slotRow = (label, sub, dd, extra = '') => sub.kcal === 0 && !dd ? '' : `
-    <div class="slotrow"><span class="t">${label}</span><span class="n">${sub.kcal.toLocaleString()}</span>
-    ${dd ? `<span class="dd">${dd}</span>` : ''}${extra}</div>`
+  const staples = stapleIds(state.trips)
+  const suggs = v?.status === 'short'
+    ? suggestions({ kcalShort: v.kcalShort, proteinShortG: v.proteinShortG }, state.library, staples)
+    : []
+  const declined = [...declinedIds(trip)]
+
   board.innerHTML = `
     <div class="fc">
       <h2 id="board-title" tabindex="-1">Day ${i + 1} — ${dayDate(trip, i)}</h2>
@@ -533,42 +635,57 @@ function fillBoard(trip, i, { focus = true } = {}) {
             ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
           </select>
         </label>
-        <span>TARGET ${fmt(t.kcal.target)} KCAL · PROTEIN FLOOR ${t.proteinG.floor} G</span>
       </div>
       ${hasPlan ? `
       <div class="big"><span class="n">${planned.kcal.toLocaleString()}</span><span class="of">planned / ${fmt(t.kcal.target)} target · Δ ${delta >= 0 ? '+' : '−'}${Math.abs(delta).toLocaleString()}</span></div>
       <span class="obadge obadge-${v.status}">Outlook · ${VERDICT_LABELS[v.status]}</span>
       ${v.status !== 'fueled' ? `<p class="gap-line${v.status === 'heavy' ? ' gap-heavy' : ''}">${gapSentence(v)}</p>` : ''}
+      ${suggs.length ? `
+      <div class="suggs">
+        ${suggs.map(f => `
+          <button class="sugg" id="sugg-${esc(f.id)}" data-sugg="${esc(f.id)}">
+            + ${esc(f.name)} <span class="mono">${f.kcal} kcal${v.proteinShortG > 0 && f.proteinG ? ` · ${f.proteinG}g P` : ''}</span>
+          </button>`).join('')}
+      </div>` : ''}
       <div class="discussion">
         <div class="k">Forecast discussion</div>
-        <p>${forecastDiscussion(day, t, st, planned, v, b, din, snackSub)}</p>
+        <p>${forecastDiscussion(day, st, planned, v, b, din, snackSub)}</p>
       </div>
+      <dl class="targets day-macros mono">
+        <div><dt>Carbs</dt><dd>${planned.carbsG} / ${t.carbsG.min}–${t.carbsG.max} g</dd></div>
+        <div><dt>Protein</dt><dd>${planned.proteinG} g</dd></div>
+        <div><dt>Fat</dt><dd>${planned.fatG} / ${t.fatG.min}–${t.fatG.max} g</dd></div>
+        <div><dt>Weight</dt><dd>${planned.weightOz} oz${planned.missingWeightCount ? ` <span class="floor">+${planned.missingWeightCount} unweighed</span>` : ''}</dd></div>
+        ${planned.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${planned.calsPerOz}</dd></div>` : ''}
+      </dl>
       <div class="editrow">
-        <a class="btn btn-primary" href="#/trip/${trip.id}/day/${i}/edit">Edit this day</a>
-      </div>` : `
+        <button class="btn ${hasPlan ? '' : 'btn-primary'}" id="board-draft">${hasPlan ? 'Re-draft' : 'Draft this day'}</button>
+        <button class="btn" id="board-draft-opt">Optimized</button>
+      </div>
+      ${declined.length ? `
+      <p class="declined-note">
+        ${declined.length} food${declined.length > 1 ? 's' : ''} excluded from drafts on this trip.
+        <button class="btn-quiet" id="undo-declines">Allow them again</button>
+      </p>` : ''}
+      ${dayTransferHTML(trip, i)}` : `
       <div class="big"><span class="n">—</span><span class="of">nothing planned · target ${fmt(t.kcal.target)} kcal</span></div>
       <span class="obadge obadge-none">No plan yet</span>
       <div class="editrow">
         <button class="btn btn-primary" id="board-draft">Draft this day</button>
-        <a class="btn" href="#/trip/${trip.id}/day/${i}/edit">Build by hand</a>
-      </div>`}
+        <button class="btn" id="board-draft-opt">Optimized draft</button>
+      </div>
+      <p class="draft-note">…or add food to any meal on the right.</p>
+      ${dayTransferHTML(trip, i)}`}
     </div>
     <div class="board-slots">
-      ${slotRow('Breakfast', b, names(day.meals?.breakfast ?? []),
+      ${boardSlot(trip, i, 'breakfast', 'Breakfast', b, day.meals.breakfast,
         b.kcal ? `<span class="w ${inWin ? 'in' : 'out'}">${inWin ? 'In window' : 'Outside window'} ${st.breakfast.kcalMin}–${st.breakfast.kcalMax}</span>` : '')}
-      ${slotRow('Lunch', slotSub('lunch'), names(day.meals?.lunch ?? []))}
-      ${slotRow('Dinner', din, names(day.meals?.dinner ?? []))}
-      ${snacks.length ? slotRow(`Snacks · ${day.meals.snacks.length} bundle${day.meals.snacks.length > 1 ? 's' : ''}`, snackSub, names(snacks)) : ''}
-      ${slotRow('Electrolytes', slotSub('electrolytes'), names(day.meals?.electrolytes ?? []))}
+      ${boardSlot(trip, i, 'lunch', 'Lunch', slotSub('lunch'), day.meals.lunch)}
+      ${boardSlot(trip, i, 'dinner', 'Dinner', din, day.meals.dinner)}
+      ${boardSnacks(trip, i, day, snackSub)}
+      ${boardSlot(trip, i, 'electrolytes', 'Electrolytes', slotSub('electrolytes'), day.meals.electrolytes)}
     </div>`
-  const sel = document.getElementById('board-intensity')
-  if (sel) sel.addEventListener('change', e => { day.intensity = e.target.value; commit() })
-  const draftBtn = document.getElementById('board-draft')
-  if (draftBtn) draftBtn.addEventListener('click', () => {
-    day.meals = draftDay(trip, i, state.library, stapleIds(state.trips), 'usual')
-    delete day.packed
-    commit()
-  })
+  wireBoard(trip, i, day)
   const announce = document.getElementById('announce')
   if (announce) announce.textContent = hasPlan
     ? `Day ${i + 1} — outlook ${VERDICT_LABELS[v.status]}`
@@ -577,7 +694,83 @@ function fillBoard(trip, i, { focus = true } = {}) {
   else if (refocusId) document.getElementById(refocusId)?.focus()
 }
 
-function forecastDiscussion(day, t, st, planned, v, b, din, snackSub) {
+// One editable meal. The slot's own numbers stay on the header line; the
+// entries below carry the controls that used to live behind "Edit this day".
+function boardSlot(trip, i, key, label, sub, entries, extra = '') {
+  return `
+    <section class="slotrow" data-slot="${key}">
+      <div class="slotrow-head">
+        <span class="t">${label}</span>
+        <span class="n">${sub.kcal.toLocaleString()}</span>
+        ${extra}
+      </div>
+      ${entries.length ? `<ul class="entries">${entryRows(entries, key)}</ul>` : ''}
+      <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/${key}">+ Add to ${label.toLowerCase()}</a>
+    </section>`
+}
+
+function boardSnacks(trip, i, day, snackSub) {
+  const bundles = day.meals.snacks
+  return `
+    <section class="slotrow" data-slot="snacks">
+      <div class="slotrow-head">
+        <span class="t">Snacks${bundles.length ? ` · ${bundles.length}` : ''}</span>
+        <span class="n">${snackSub.kcal.toLocaleString()}</span>
+      </div>
+      ${bundles.map((s, sIdx) => `
+        <div class="snack-bundle">
+          <div class="snack-head">
+            <h3>Snack ${sIdx + 1}</h3>
+            <span class="slot-sub mono">${sumEntries(s.items, state.library).kcal.toLocaleString()} kcal</span>
+            <button id="rm-snack-${sIdx}" data-rm-snack="${sIdx}" aria-label="Remove snack ${sIdx + 1}">×</button>
+          </div>
+          ${s.items.length ? `<ul class="entries">${entryRows(s.items, `snack-${sIdx}`)}</ul>` : ''}
+          <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/snack-${sIdx}">+ Add item</a>
+        </div>`).join('')}
+      <button class="btn-add" id="add-snack" type="button">+ Add snack</button>
+    </section>`
+}
+
+// Copying a proven day in beats retyping it. Tucked behind a disclosure — it's
+// a real capability, not a thing you reach for every visit.
+function dayTransferHTML(trip, i) {
+  const others = trip.days.map((_, j) => j).filter(j => j !== i)
+  const imports = plannedDayOptions(state.trips, state.library)
+    .filter(o => !(o.tripId === trip.id && o.dayIndex === i))
+  if (!others.length && !imports.length) return ''
+  const byTrip = new Map()
+  for (const o of imports) {
+    if (!byTrip.has(o.tripId)) byTrip.set(o.tripId, { name: o.tripName, days: [] })
+    byTrip.get(o.tripId).days.push(o)
+  }
+  return `
+    <details class="day-transfer">
+      <summary>Copy or import a day</summary>
+      ${others.length ? `
+      <div class="transfer-row">
+        <label>Copy this day to
+          <select id="copy-target">
+            ${others.map(j => `<option value="${j}">Day ${j + 1} — ${dayDate(trip, j)}</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn" id="copy-apply" type="button">Copy</button>
+      </div>` : ''}
+      ${imports.length ? `
+      <div class="transfer-row">
+        <label>Import a plan from
+          <select id="import-source">
+            ${[...byTrip.values()].map(g => `
+              <optgroup label="${esc(g.name)}">
+                ${g.days.map(o => `<option value="${esc(o.tripId)}:${o.dayIndex}">Day ${o.dayIndex + 1} — ${o.kcal.toLocaleString()} kcal</option>`).join('')}
+              </optgroup>`).join('')}
+          </select>
+        </label>
+        <button class="btn" id="import-apply" type="button">Import</button>
+      </div>` : ''}
+    </details>`
+}
+
+function forecastDiscussion(day, st, planned, v, b, din, snackSub) {
   const parts = []
   parts.push(`${day.intensity === 'easy' ? 'An' : 'A'} ${day.intensity} day ${v.status === 'fueled' ? 'in the window' : v.status === 'short' ? 'running short' : 'running heavy'}.`)
   if (b.kcal) parts.push(`Breakfast holds ${b.kcal.toLocaleString()} kcal ${b.kcal >= st.breakfast.kcalMin && b.kcal <= st.breakfast.kcalMax ? 'inside' : 'outside'} its ${st.breakfast.kcalMin}–${st.breakfast.kcalMax} band;`)
@@ -585,8 +778,7 @@ function forecastDiscussion(day, t, st, planned, v, b, din, snackSub) {
     const gap = din.kcal - st.dinner.kcal
     parts.push(`dinner runs ${Math.abs(gap).toLocaleString()} ${gap < 0 ? 'under' : 'over'} its share${snackSub.kcal ? ` and snacks carry ${snackSub.kcal.toLocaleString()} kcal` : ''}.`)
   }
-  const pOver = planned.proteinG - t.proteinG.floor
-  parts.push(pOver >= 0 ? `Protein finishes ${pOver} g above the floor.` : `Protein sits ${Math.abs(pOver)} g under the floor.`)
+  parts.push(`Protein comes to ${planned.proteinG} g.`)
   parts.push(`Pack weight: ${planned.weightOz} oz logged${planned.missingWeightCount ? `, ${planned.missingWeightCount} item${planned.missingWeightCount > 1 ? 's' : ''} unweighed` : ''}.`)
   return parts.join(' ')
 }
@@ -628,10 +820,10 @@ function updateTripSurface(surface, trip, openDay) {
       target?.focus()
     }
   }
-  const crumb = document.getElementById('surface-crumb')
-  if (crumb) {
-    crumb.setAttribute('href', openDay !== null ? `#/trip/${trip.id}` : '#/')
-    crumb.innerHTML = openDay !== null ? `&lsaquo; ${esc(trip.name)}` : '&larr; Trips'
+  const back = document.getElementById('surface-back')
+  if (back) {
+    back.setAttribute('href', openDay !== null ? `#/trip/${trip.id}` : '#/')
+    back.innerHTML = openDay !== null ? `&larr; ${esc(trip.name)}` : '&larr; Trips'
   }
   if (openDay !== null) lastOpenDay = openDay
   wireTripSurface(trip)
@@ -691,10 +883,6 @@ window.addEventListener('keydown', e => {
 
 const VERDICT_LABELS = { fueled: 'Fueled', short: 'Short', heavy: 'Heavy' }
 
-function verdictBadge(v) {
-  return `<span class="badge badge-${v.status}">${VERDICT_LABELS[v.status]}</span>`
-}
-
 function gapSentence(v) {
   if (v.status === 'heavy') return `${v.kcalOver.toLocaleString()} kcal over the 115% line — extra weight, your call.`
   const parts = []
@@ -719,189 +907,74 @@ function resolveEntries(day, key) {
     : day.meals[key]
 }
 
+// Ids are stable across a re-render so a qty tap keeps focus on its own button
+// (the board rebuilds on every commit).
 function entryRows(entries, slotKey) {
   return entries.map((e, j) => {
     const f = state.library.find(x => x.id === e.foodId)
+    const name = esc(foodName(e.foodId))
     return `
       <li class="entry">
-        <span class="entry-name">${esc(foodName(e.foodId))}</span>
+        <span class="entry-name">${name}</span>
         <span class="entry-kcal mono">${f ? sumEntries([e], state.library).kcal.toLocaleString() + ' kcal' : '—'}</span>
         <span class="entry-ctl">
-          <button data-qty="${slotKey}:${j}:-1" aria-label="Less ${esc(foodName(e.foodId))}">−</button>
+          <button id="qty-${slotKey}-${j}-down" data-qty="${slotKey}:${j}:-1" aria-label="Less ${name}">−</button>
           <span class="qty mono">${e.qty}</span>
-          <button data-qty="${slotKey}:${j}:1" aria-label="More ${esc(foodName(e.foodId))}">+</button>
-          <button data-rm="${slotKey}:${j}" aria-label="Remove ${esc(foodName(e.foodId))}">×</button>
+          <button id="qty-${slotKey}-${j}-up" data-qty="${slotKey}:${j}:1" aria-label="More ${name}">+</button>
+          <button id="rm-${slotKey}-${j}" data-rm="${slotKey}:${j}" aria-label="Remove ${name}">×</button>
         </span>
       </li>`
   }).join('')
 }
 
-function slotSection(trip, i, slotKey, entries, targetLine) {
-  const sub = sumEntries(entries, state.library)
-  return `
-    <section class="slot">
-      <div class="slot-head">
-        <h2>${SLOT_LABELS[slotKey]}</h2>
-        ${targetLine ? `<span class="slot-target mono">${targetLine}</span>` : ''}
-      </div>
-      <ul class="entries">${entryRows(entries, slotKey)}</ul>
-      <div class="slot-foot">
-        <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/${slotKey}">+ Add food</a>
-        ${entries.length ? `<span class="slot-sub mono">${sub.kcal.toLocaleString()} kcal · C ${sub.carbsG}g · P ${sub.proteinG}g</span>` : ''}
-      </div>
-    </section>`
+// Taking a food off a day is a standing decision for this trip: drafting must
+// not hand it straight back (Lawrence 2026-07-27, the pico de gallo loop).
+function decline(trip, foodId) {
+  trip.declined ??= []
+  if (!trip.declined.includes(foodId)) trip.declined.push(foodId)
 }
 
-function renderDay(trip, i) {
-  const day = trip.days[i]
-  day.meals ??= emptyMeals()
-  const targets = dailyTargets(trip.weightLbs, day.intensity)
-  const st = slotTargets(targets)
-  const totals = dayTotals(day, state.library)
-  const otherDays = trip.days.map((_, j) => j).filter(j => j !== i)
-  const v = dayVerdict(day, trip.weightLbs, state.library)
-  const staples = stapleIds(state.trips)
-  const suggs = v.status === 'short'
-    ? suggestions({ kcalShort: v.kcalShort, proteinShortG: v.proteinShortG }, state.library, staples)
-    : []
-  const verdictBlock = totals.kcal === 0 ? '' : `
-    <div class="verdict verdict-${v.status}">
-      ${verdictBadge(v)}
-      <span class="gap">${gapSentence(v)}</span>
-      ${suggs.length ? `
-        <div class="suggs">
-          ${suggs.map(f => `
-            <button class="sugg" data-sugg="${f.id}">
-              + ${esc(f.name)} <span class="mono">${f.kcal} kcal${v.proteinShortG > 0 && f.proteinG ? ` · ${f.proteinG}g P` : ''}</span>
-            </button>`).join('')}
-        </div>` : ''}
-    </div>`
-  app.replaceChildren(el(`
-    <section class="day-screen">
-      <a href="#/trip/${trip.id}/day/${i}" class="crumb">&lsaquo; Day ${i + 1} forecast</a>
-      <div class="day-screen-head">
-        <h1>Day ${i + 1}</h1>
-        <span class="day-date">${dayDate(trip, i)}</span>
-        <label class="intensity">
-          <span class="intensity-label">Effort</span>
-          <select id="day-intensity">
-            ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-      <dl class="targets day-totals mono">
-        <div class="totals-legend"><dt></dt><dd>planned / target</dd></div>
-        <div><dt>kcal</dt><dd>${totals.kcal.toLocaleString()} / ${fmt(targets.kcal.target)}</dd></div>
-        <div><dt>Carbs</dt><dd>${totals.carbsG} / ${targets.carbsG.min}–${targets.carbsG.max} g</dd></div>
-        <div><dt>Protein</dt><dd>${totals.proteinG} / ${targets.proteinG.min}–${targets.proteinG.max} g</dd></div>
-        <div><dt>Fat</dt><dd>${totals.fatG} / ${targets.fatG.min}–${targets.fatG.max} g</dd></div>
-        <div><dt>Weight</dt><dd>${totals.weightOz} oz${totals.missingWeightCount ? ` <span class="floor">+${totals.missingWeightCount} unweighed</span>` : ''}</dd></div>
-        ${totals.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${totals.calsPerOz}</dd></div>` : ''}
-      </dl>
-      ${totals.kcal === 0 ? `
-      <section class="draft-panel">
-        <p class="draft-lead">Let PackOut propose this day from your usual food — then edit anything.</p>
-        <div class="backup-actions">
-          <button class="btn btn-primary" data-draft="usual">Draft this day</button>
-          <button class="btn" data-draft="optimized">Optimized draft</button>
-        </div>
-        <p class="draft-note">…or build it manually below.</p>
-      </section>` : ''}
-      ${verdictBlock}
-      ${totals.kcal > 0 ? `
-      <div class="draft-redo">
-        <span class="draft-note">Re-propose this day (replaces the current plan):</span>
-        <button class="btn" data-draft="usual">Draft</button>
-        <button class="btn" data-draft="optimized">Optimized</button>
-      </div>` : ''}
-      ${slotSection(trip, i, 'electrolytes', day.meals.electrolytes, '')}
-      ${slotSection(trip, i, 'breakfast', day.meals.breakfast, `${st.breakfast.kcalMin}–${st.breakfast.kcalMax} kcal · ${st.breakfast.carbsMinG}–${st.breakfast.carbsMaxG}g C`)}
-      ${slotSection(trip, i, 'lunch', day.meals.lunch, '')}
-      ${slotSection(trip, i, 'dinner', day.meals.dinner, `~${st.dinner.kcal} kcal · ≥${st.dinner.carbsMinG}g C · ≥${st.dinner.proteinMinG}g P`)}
-      <section class="slot">
-        <div class="slot-head">
-          <h2>Snacks</h2>
-          <span class="slot-target mono">each ~${st.snack.kcal} kcal · ${st.snack.carbsMinG}–${st.snack.carbsMaxG}g C</span>
-        </div>
-        ${day.meals.snacks.map((snack, sIdx) => {
-          const sub = sumEntries(snack.items, state.library)
-          return `
-          <div class="snack-bundle">
-            <div class="snack-head">
-              <h3>Snack ${sIdx + 1}</h3>
-              <span class="slot-sub mono">${sub.kcal.toLocaleString()} kcal · C ${sub.carbsG}g</span>
-              <button data-rm-snack="${sIdx}" aria-label="Remove snack ${sIdx + 1}">×</button>
-            </div>
-            <ul class="entries">${entryRows(snack.items, `snack-${sIdx}`)}</ul>
-            <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/snack-${sIdx}">+ Add item</a>
-          </div>`
-        }).join('')}
-        <button class="btn" id="add-snack">+ Add Snack</button>
-      </section>
-      ${otherDays.length ? `
-      <section class="copy-day">
-        <label>Copy this day's plan to
-          <select id="copy-target">
-            ${otherDays.map(j => `<option value="${j}">Day ${j + 1} — ${dayDate(trip, j)}</option>`).join('')}
-          </select>
-        </label>
-        <button class="btn" id="copy-apply">Copy</button>
-      </section>` : ''}
-      ${importOptions(trip, i)}
-    </section>
-  `))
+function wireBoard(trip, i, day) {
+  const on = (id, ev, fn) => document.getElementById(id)?.addEventListener(ev, fn)
+  on('board-intensity', 'change', e => { day.intensity = e.target.value; commit() })
 
-  document.getElementById('day-intensity').addEventListener('change', e => {
-    day.intensity = e.target.value
-    commit()
-  })
-  document.getElementById('add-snack').addEventListener('click', () => {
-    day.meals.snacks.push({ items: [] })
-    commit()
-  })
-  app.querySelectorAll('[data-draft]').forEach(btn => btn.addEventListener('click', () => {
+  const draft = strategy => {
     const current = dayTotals(day, state.library)
     if (current.kcal > 0) {
       const count = dayPackList(day, state.library).length
-      const ok = confirm(
-        `Day ${i + 1} already has ${count} item${count > 1 ? 's' : ''} planned — ` +
-        `drafting replaces that work and resets this day's packed marks.`)
-      if (!ok) return
+      if (!confirm(`Day ${i + 1} already has ${count} item${count > 1 ? 's' : ''} planned — drafting replaces that work and resets this day's packed marks.`)) return
     }
-    day.meals = draftDay(trip, i, state.library, stapleIds(state.trips), btn.dataset.draft)
+    day.meals = draftDay(trip, i, state.library, stapleIds(state.trips), strategy)
     delete day.packed
     commit()
-  }))
-  wireImportDay(trip, i, day)
-  const copyApply = document.getElementById('copy-apply')
-  if (copyApply) copyApply.addEventListener('click', () => {
-    const j = Number(document.getElementById('copy-target').value)
-    if (confirm(`Replace Day ${j + 1}'s plan with Day ${i + 1}'s?`)) {
-      trip.days[j].meals = structuredClone(day.meals)
-      delete trip.days[j].packed // new plan, stale marks would lie
-      persist()
-      location.hash = `#/trip/${trip.id}/day/${j}`
-    }
-  })
+  }
+  on('board-draft', 'click', () => draft('usual'))
+  on('board-draft-opt', 'click', () => draft('optimized'))
+  on('undo-declines', 'click', () => { delete trip.declined; commit() })
+  on('add-snack', 'click', () => { day.meals.snacks.push({ items: [] }); commit() })
 
-  app.querySelectorAll('[data-qty]').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('#board [data-qty]').forEach(btn => btn.addEventListener('click', () => {
     const [key, j, delta] = btn.dataset.qty.split(':')
     const entry = resolveEntries(day, key)[Number(j)]
     entry.qty = Math.max(1, entry.qty + Number(delta))
     commit()
   }))
-  app.querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('#board [data-rm]').forEach(btn => btn.addEventListener('click', () => {
     const [key, j] = btn.dataset.rm.split(':')
-    resolveEntries(day, key).splice(Number(j), 1)
+    const [removed] = resolveEntries(day, key).splice(Number(j), 1)
+    if (removed) decline(trip, removed.foodId)
     commit()
   }))
-  app.querySelectorAll('[data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
-    day.meals.snacks.splice(Number(btn.dataset.rmSnack), 1)
+  document.querySelectorAll('#board [data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
+    const [bundle] = day.meals.snacks.splice(Number(btn.dataset.rmSnack), 1)
+    for (const e of bundle?.items ?? []) decline(trip, e.foodId)
     commit()
   }))
-  app.querySelectorAll('[data-sugg]').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('#board [data-sugg]').forEach(btn => btn.addEventListener('click', () => {
     const food = state.library.find(f => f.id === btn.dataset.sugg)
     if (!food) return
+    // Accepting a suggestion un-declines it: the user just asked for it back.
+    if (trip.declined?.includes(food.id)) trip.declined = trip.declined.filter(id => id !== food.id)
     if (food.slotHint === 'snack') {
       day.meals.snacks.push({ items: [{ foodId: food.id, qty: 1 }] })
     } else {
@@ -912,47 +985,27 @@ function renderDay(trip, i) {
     }
     commit()
   }))
-}
 
-// Import a planned day from any trip — proven meals over manual re-entry.
-function importOptions(trip, i) {
-  const options = plannedDayOptions(state.trips, state.library)
-    .filter(o => !(o.tripId === trip.id && o.dayIndex === i))
-  if (!options.length) return ''
-  const byTrip = new Map()
-  for (const o of options) {
-    if (!byTrip.has(o.tripId)) byTrip.set(o.tripId, { name: o.tripName, days: [] })
-    byTrip.get(o.tripId).days.push(o)
-  }
-  return `
-    <section class="copy-day">
-      <label>Import a day's plan from
-        <select id="import-source">
-          ${[...byTrip.values()].map(g => `
-            <optgroup label="${esc(g.name)}">
-              ${g.days.map(o => `<option value="${o.tripId}:${o.dayIndex}">Day ${o.dayIndex + 1} — ${o.kcal.toLocaleString()} kcal</option>`).join('')}
-            </optgroup>`).join('')}
-        </select>
-      </label>
-      <button class="btn" id="import-apply">Import</button>
-    </section>`
-}
-
-function wireImportDay(trip, i, day) {
-  const btn = document.getElementById('import-apply')
-  if (!btn) return
-  btn.addEventListener('click', () => {
+  on('copy-apply', 'click', () => {
+    const j = Number(document.getElementById('copy-target').value)
+    if (!confirm(`Replace Day ${j + 1}'s plan with Day ${i + 1}'s?`)) return
+    trip.days[j].meals = structuredClone(day.meals)
+    delete trip.days[j].packed // new plan, stale marks would lie
+    persist()
+    location.hash = `#/trip/${trip.id}/day/${j}`
+  })
+  on('import-apply', 'click', () => {
     const [tripId, dayIndex] = document.getElementById('import-source').value.split(':')
-    const source = state.trips.find(t => t.id === tripId)?.days[Number(dayIndex)]
+    const sourceTrip = state.trips.find(t => t.id === tripId)
+    const source = sourceTrip?.days[Number(dayIndex)]
     if (!source) return
-    const sourceName = state.trips.find(t => t.id === tripId).name
-    if (confirm(`Replace Day ${i + 1}'s plan with ${sourceName} Day ${Number(dayIndex) + 1}'s?`)) {
-      day.meals = structuredClone(source.meals)
-      delete day.packed
-      commit()
-    }
+    if (!confirm(`Replace Day ${i + 1}'s plan with ${sourceTrip.name} Day ${Number(dayIndex) + 1}'s?`)) return
+    day.meals = structuredClone(source.meals)
+    delete day.packed
+    commit()
   })
 }
+
 
 let pickerSearch = ''
 
@@ -967,7 +1020,7 @@ function renderPicker(trip, i, slotKey) {
   const slotLabel = slotKey.startsWith('snack-') ? `Snack ${Number(slotKey.slice(6)) + 1}` : SLOT_LABELS[slotKey]
   app.replaceChildren(el(`
     <section class="picker">
-      <a href="#/trip/${trip.id}/day/${i}/edit" class="crumb">&larr; Day ${i + 1}</a>
+      <a href="#/trip/${trip.id}/day/${i}" class="back">&larr; Day ${i + 1}</a>
       <h1>Add to ${slotLabel}</h1>
       <input id="picker-search" type="search" placeholder="Search foods…" value="${esc(pickerSearch)}" aria-label="Search foods">
       <ul class="food-list">
@@ -994,9 +1047,13 @@ function renderPicker(trip, i, slotKey) {
     const existing = entries.find(e => e.foodId === btn.dataset.pick)
     if (existing) existing.qty += 1
     else entries.push({ foodId: btn.dataset.pick, qty: 1 })
+    // Adding it back by hand overrides the standing decline.
+    if (trip.declined?.includes(btn.dataset.pick)) {
+      trip.declined = trip.declined.filter(id => id !== btn.dataset.pick)
+    }
     persist()
     pickerSearch = ''
-    location.hash = `#/trip/${trip.id}/day/${i}/edit`
+    location.hash = `#/trip/${trip.id}/day/${i}`
   }))
 }
 
@@ -1007,7 +1064,7 @@ function renderGrocery(trip) {
   const rows = groceryList(trip, state.library)
   app.replaceChildren(el(`
     <section class="output">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <div class="dashboard-head">
         <h1>Grocery</h1>
         <button class="btn" id="print">Print</button>
@@ -1017,9 +1074,9 @@ function renderGrocery(trip) {
         ${rows.map(r => `
           <li>
             <label class="check-row">
-              <input type="checkbox" data-check="${r.foodId}" data-count="${r.count}" ${trip.groceryChecked[r.foodId] === r.count ? 'checked' : ''}>
+              <span class="check-lead mono">×${r.count}</span>
               <span class="check-name ${trip.groceryChecked[r.foodId] === r.count ? 'is-done' : ''}">${esc(r.name)}</span>
-              <span class="check-qty mono">×${r.count}</span>
+              <input type="checkbox" data-check="${esc(r.foodId)}" data-count="${r.count}" ${trip.groceryChecked[r.foodId] === r.count ? 'checked' : ''}>
             </label>
           </li>`).join('')}
       </ul>`}
@@ -1037,7 +1094,7 @@ function renderGrocery(trip) {
 function renderPack(trip) {
   app.replaceChildren(el(`
     <section class="output">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <div class="dashboard-head">
         <h1>Pack Plan</h1>
         <button class="btn" id="print">Print</button>
@@ -1052,9 +1109,9 @@ function renderPack(trip) {
             ${items.map(it => `
               <li>
                 <label class="check-row">
-                  <input type="checkbox" data-pack="${i}:${it.foodId}" data-qty="${it.qty}" ${day.packed?.[it.foodId] === it.qty ? 'checked' : ''}>
+                  <span class="check-lead mono">×${it.qty}</span>
                   <span class="check-name ${day.packed?.[it.foodId] === it.qty ? 'is-done' : ''}">${esc(it.name)}</span>
-                  <span class="check-qty mono">×${it.qty}</span>
+                  <input type="checkbox" data-pack="${i}:${esc(it.foodId)}" data-qty="${it.qty}" ${day.packed?.[it.foodId] === it.qty ? 'checked' : ''}>
                 </label>
               </li>`).join('')}
           </ul>`}
@@ -1102,7 +1159,7 @@ function renderGear(trip) {
     .filter(g => g.entries.length > 0)
   app.replaceChildren(el(`
     <section class="output">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <div class="dashboard-head">
         <h1>Gear</h1>
         <button class="btn" id="print">Print</button>
@@ -1110,6 +1167,10 @@ function renderGear(trip) {
       ${trip.gear.length ? `
       <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.weightOz ? ` · ${stats.weightOz} oz on your back` : ''}${stats.wornOz ? ` · ${stats.wornOz} oz worn` : ''}${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>` : `
       <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
+      <label class="fly-toggle">
+        <input type="checkbox" id="trip-flying" ${trip.flying ? 'checked' : ''}>
+        <span>I'm flying to this trip</span>
+      </label>
       <div class="backup-actions gear-actions">
         <a class="btn" href="#/trip/${trip.id}/gear/kit">Build from questions</a>
         <a class="btn" href="#/trip/${trip.id}/gear/add">Add item</a>
@@ -1122,28 +1183,19 @@ function renderGear(trip) {
         </label>
         <button class="btn" id="gear-import">Import</button>` : ''}
       </div>
+      ${flyBlockHTML(trip)}
       ${grouped.map(g => `
         <section class="pack-day">
           <h2>${esc(g.cat)}</h2>
           <ul class="check-list">
-            ${g.entries.map(e => {
-              const item = byId.get(e.gearId)
-              return `
-              <li>
-                <label class="check-row">
-                  <input type="checkbox" data-gear-pack="${e.gearId}" ${e.packed ? 'checked' : ''}>
-                  <span class="check-name ${e.packed ? 'is-done' : ''}">${esc(item.name)}</span>
-                  <span class="check-qty mono">${item.weightOz !== null ? `${item.weightOz} oz` : ''}</span>
-                  <button class="btn-quiet" data-gear-rm="${e.gearId}" aria-label="Remove ${esc(item.name)}">×</button>
-                </label>
-              </li>`
-            }).join('')}
+            ${g.entries.map(e => gearRow(byId.get(e.gearId), e)).join('')}
           </ul>
           <a class="btn-add gear-add" href="#/trip/${trip.id}/gear/add" data-gear-cat="${esc(g.cat)}">+ Add to ${esc(g.cat)}</a>
         </section>`).join('')}
     </section>
   `))
   wirePrint()
+  wireGearRows(trip)
   // Section CTAs open the picker scoped to their category: the search
   // prefilters the library and the new-item form starts on that category.
   app.querySelectorAll('[data-gear-cat]').forEach(a => a.addEventListener('click', () => {
@@ -1165,70 +1217,309 @@ function renderGear(trip) {
       commit()
     }
   })
+  document.getElementById('trip-flying').addEventListener('change', e => {
+    trip.flying = e.target.checked
+    commit()
+  })
+}
+
+// A row that still carries its question's generic name and no weight is a
+// slot, not a decision. Saying so is the whole point of the note: "there is
+// nothing that lets me specify what I'm actually bringing."
+function isBlankSlot(item) {
+  return item.id.startsWith('ob-') && item.weightOz === null && !item.url
+}
+
+// The gear list edits in place (Lawrence 2026-07-27) — name it, paste the
+// product page, take the weight off it, without leaving for the picker.
+// Buttons sit outside the label so a tap on Specify never toggles Packed.
+function gearRow(item, entry) {
+  const open = gearRowEditId === item.id
+  const blank = isBlankSlot(item)
+  const cb = `gp-${esc(item.id)}`
+  return `
+    <li class="gear-item">
+      <div class="check-row gear-row${blank ? ' is-blank' : ''}">
+        <label class="check-name ${entry.packed ? 'is-done' : ''}" for="${cb}">${esc(item.name)}</label>
+        <span class="check-meta mono">${item.weightOz !== null ? `${item.weightOz} oz` : 'no weight'}</span>
+        <button class="btn-quiet" data-gear-edit-row="${esc(item.id)}" aria-expanded="${open}">${blank ? 'Specify' : 'Edit'}</button>
+        <button class="btn-quiet gear-rm" data-gear-rm="${esc(item.id)}" aria-label="Remove ${esc(item.name)} from this trip">&times;</button>
+        <input id="${cb}" type="checkbox" data-gear-pack="${esc(item.id)}" ${entry.packed ? 'checked' : ''}>
+      </div>
+      ${open ? `
+      <form class="gear-inline" id="gear-inline">
+        <label>What is it?<input name="name" required value="${esc(item.name)}" placeholder="Kifaru SuperTarp"></label>
+        <label>Product page URL<input name="url" type="url" value="${esc(item.url ?? '')}" placeholder="https://kifaru.net/products/…"></label>
+        <div class="fetch-row">
+          <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
+          <span class="fetch-status mono" role="status" id="scrape-status"></span>
+        </div>
+        <div class="macro-grid">
+          <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${item.weightOz ?? ''}"></label>
+          <label>Category
+            <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === item.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
+          </label>
+        </div>
+        <div class="onboard-actions">
+          <button class="btn btn-primary" type="submit">Save</button>
+          <button class="btn-quiet" type="button" id="gear-inline-cancel">Cancel</button>
+        </div>
+      </form>` : ''}
+    </li>`
+}
+
+function wireGearRows(trip) {
   app.querySelectorAll('[data-gear-pack]').forEach(cb => cb.addEventListener('change', () => {
     const entry = trip.gear.find(e => e.gearId === cb.dataset.gearPack)
     entry.packed = cb.checked
     commit()
   }))
-  app.querySelectorAll('[data-gear-rm]').forEach(btn => btn.addEventListener('click', e => {
-    e.preventDefault()
+  app.querySelectorAll('[data-gear-rm]').forEach(btn => btn.addEventListener('click', () => {
     trip.gear = trip.gear.filter(x => x.gearId !== btn.dataset.gearRm)
     commit()
   }))
+  app.querySelectorAll('[data-gear-edit-row]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.gearEditRow
+    gearRowEditId = gearRowEditId === id ? null : id
+    renderGear(trip)
+    document.querySelector(`[data-gear-edit-row="${CSS.escape(id)}"]`)?.focus()
+  }))
+  const form = document.getElementById('gear-inline')
+  if (!form) return
+  const item = state.gearLibrary.find(g => g.id === gearRowEditId)
+  document.getElementById('gear-inline-cancel').addEventListener('click', () => {
+    gearRowEditId = null
+    renderGear(trip)
+  })
+  form.addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    // The edit lands on the library row, so every trip sharing this slot gets
+    // the real item — that is what makes naming it once worth doing.
+    Object.assign(item, {
+      name: f.get('name').trim(),
+      category: f.get('category'),
+      weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
+      url: f.get('url').trim() || null,
+    })
+    gearRowEditId = null
+    persist()
+    renderGear(trip)
+  })
+  wireScrape(form, ['name', 'weightOz'])
 }
 
-// The kit questions (spec #24, reworked 2026-07-27): what's going on THIS
-// trip, asked in plain language and scoped by the trip's types. Gear you
-// already own is listed under the question that owns its category, so the
-// questions read with your own kit; the generic options below build blank
-// slots for anything you've never logged.
+// What this kit can't do at an airport. Advisory by construction — it names
+// items and the rule, and never blocks a checklist.
+const FLY_BLOCKS = [
+  { key: 'banned', title: "Can't fly with these", note: 'Buy them at the other end.' },
+  { key: 'checked', title: 'Checked baggage only', note: 'Never in the cabin.' },
+  { key: 'carryon', title: 'Carry-on only', note: 'Lithium cells cannot ride in the hold.' },
+]
+
+function flyBlockHTML(trip) {
+  if (!trip.flying) return ''
+  const issues = flyIssues(trip, state.gearLibrary)
+  const blocks = FLY_BLOCKS.filter(b => issues[b.key].length)
+  if (!blocks.length) return '<p class="fly-clear">Flying — nothing in this kit is restricted.</p>'
+  return `
+    <section class="fly-note" aria-label="Airline restrictions">
+      ${blocks.map(b => `
+        <div class="fly-group fly-${b.key}">
+          <h3>${b.title} <span class="mono">${b.note}</span></h3>
+          <ul>${issues[b.key].map(x => `<li><strong>${esc(x.name)}</strong> — ${esc(x.why)}</li>`).join('')}</ul>
+        </div>`).join('')}
+    </section>`
+}
+
+// The kit questions (spec #24, reworked twice: 2026-07-27 morning to plain
+// questions, 2026-07-27 evening to a board). Lawrence: "the initial
+// questionnaire should be more than a long list … on a big screen it makes me
+// scroll unnecessarily." So the questions lay out as cards across the wide
+// canvas, answers are chips, and a running tally sits at the foot. Density is
+// NOT the goal — the desktop canvas buys columns, not smaller type.
+//
+// Answers live here rather than in the DOM because the question set is live:
+// picking "rifle hunt" adds its blocks immediately, and a re-render must not
+// forget what has already been answered.
+let kitAnswers = {}
+let kitDetails = {}
+let kitTripId = null
+
+function kitReset() {
+  kitAnswers = {}
+  kitDetails = {}
+}
+
+// Everything the answers currently imply, for the foot tally.
+function kitTally(questions) {
+  const rows = kitRows(kitAnswers, questions)
+  // A weight the user just fetched counts immediately — the tally has to
+  // agree with the detail row sitting right above it.
+  const weightOf = r => kitDetails[r.id]?.weightOz ?? r.weightOz
+  const known = rows.map(weightOf).filter(w => typeof w === 'number' && w > 0)
+  const oz = known.reduce((a, w) => a + w, 0)
+  return { count: rows.length, oz: Math.round(oz * 10) / 10, unweighed: rows.length - known.length }
+}
+
+function chip(qId, value, label, { note = '', suggested = null, checked = false, meta = '' } = {}) {
+  const id = `chip-${qId}-${value}`.replace(/[^A-Za-z0-9_-]/g, '_')
+  return `
+    <label class="chip" for="${id}">
+      <input type="checkbox" id="${id}" data-q="${esc(qId)}" value="${esc(value)}"${checked ? ' checked' : ''}>
+      <span class="chip-face">
+        <span class="chip-label">${esc(label)}</span>
+        ${meta ? `<span class="chip-meta mono">${esc(meta)}</span>` : ''}
+        ${note ? `<span class="chip-note">${esc(note)}</span>` : ''}
+        ${suggested ? `<span class="chip-flag mono">${esc(suggested)}</span>` : ''}
+      </span>
+    </label>`
+}
+
+// A checked generic option opens its detail row: name the actual product, or
+// let the product page name and weigh it (Lawrence 2026-07-27). Only generic
+// options get one — picking gear you already own is already specific.
+function detailRow(qId, o) {
+  const rowId = o.rows[0].id
+  const d = kitDetails[rowId] ?? {}
+  return `
+    <div class="chip-detail" data-row="${esc(rowId)}">
+      <label class="chip-detail-name">Which one?
+        <input data-detail="${esc(rowId)}:name" value="${esc(d.name ?? '')}" placeholder="${esc(o.rows[0].name)} — brand and model">
+      </label>
+      <div class="chip-detail-fetch">
+        <input type="url" data-detail="${esc(rowId)}:url" value="${esc(d.url ?? '')}" placeholder="https://… product page" aria-label="Product page URL for ${esc(o.rows[0].name)}">
+        <button class="btn" type="button" data-fetch="${esc(rowId)}">Fetch</button>
+        <span class="fetch-status mono" role="status" id="fetch-${esc(rowId)}">${d.weightOz ? `${d.weightOz} oz` : ''}</span>
+      </div>
+    </div>`
+}
+
 function renderKitQuestions(trip) {
   trip.gear ??= []
-  const questions = tripGearQuestions(trip, state.gearLibrary)
+  // Answers belong to the trip that was asked. Opening another trip's kit
+  // starts clean; re-rendering this one (every chip does) keeps them.
+  if (kitTripId !== trip.id) { kitReset(); kitTripId = trip.id }
+  // The trip's own types are an answer on this screen now (Lawrence: "we
+  // should ask if this trip is a rifle hunt, bow hunt, or fishing trip, and
+  // that will simplify some of the follow-up questions"). They are read live
+  // from kitAnswers so the dependent blocks appear the moment they're picked.
+  if (kitAnswers.tripTypes === undefined) kitAnswers.tripTypes = tripTypes(trip)
+  const asked = { ...trip, types: kitAnswers.tripTypes }
+  const questions = tripGearQuestions(asked, state.gearLibrary)
   const source = [...state.trips]
     .filter(t => t.id !== trip.id && (t.gear?.length ?? 0) > 0)
     .sort((a, b) => b.createdAt - a.createdAt)[0]
-
-  const option = (name, value, label, note) => `
-    <label class="onboard-option">
-      <input type="checkbox" name="${esc(name)}" value="${esc(value)}">
-      <span>${esc(label)}${note ? ` <span class="onboard-note">${esc(note)}</span>` : ''}</span>
-    </label>`
+  const picked = q => kitAnswers[q.id] ?? []
+  const tally = kitTally(questions)
+  const climate = trip.place?.climate
 
   app.replaceChildren(el(`
-    <section class="gate onboard kit-ask">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+    <section class="kit-ask">
+      <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <h1>What's going on this trip?</h1>
-      <p>Anything you pick that PackOut hasn't seen becomes a blank slot in your gear list — name it and weigh it whenever you like.</p>
+      <p class="kit-lead">Pick what's coming. Anything PackOut hasn't seen becomes a slot in your
+      gear list — name it here, or name it later.</p>
+      ${climate ? `<p class="kit-conditions mono">${esc(conditionsLine(trip))}</p>` : ''}
       ${source ? `
-      <button class="btn" id="kit-copy">Same kit as ${esc(source.name)} (${source.gear.length} items)</button>
-      <p class="kit-or mono">or answer again</p>` : ''}
+      <div class="kit-shortcut">
+        <button class="btn" id="kit-copy" type="button">Same kit as ${esc(source.name)}</button>
+        <span class="draft-note">${source.gear.length} items, none marked packed. Or answer below.</span>
+      </div>` : ''}
       <form id="kit-form">
-        ${questions.map(q => `
-          <fieldset class="onboard-q">
-            <legend>${esc(q.prompt)}</legend>
-            ${q.hint && !q.items.length ? `<p class="onboard-q-hint">${esc(q.hint)}</p>` : ''}
-            <div class="onboard-opts">
-              ${q.items.map(g => option(q.id, g.id, g.name, g.weightOz !== null ? `${g.weightOz} oz` : 'no weight yet')).join('')}
-              ${q.options.map(o => option(q.id, o.value, q.items.length ? `+ ${o.label}` : o.label, o.note)).join('')}
+        <div class="q-grid">
+          <fieldset class="q-card">
+            <legend>What are you doing out there?</legend>
+            <p class="onboard-q-hint">Each one adds its own gear questions.</p>
+            <div class="chips">
+              ${TRIP_TYPES.map(t => chip('tripTypes', t, TRIP_TYPE_LABELS[t],
+                { checked: kitAnswers.tripTypes.includes(t) })).join('')}
             </div>
-          </fieldset>`).join('')}
-        <div class="onboard-actions">
+          </fieldset>
+          <fieldset class="q-card">
+            <legend>Are you flying to this trip?</legend>
+            <p class="onboard-q-hint">PackOut flags what won't make it through an airport.</p>
+            <div class="chips">
+              ${chip('flying', 'yes', 'Flying', { checked: !!kitAnswers.flying })}
+            </div>
+          </fieldset>
+          ${questions.map(q => `
+            <fieldset class="q-card">
+              <legend>${esc(q.prompt)}</legend>
+              ${q.hint && !q.items.length ? `<p class="onboard-q-hint">${esc(q.hint)}</p>` : ''}
+              <div class="chips">
+                ${q.items.map(g => chip(q.id, g.id, g.name, {
+                  checked: picked(q).includes(g.id),
+                  meta: g.weightOz !== null ? `${g.weightOz} oz` : 'no weight yet',
+                })).join('')}
+                ${q.options.map(o => chip(q.id, o.value, q.items.length ? `+ ${o.label}` : o.label, {
+                  note: o.note, suggested: o.suggested, checked: picked(q).includes(o.value),
+                })).join('')}
+              </div>
+              ${q.options.filter(o => picked(q).includes(o.value)).map(o => detailRow(q.id, o)).join('')}
+            </fieldset>`).join('')}
+        </div>
+        <div class="kit-foot">
+          <span class="kit-tally mono">${tally.count} item${tally.count === 1 ? '' : 's'}${tally.oz ? ` · ${tally.oz} oz known` : ''}${tally.unweighed ? ` · ${tally.unweighed} unweighed` : ''}</span>
           <button class="btn btn-primary" type="submit">Build my kit</button>
           <button class="btn-quiet" type="button" id="kit-skip">Add items myself</button>
         </div>
       </form>
     </section>
   `))
+
   // Both paths land on the kit itself — the questions are a way in, not a
   // screen to sit on.
   const showKit = () => {
     kitAskSkipped.add(trip.id)
+    kitReset()
     persist()
     const target = `#/trip/${trip.id}/gear`
     if (location.hash === target) route()
     else location.hash = target
   }
+
+  app.querySelectorAll('[data-q]').forEach(cb => cb.addEventListener('change', () => {
+    const q = cb.dataset.q
+    if (q === 'flying') kitAnswers.flying = cb.checked
+    else {
+      const set = new Set(kitAnswers[q] ?? [])
+      cb.checked ? set.add(cb.value) : set.delete(cb.value)
+      kitAnswers[q] = [...set]
+    }
+    // A chip changes which questions exist and what the tally says, so the
+    // board rebuilds — focus rides back to the chip that was just tapped.
+    const id = cb.id
+    renderKitQuestions(trip)
+    document.getElementById(id)?.focus()
+  }))
+
+  app.querySelectorAll('[data-detail]').forEach(input => input.addEventListener('input', () => {
+    const [rowId, field] = input.dataset.detail.split(':')
+    kitDetails[rowId] = { ...kitDetails[rowId], [field]: input.value }
+  }))
+
+  app.querySelectorAll('[data-fetch]').forEach(btn => btn.addEventListener('click', async () => {
+    const rowId = btn.dataset.fetch
+    const status = document.getElementById(`fetch-${rowId}`)
+    const url = (kitDetails[rowId]?.url ?? '').trim()
+    if (!url) { status.textContent = 'Paste a product URL first.'; return }
+    btn.disabled = true
+    status.textContent = 'Fetching…'
+    const data = await fetchProduct(url)
+    btn.disabled = false
+    if (!data.ok) { status.textContent = data.error; return }
+    const nameInput = app.querySelector(`[data-detail="${CSS.escape(rowId)}:name"]`)
+    if (data.name && nameInput && !nameInput.value) {
+      nameInput.value = data.name
+      kitDetails[rowId] = { ...kitDetails[rowId], name: data.name }
+    }
+    if (typeof data.weightOz === 'number') {
+      kitDetails[rowId] = { ...kitDetails[rowId], weightOz: data.weightOz }
+    }
+    status.textContent = data.weightOz ? `${data.weightOz} oz` : 'No weight on that page — type it later.'
+  }))
+
   const copy = document.getElementById('kit-copy')
   if (copy) copy.addEventListener('click', () => {
     copyKit(source, trip)
@@ -1236,13 +1527,14 @@ function renderKitQuestions(trip) {
   })
   document.getElementById('kit-skip').addEventListener('click', () => {
     kitAskSkipped.add(trip.id)
+    kitReset()
     renderGear(trip)
   })
   document.getElementById('kit-form').addEventListener('submit', e => {
     e.preventDefault()
-    const f = new FormData(e.target)
-    const answers = Object.fromEntries(questions.map(q => [q.id, f.getAll(q.id)]))
-    applyTripKit(state, trip, answers, questions)
+    trip.types = TRIP_TYPES.filter(t => kitAnswers.tripTypes.includes(t))
+    trip.flying = !!kitAnswers.flying
+    applyTripKit(state, trip, kitAnswers, questions, kitDetails)
     showKit()
   })
 }
@@ -1250,6 +1542,8 @@ function renderKitQuestions(trip) {
 let gearSearch = ''
 let gearNewCategory = null
 let gearEditId = null
+// Which gear row on the trip's gear screen has its inline editor open.
+let gearRowEditId = null
 
 function renderGearPicker(trip) {
   trip.gear ??= []
@@ -1262,7 +1556,7 @@ function renderGearPicker(trip) {
     .sort((a, b) => GEAR_CATEGORIES.indexOf(a.category) - GEAR_CATEGORIES.indexOf(b.category) || a.name.localeCompare(b.name))
   app.replaceChildren(el(`
     <section class="picker">
-      <a href="#/trip/${trip.id}/gear" class="crumb">&larr; Gear</a>
+      <a href="#/trip/${trip.id}/gear" class="back">&larr; Gear</a>
       <h1>Add Gear</h1>
       <input id="gear-search" type="search" placeholder="Search gear…" value="${esc(gearSearch)}" aria-label="Search gear">
       <ul class="food-list">
@@ -1367,7 +1661,7 @@ function renderReady(trip) {
     : `Short: ${r.shortDays.map(i => `<a href="#/trip/${trip.id}/day/${i}">Day ${i + 1}</a>`).join(', ')}.`
   app.replaceChildren(el(`
     <section class="output">
-      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <div class="dashboard-head">
         <h1>Readiness</h1>
         <button class="btn" id="print">Print</button>
@@ -1396,16 +1690,15 @@ function renderReady(trip) {
           ${r.gear.unpacked.length > 12 ? `<li>…and ${r.gear.unpacked.length - 12} more</li>` : ''}
         </ul>` : ''}
       </section>
+      ${trip.flying ? `<section class="ready-block"><h2>Flying</h2>${flyBlockHTML(trip)}</section>` : ''}
       <section class="ready-block">
         <h2>Pre-trip actions</h2>
         <ul class="check-list">
           ${trip.actions.map(a => `
-            <li>
-              <label class="check-row">
-                <input type="checkbox" data-action-done="${a.id}" ${a.done ? 'checked' : ''}>
-                <span class="check-name ${a.done ? 'is-done' : ''}">${esc(a.text)}</span>
-                <button class="btn-quiet" data-action-rm="${a.id}" aria-label="Remove ${esc(a.text)}">×</button>
-              </label>
+            <li class="check-row">
+              <label class="check-name ${a.done ? 'is-done' : ''}" for="act-${esc(a.id)}">${esc(a.text)}</label>
+              <button class="btn-quiet" data-action-rm="${esc(a.id)}" aria-label="Remove ${esc(a.text)}">Remove</button>
+              <input id="act-${esc(a.id)}" type="checkbox" data-action-done="${esc(a.id)}" ${a.done ? 'checked' : ''}>
             </li>`).join('')}
         </ul>
         <form id="action-add" class="action-add">
@@ -1420,8 +1713,7 @@ function renderReady(trip) {
     trip.actions.find(a => a.id === cb.dataset.actionDone).done = cb.checked
     commit()
   }))
-  app.querySelectorAll('[data-action-rm]').forEach(btn => btn.addEventListener('click', e => {
-    e.preventDefault()
+  app.querySelectorAll('[data-action-rm]').forEach(btn => btn.addEventListener('click', () => {
     trip.actions = trip.actions.filter(a => a.id !== btn.dataset.actionRm)
     commit()
   }))
@@ -1509,34 +1801,22 @@ function wireScrape(form, fields) {
     if (!url) { say('Paste a product URL first.'); return }
     btn.disabled = true
     say('Fetching…')
-    try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
-      if (res.status === 401) { say('Sign in to fetch product pages.'); return }
-      const data = await res.json().catch(() => null)
-      if (!res.ok || !data) { say(`${data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`} Enter it by hand.`); return }
-      const filled = fields.filter(name => {
-        const input = form.elements[name]
-        if (!input || input.value !== '' || data[name] == null) return false
-        input.value = data[name]
-        return true
-      })
-      if (!filled.length) {
-        say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
-        return
-      }
-      const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))
-      say(`Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
-        (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : ''))
-    } catch {
-      say('Couldn’t reach the fetch service — enter it by hand.')
-    } finally {
-      btn.disabled = false
+    const data = await fetchProduct(url)
+    btn.disabled = false
+    if (!data.ok) { say(data.error); return }
+    const filled = fields.filter(name => {
+      const input = form.elements[name]
+      if (!input || input.value !== '' || data[name] == null) return false
+      input.value = data[name]
+      return true
+    })
+    if (!filled.length) {
+      say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
+      return
     }
+    const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))
+    say(`Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
+      (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : ''))
   })
 }
 
@@ -1545,7 +1825,7 @@ function renderFoodForm(food) {
   const numOrBlank = v => v === null || v === undefined ? '' : v
   app.replaceChildren(el(`
     <section class="form-screen">
-      <a href="#/library" class="crumb">&larr; Library</a>
+      <a href="#/library" class="back">&larr; Library</a>
       <h1>${isNew ? 'Add Food' : 'Edit Food'}</h1>
       <form id="food-form">
         <label>Product page URL (optional)
@@ -1713,49 +1993,67 @@ function renderProfile() {
   const p = state.profile ?? emptyProfile()
   const welcome = welcomeProfile
   const style = p.mealStyle ?? mealStyleOf(null)
-  const brandBlock = kind => `
-    <fieldset class="onboard-q">
-      <legend>${kind === 'meal' ? 'Meals' : 'Snacks and drink mixes'}</legend>
-      <div class="onboard-opts">
-        ${BRANDS.filter(b => b.kind === kind).map(b => `
-          <label class="onboard-option">
-            <input type="checkbox" name="brand" value="${esc(b.id)}"${p.brands.includes(b.id) ? ' checked' : ''}>
-            <span>${esc(b.label)}</span>
-          </label>`).join('')}
-      </div>
-    </fieldset>`
+  // Same question board as the trip's kit screen (Lawrence 2026-07-27: the
+  // initial questionnaire "makes me scroll unnecessarily" on a big screen).
+  // One chip vocabulary across both questionnaires, one thing to learn.
+  const brandChip = b => `
+    <label class="chip" for="brand-${esc(b.id)}">
+      <input type="checkbox" id="brand-${esc(b.id)}" name="brand" value="${esc(b.id)}"${p.brands.includes(b.id) ? ' checked' : ''}>
+      <span class="chip-face"><span class="chip-label">${esc(b.label)}</span></span>
+    </label>`
 
   app.replaceChildren(el(`
-    <section class="gate onboard profile">
-      ${welcome ? '' : '<a href="#/" class="crumb">&larr; Trips</a>'}
+    <section class="kit-ask profile">
+      ${welcome ? '' : '<a href="#/" class="back">&larr; Trips</a>'}
       <h1>${welcome ? 'Welcome to PackOut' : 'Your profile'}</h1>
-      <p>${welcome
+      <p class="kit-lead">${welcome
         ? 'Set this up once — you can change any of it later under your name.'
         : 'Changes apply to new trips. Trips you have already planned keep the weight and style you planned them with.'}</p>
       <form id="profile-form">
-        <label>Body weight (lbs)
-          <input name="weightLbs" type="number" min="50" max="400" value="${p.weightLbs ?? ''}" placeholder="208">
-          <small>Drives your daily calorie and macro targets.</small>
-        </label>
-        <fieldset class="onboard-q">
-          <legend>Which brands do you reach for?</legend>
-          <p class="onboard-q-hint">Their foods get starred, and drafting reaches for starred foods first.</p>
-          ${brandBlock('meal')}
-          ${brandBlock('snack')}
-        </fieldset>
-        <fieldset class="onboard-q">
-          <legend>What kind of trips do you take?</legend>
-          <p class="onboard-q-hint">New trips start with these types selected — each one adds its own gear questions.</p>
-          <div class="onboard-opts">
-            ${TRIP_TYPES.map(t => `
-              <label class="onboard-option">
-                <input type="checkbox" name="tripType" value="${t}"${p.tripTypes.includes(t) ? ' checked' : ''}>
-                <span>${TRIP_TYPE_LABELS[t]}</span>
-              </label>`).join('')}
-          </div>
-        </fieldset>
-        ${mealStyleFields(style)}
-        <div class="onboard-actions">
+        <div class="q-grid">
+          <fieldset class="q-card">
+            <legend>What do you weigh?</legend>
+            <p class="onboard-q-hint">Drives your daily calorie and macro targets.</p>
+            <label class="q-field">Body weight (lbs)
+              <input name="weightLbs" type="number" min="50" max="400" value="${p.weightLbs ?? ''}" placeholder="208">
+            </label>
+          </fieldset>
+          <fieldset class="q-card">
+            <legend>Which meals do you reach for?</legend>
+            <p class="onboard-q-hint">Their foods get starred, and drafting reaches for starred foods first.</p>
+            <div class="chips">${BRANDS.filter(b => b.kind === 'meal').map(brandChip).join('')}</div>
+          </fieldset>
+          <fieldset class="q-card">
+            <legend>Which snacks and drink mixes?</legend>
+            <div class="chips">${BRANDS.filter(b => b.kind === 'snack').map(brandChip).join('')}</div>
+          </fieldset>
+          <fieldset class="q-card">
+            <legend>What kind of trips do you take?</legend>
+            <p class="onboard-q-hint">New trips start with these types selected.</p>
+            <div class="chips">
+              ${TRIP_TYPES.map(t => `
+                <label class="chip" for="ptype-${t}">
+                  <input type="checkbox" id="ptype-${t}" name="tripType" value="${t}"${p.tripTypes.includes(t) ? ' checked' : ''}>
+                  <span class="chip-face"><span class="chip-label">${TRIP_TYPE_LABELS[t]}</span></span>
+                </label>`).join('')}
+            </div>
+          </fieldset>
+          <fieldset class="q-card q-card-wide">
+            <legend>How do you eat out there?</legend>
+            <p class="onboard-q-hint">Mobile meals never draft cook foods; sit-down meals welcome dehydrated
+            pouches. You can always add any food to any meal by hand.</p>
+            <div class="style-row">
+              ${Object.entries(STYLE_LABELS).map(([slot, label]) => `
+                <label>${label}
+                  <select name="style-${slot}">
+                    <option value="mobile"${style[slot] === 'mobile' ? ' selected' : ''}>Mobile — grab &amp; go</option>
+                    <option value="sitdown"${style[slot] === 'sitdown' ? ' selected' : ''}>Sit-down — cook OK</option>
+                  </select>
+                </label>`).join('')}
+            </div>
+          </fieldset>
+        </div>
+        <div class="kit-foot">
           <button class="btn btn-primary" type="submit">${welcome ? 'Save and start' : 'Save'}</button>
           ${welcome ? '<button class="btn-quiet" type="button" id="profile-skip">Skip for now</button>' : ''}
         </div>

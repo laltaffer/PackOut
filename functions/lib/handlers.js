@@ -4,6 +4,7 @@
 
 import { createSession, verifySession, sessionCookie, clearedCookie, readCookie, COOKIE_NAME } from './session.js'
 import { extractProduct } from './extract.js'
+import { lookupPlace } from './place.js'
 import { validateImport } from '../../js/engine.js'
 
 const TOKENINFO = 'https://oauth2.googleapis.com/tokeninfo?id_token='
@@ -196,6 +197,22 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
     } catch { /* the user still gets their scrape */ }
   }
   return json({ found, ...product })
+}
+
+// Session-gated like every other outbound call: signed-out visitors don't get
+// to spend the app's upstream quota.
+export async function handlePlace({ request, env, fetcher = fetch, now = Date.now() }) {
+  const s = await session(request, env, now)
+  if (!s) return json({ error: 'Signed out.' }, 401)
+  let body
+  try { body = await request.json() } catch { return json({ error: 'Bad request.' }, 400) }
+  const { query, startDate, days } = body ?? {}
+  const result = await lookupPlace({
+    query, startDate,
+    days: typeof days === 'number' && Number.isFinite(days) ? days : null,
+    fetcher, now, kv: env.PACKOUT_KV ?? null,
+  })
+  return json(result.body, result.status)
 }
 
 // Read at most `max` characters without buffering the whole body — the cap

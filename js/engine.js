@@ -203,6 +203,41 @@ export function gearStats(trip, gearLibrary) {
   return stats
 }
 
+// Flying (Lawrence 2026-07-27: "call out what you will not be able to fly
+// with"). Rules match the gear item's NAME, not an id, so they catch both the
+// question rows ("Stove fuel") and whatever the user renamed them to ("MSR
+// IsoPro"). Name matching is a heuristic by nature — it warns, it never blocks
+// a checklist, and an item it misses is still the packer's call.
+// Levels: 'banned' — no US airline takes it in either bag, buy it there;
+// 'checked' — checked baggage only, declared where the law says so;
+// 'carryon' — cabin only (lithium cells may not ride in the hold).
+export const FLY_RULES = [
+  { level: 'banned', why: 'No airline takes fuel — buy it at the trailhead.', match: /\b(fuel|isopro|isobutane|propane|canister)\b/i },
+  { level: 'banned', why: 'Bear spray is forbidden in both bags — buy it there.', match: /\bbear spray\b/i },
+  { level: 'banned', why: 'Aerosols of this kind are forbidden in both bags.', match: /\b(bear repellent|pepper spray|mace)\b/i },
+  { level: 'checked', why: 'Firearms fly checked, declared, in a locked case.', match: /\b(rifle|pistol|handgun|shotgun|firearm|revolver)\b/i },
+  { level: 'checked', why: 'Ammunition flies checked, in its own approved box.', match: /\b(ammunition|ammo|cartridges|shells)\b/i },
+  { level: 'checked', why: 'Blades of any length fly checked, never in the cabin.', match: /\b(knife|knives|blade|axe|hatchet|saw|multi-?tool|shears)\b/i },
+  { level: 'checked', why: 'Broadheads and arrows fly checked.', match: /\b(arrow|arrows|broadhead|broadheads|bolt|bolts|bow)\b/i },
+  { level: 'checked', why: 'Poles and stakes fly checked — they read as clubs.', match: /\b(trekking poles?|stakes?|tripod)\b/i },
+  { level: 'carryon', why: 'Lithium cells ride in the cabin, never in the hold.', match: /\b(battery|batteries|power ?bank|inreach|garmin|satellite communicator)\b/i },
+]
+
+// What this trip's kit can't do at an airport. Empty unless the trip flies —
+// a truck trip has no restrictions to report.
+export function flyIssues(trip, gearLibrary = []) {
+  const out = { banned: [], checked: [], carryon: [] }
+  if (!trip?.flying) return out
+  const byId = new Map(gearLibrary.map(g => [g.id, g]))
+  for (const entry of trip.gear ?? []) {
+    const g = byId.get(entry.gearId)
+    if (!g) continue
+    const rule = FLY_RULES.find(r => r.match.test(g.name))
+    if (rule) out[rule.level].push({ gearId: g.id, name: g.name, why: rule.why })
+  }
+  return out
+}
+
 // Readiness: every Day Fueled (heavy is a warning, not a blocker), every
 // planned food Packed, every gear item Packed, every Action done. Blockers
 // are named, not counted. Trips without gear/actions aren't blocked by them.
@@ -335,8 +370,25 @@ function rankSlot(pool, staples, slotBase) {
     a.name.localeCompare(b.name))
 }
 
-function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, mainsOverride = null) {
+// A food you took off a day is a decision, not a typo (Lawrence 2026-07-27:
+// "I keep removing pico de gallo and drafting adds it back"). Declines are
+// per-trip — a food that has no place in Alaska may still belong in Montana.
+export function declinedIds(trip) {
+  return new Set(Array.isArray(trip?.declined) ? trip.declined : [])
+}
+
+// Favorites are a choice, not a tie-breaker (Lawrence 2026-07-27). Every pick
+// tries the starred subset first and only widens to the rest of the library
+// when nothing starred fits the window that's left.
+function findFit(pool, rank, fits) {
+  const starred = pool.filter(f => f.favorite)
+  return (starred.length ? rank(starred).find(fits) : undefined) ?? rank(pool).find(fits)
+}
+
+function buildDraft(trip, dayIndex, fullLibrary, staples, strategy, avoidMains, mainsOverride = null) {
   const meals = emptyMeals()
+  const declined = declinedIds(trip)
+  const library = declined.size ? fullLibrary.filter(f => !declined.has(f.id)) : fullLibrary
   if (library.length === 0) return meals
   const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium')
   const target = targets.kcal.target
@@ -364,9 +416,9 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
       const habits = strategy === 'usual'
         ? rankHabit(pool.filter(f => f.favorite || staples.has(f.id)), staples)
         : []
-      const picks = habits.length ? habits
-        : [(strategy === 'usual' ? rankHabit(pool, staples) : rankByDensity(pool, staples, 'kcal'))[0]]
-      for (const f of picks) add('electrolytes', f)
+      const rank = p => strategy === 'usual' ? rankHabit(p, staples) : rankByDensity(p, staples, 'kcal')
+      const picks = habits.length ? habits : [findFit(pool, rank, () => true)]
+      for (const f of picks) if (f) add('electrolytes', f)
     }
   }
 
@@ -407,10 +459,10 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     // most one cook food; the rest of the window fills with ready sides.
     let pouched = false
     while (slotKcal[slot] < w.goal) {
-      const ranked = protein < proteinFloor
-        ? [...pool].sort((a, b) => ((b.favorite === true) - (a.favorite === true)) || ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
-        : (strategy === 'usual' ? rankSlot(pool, staples, slot) : rankByDensity(pool, staples, 'kcal'))
-      const f = ranked.find(x => !used.has(x.id) && !(pouched && x.prep === 'cook') &&
+      const rank = p => protein < proteinFloor
+        ? [...p].sort((a, b) => ((b.favorite === true) - (a.favorite === true)) || ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
+        : (strategy === 'usual' ? rankSlot(p, staples, slot) : rankByDensity(p, staples, 'kcal'))
+      const f = findFit(pool, rank, x => !used.has(x.id) && !(pouched && x.prep === 'cook') &&
         slotKcal[slot] + x.kcal <= w.max && kcal + x.kcal <= dayCeil)
       if (!f) break
       add(slot, f)
@@ -433,25 +485,28 @@ function buildDraft(trip, dayIndex, library, staples, strategy, avoidMains, main
     kcal += food.kcal
     protein += food.proteinG ?? 0
   }
-  const byProtein = [...snackPool].sort((a, b) =>
+  const byProtein = p => [...p].sort((a, b) =>
     ((b.proteinG ?? 0) - (a.proteinG ?? 0)) || (a.kcal - b.kcal) || a.name.localeCompare(b.name))
   let guard = 0
   while (protein < proteinFloor && guard < 60) {
     guard += 1
-    const f = byProtein.find(x => (x.proteinG ?? 0) > 0 && kcal + x.kcal <= dayCeil)
+    const f = findFit(snackPool, byProtein, x => (x.proteinG ?? 0) > 0 && kcal + x.kcal <= dayCeil)
     if (!f) break
     addSnack(f)
   }
-  const ordered = strategy === 'usual'
-    ? rankHabit(snackPool, staples)
-    : rankByDensity(snackPool, staples, 'kcal')
+  const rankSnack = p => strategy === 'usual' ? rankHabit(p, staples) : rankByDensity(p, staples, 'kcal')
   let adds = 0
   guard = 0
-  while (kcal < target - DAY_KCAL_TOL && ordered.length > 0 && guard < 100) {
+  while (kcal < target - DAY_KCAL_TOL && snackPool.length > 0 && guard < 100) {
     guard += 1
-    const idx = adds % ordered.length
-    const rotation = [...ordered.slice(idx), ...ordered.slice(0, idx)]
-    const f = rotation.find(x => kcal + x.kcal <= dayCeil)
+    // Rotation keeps variety inside whichever pool answers — the offset is
+    // applied to the ranked list findFit would have used.
+    const rotate = p => {
+      const r = rankSnack(p)
+      const idx = r.length ? adds % r.length : 0
+      return [...r.slice(idx), ...r.slice(0, idx)]
+    }
+    const f = findFit(snackPool, rotate, x => kcal + x.kcal <= dayCeil)
     if (!f) break
     addSnack(f)
     adds += 1
@@ -463,7 +518,9 @@ export function draftDay(trip, dayIndex, library, staples, strategy = 'usual') {
   return buildDraft(trip, dayIndex, library, staples, strategy, adjacentMains(trip, dayIndex))
 }
 
-export function draftEmptyDays(trip, library, staples, strategy = 'usual') {
+export function draftEmptyDays(trip, fullLibrary, staples, strategy = 'usual') {
+  const declined = declinedIds(trip)
+  const library = declined.size ? fullLibrary.filter(f => !declined.has(f.id)) : fullLibrary
   const out = []
   let prevMain = null
   trip.days.forEach((day, dayIndex) => {
@@ -532,6 +589,21 @@ function validMealStyle(style) {
       ['breakfast', 'lunch', 'dinner'].includes(k) && (v === 'mobile' || v === 'sitdown'))
 }
 
+// A looked-up destination (spec: destination lookup). Every field is display
+// text or a number that reaches the DOM, so the shape is pinned here the same
+// way food macros are — a hand-edited backup can't inject markup or NaN.
+function validPlace(p) {
+  if (typeof p !== 'object' || typeof p.label !== 'string' || p.label.length > 200) return false
+  if (!num(p.lat) || p.lat < -90 || p.lat > 90) return false
+  if (!num(p.lon) || p.lon < -180 || p.lon > 180) return false
+  if (!numOrNull(p.elevationFt)) return false
+  if (!num(p.at)) return false
+  if (p.climate === undefined || p.climate === null) return true
+  const c = p.climate
+  return typeof c === 'object' &&
+    [c.tempLoF, c.tempHiF, c.precipIn, c.precipDays, c.days].every(numOrNull)
+}
+
 function validEntries(entries) {
   return Array.isArray(entries) && entries.every(e =>
     e && validId(e.foodId) && num(e.qty) && e.qty >= 1)
@@ -576,6 +648,15 @@ export function validateImport(data) {
     }
     if (t.mealStyle !== undefined && !validMealStyle(t.mealStyle)) {
       return { ok: false, error: `Trip "${t.name}" has an invalid meal style.` }
+    }
+    if (t.flying !== undefined && typeof t.flying !== 'boolean') {
+      return { ok: false, error: `Trip "${t.name}" has an invalid flying flag.` }
+    }
+    if (t.declined !== undefined && (!Array.isArray(t.declined) || !t.declined.every(validId))) {
+      return { ok: false, error: `Trip "${t.name}" has an invalid excluded-food list.` }
+    }
+    if (t.place !== undefined && t.place !== null && !validPlace(t.place)) {
+      return { ok: false, error: `Trip "${t.name}" has malformed destination data.` }
     }
     for (const [i, day] of t.days.entries()) {
       if (!validDay(day)) return { ok: false, error: `Trip "${t.name}", day ${i + 1} is malformed.` }
