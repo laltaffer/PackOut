@@ -150,3 +150,26 @@ test('a day planned entirely with declined food is NOT treated as empty', () => 
   const drafted = draftEmptyDays(trip, LIB, NONE, 'usual').map(d => d.dayIndex)
   assert.deepEqual(drafted, [0, 2], 'day 1 already has a plan, declined or not')
 })
+
+test('a lone starred main still beats a denser stranger, and still rotates', () => {
+  // Codex round 2: the >=2 rotation-pool floor widened to every main before
+  // density ranking, so the optimizer picked an unstarred main over the only
+  // starred one. Tier first, rank within the tier.
+  const lib = [
+    { id: 'liked', name: 'The one I like', kcal: 800, carbsG: 60, fatG: 40, proteinG: 40, weightOz: 8, favorite: true, slotHint: 'dinner' },
+    { id: 'dense', name: 'Denser stranger', kcal: 900, carbsG: 60, fatG: 45, proteinG: 45, weightOz: 4, favorite: false, slotHint: 'dinner' },
+    { id: 'other', name: 'Another stranger', kcal: 850, carbsG: 60, fatG: 42, proteinG: 42, weightOz: 5, favorite: false, slotHint: 'dinner' },
+    { id: 'bar', name: 'Bar', kcal: 400, carbsG: 43, fatG: 8, proteinG: 12, weightOz: 3, favorite: true, slotHint: 'breakfast' },
+    { id: 'gummy', name: 'Gummies', kcal: 100, carbsG: 22, fatG: 0, proteinG: 1, weightOz: 1, favorite: true, slotHint: 'snack' },
+  ]
+  for (const strategy of ['usual', 'optimized']) {
+    const meals = draftDay(mkTrip(3), 0, lib, NONE, strategy)
+    assert.equal(meals.dinner[0]?.foodId, 'liked', `${strategy} skipped the only starred main`)
+  }
+  // Across a week the avoid set steps past it — one favorite is not a life
+  // sentence to the same dinner.
+  const week = mkTrip(3)
+  const mains = draftEmptyDays(week, lib, NONE, 'usual').map(d => d.meals.dinner[0]?.foodId)
+  assert.equal(mains[0], 'liked')
+  assert.ok(new Set(mains).size > 1, `dinners still rotate: ${mains.join(', ')}`)
+})

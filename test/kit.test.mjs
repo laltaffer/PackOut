@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName } from '../js/seed.js'
+import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, GEAR_CATEGORIES } from '../js/seed.js'
 
 const CATEGORIES = new Set(['Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon',
   'Optics/Bino Pouch', 'Kill kit', 'Fishing', 'First aid & Safety',
@@ -289,6 +289,17 @@ test('every question row can be recognised by its generic name', () => {
   for (const q of GEAR_QUESTIONS) {
     for (const row of [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)]) {
       assert.equal(genericGearName(row.id), row.name)
+    }
+  }
+})
+
+test('the gear category vocabulary has exactly one home', () => {
+  // engine.js is the pure core and imports nothing, so it spells the list out
+  // again; this pins the two together the way TRIP_TYPES already is.
+  assert.deepEqual([...CATEGORIES].sort(), [...GEAR_CATEGORIES].sort())
+  for (const q of GEAR_QUESTIONS) {
+    for (const row of [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)]) {
+      assert.ok(GEAR_CATEGORIES.includes(row.category), `${row.id} files outside the cabinet`)
     }
   }
 })

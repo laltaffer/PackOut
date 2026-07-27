@@ -342,7 +342,14 @@ function mainsFor(trip, library, staples, strategy) {
   const mobile = mealStyleOf(trip).dinner === 'mobile'
   const pool = mobile ? library.filter(f => f.prep !== 'cook') : library
   const mains = dinnerMains(pool, staples, mobile)
-  return strategy === 'usual' ? rankHabit(mains, staples) : rankByDensity(mains, staples, 'kcal')
+  const ranked = strategy === 'usual' ? rankHabit(mains, staples) : rankByDensity(mains, staples, 'kcal')
+  // Even the optimizer eats what you like first. Density decides the order
+  // WITHIN the food you've starred, never whether to skip past it for a denser
+  // stranger (Codex, 2026-07-27) — the sort is stable, so each tier keeps the
+  // strategy's own ranking. With a single starred main this still rotates:
+  // pickMain's avoid set steps past it on the following night.
+  const own = f => (f.favorite === true || staples.has(f.id)) ? 0 : 1
+  return [...ranked].sort((a, b) => own(a) - own(b))
 }
 
 function pickMain(mains, avoid) {
@@ -587,6 +594,16 @@ function validId(v) { return typeof v === 'string' && SAFE_ID.test(v) }
 // is spelled out here as well as in seed.js — a test pins the two together.
 const TRIP_TYPE_VALUES = ['backpacking', 'rifle', 'bow', 'fishing']
 
+// Same deal for gear categories: the gear screen groups by a fixed list, so an
+// item filed outside it is invisible while still counting toward the weight and
+// packed totals (Codex, 2026-07-27). Legacy names are accepted because
+// migrateGear renames them after the gate. A test pins this to seed.js.
+const GEAR_CATEGORY_VALUES = [
+  'Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon', 'Optics/Bino Pouch',
+  'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
+  'Pack', 'Food kit',
+]
+
 function validMealStyle(style) {
   return style && typeof style === 'object' &&
     Object.entries(style).every(([k, v]) =>
@@ -694,10 +711,14 @@ export function validateImport(data) {
       if (typeof g.name !== 'string' || !g.name.trim() || g.name.length > 200) {
         return { ok: false, error: `Gear item "${g.id}" has a malformed name.` }
       }
-      if (typeof g.category !== 'string' || !g.category.trim() || g.category.length > 80) {
-        return { ok: false, error: `Gear item "${g.name}" has a malformed category.` }
+      if (!GEAR_CATEGORY_VALUES.includes(g.category)) {
+        return { ok: false, error: `Gear item "${g.name}" has an unknown category.` }
       }
-      if (!numOrNull(g.weightOz)) return { ok: false, error: `Gear item "${g.name}" has a non-numeric weight.` }
+      // A zero or negative ounce is not a light item, it is a corrupt one —
+      // and it would quietly subtract from the pack weight.
+      if (g.weightOz !== null && (!num(g.weightOz) || g.weightOz <= 0)) {
+        return { ok: false, error: `Gear item "${g.name}" has an impossible weight.` }
+      }
       if (g.url !== undefined && g.url !== null && typeof g.url !== 'string') {
         return { ok: false, error: `Gear item "${g.name}" has an invalid url.` }
       }

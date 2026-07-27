@@ -2,7 +2,7 @@
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, flyIssues, declinedIds, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, BRANDS, TRIP_TYPES } from './seed.js'
+import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, BRANDS, TRIP_TYPES, GEAR_CATEGORIES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -756,7 +756,7 @@ function boardSnacks(trip, i, day, snackSub) {
         <span class="n">${snackSub.kcal.toLocaleString()}</span>
       </div>
       ${bundles.map((s, sIdx) => `
-        <div class="snack-bundle">
+        <div class="snack-bundle" data-bundle="${sIdx}">
           <div class="snack-head">
             <h3>Snack ${sIdx + 1}</h3>
             <span class="slot-sub mono">${sumEntries(s.items, state.library).kcal.toLocaleString()} kcal</span>
@@ -972,6 +972,15 @@ function decline(trip, foodId) {
   if (!trip.declined.includes(foodId)) trip.declined.push(foodId)
 }
 
+// The Add control belonging to a given entry list: a snack key addresses its
+// own bundle, everything else its slot.
+function slotAddControl(key) {
+  const m = /^snack-(\d+)$/.exec(key)
+  return m
+    ? document.querySelector(`[data-bundle="${m[1]}"] .btn-add`)
+    : document.querySelector(`[data-slot="${CSS.escape(key)}"] .btn-add`)
+}
+
 function wireBoard(trip, i, day) {
   const on = (id, ev, fn) => document.getElementById(id)?.addEventListener(ev, fn)
   on('board-intensity', 'change', e => { day.intensity = e.target.value; commit() })
@@ -1004,15 +1013,23 @@ function wireBoard(trip, i, day) {
     if (removed) decline(trip, removed.foodId)
     commit()
     // The button that was focused no longer exists, and its id now belongs to
-    // a different food. Land on the neighbour, or on the slot's own Add.
+    // a different food. Land on the neighbour, or on the Add control of the
+    // very list that was emptied — for a snack that is its own bundle's Add,
+    // not the first bundle's (Codex, 2026-07-27).
     const idx = Math.min(Number(j), entries.length - 1)
     const next = idx >= 0 ? document.getElementById(`rm-${key}-${idx}`) : null
-    ;(next ?? document.querySelector(`[data-slot="${CSS.escape(key.replace(/^snack-\d+$/, 'snacks'))}"] .btn-add`))?.focus()
+    ;(next ?? slotAddControl(key))?.focus()
   }))
   document.querySelectorAll('#board [data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
-    const [bundle] = day.meals.snacks.splice(Number(btn.dataset.rmSnack), 1)
+    const at = Number(btn.dataset.rmSnack)
+    const [bundle] = day.meals.snacks.splice(at, 1)
     for (const e of bundle?.items ?? []) decline(trip, e.foodId)
     commit()
+    // Removing the last bundle leaves no neighbour to land on — fall through
+    // to the control that would make another one.
+    const neighbour = Math.min(at, day.meals.snacks.length - 1)
+    const next = neighbour >= 0 ? document.getElementById(`rm-snack-${neighbour}`) : null
+    ;(next ?? document.getElementById('add-snack'))?.focus()
   }))
   document.querySelectorAll('#board [data-sugg]').forEach(btn => btn.addEventListener('click', () => {
     const food = state.library.find(f => f.id === btn.dataset.sugg)
@@ -1175,11 +1192,6 @@ function renderPack(trip) {
 }
 
 // ---------- gear ----------
-
-const GEAR_CATEGORIES = [
-  'Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon', 'Optics/Bino Pouch',
-  'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
-]
 
 // A trip whose kit is empty gets asked rather than shown an empty list. This
 // remembers the trips where the user said "I'll add them myself" so the ask

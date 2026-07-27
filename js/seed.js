@@ -126,6 +126,18 @@ export const SEED = {
 
 export const TRIP_TYPES = ['backpacking', 'rifle', 'bow', 'fishing']
 
+// The gear filing cabinet. The gear screen groups by this list in this order,
+// so a category outside it is an item nobody can see — which is why the
+// import gate refuses one (engine.js pins its own copy against this).
+export const GEAR_CATEGORIES = [
+  'Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon', 'Optics/Bino Pouch',
+  'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
+]
+
+// Categories that no longer exist but still arrive in old backups; migrateGear
+// renames them, so the gate has to let them through the door first.
+export const LEGACY_GEAR_CATEGORIES = ['Pack', 'Food kit']
+
 // Who makes the food, kept as an explicit table rather than read off id
 // prefixes: 'pro-bolt-chews' and 'probar-peanut-butter' are the same company,
 // and snack brands never prefixed cleanly at all. Starring a brand stars every
@@ -630,7 +642,15 @@ const KILLED_V2 = [
 // Gear migrations run on their own version gate, ahead of the food seed's
 // early return — a current food library must never park a stale gear one.
 function migrateGear(state) {
-  if (!Array.isArray(state.gearLibrary)) return
+  // A backup written before gear existed has no gearLibrary at all. Import
+  // and sync assign the validated blob straight to `state`, so leaving the
+  // key missing crashes the gear screen on `.map` (Codex, 2026-07-27) —
+  // normalize here, the one place both paths pass through.
+  if (!Array.isArray(state.gearLibrary)) {
+    state.gearLibrary = []
+    state.gearSeedVersion = GEAR_SEED.version
+    return
+  }
   const from = state.gearSeedVersion ?? 1
   if (from >= GEAR_SEED.version) return
   if (from < 2) {

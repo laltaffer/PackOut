@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { gearStats, readiness, emptyMeals } from '../js/engine.js'
-import { GEAR_SEED } from '../js/seed.js'
+import { GEAR_SEED, applySeedMigrations } from '../js/seed.js'
 
 const GEAR_LIB = [
   { id: 'tent', name: 'Kifaru SuperTarp', category: 'Shelter/Sleeping', weightOz: 40 },
@@ -102,4 +102,26 @@ test('gear seed honors its contract: unique ids, named items, known categories',
   // Spot-pin real Montana items
   assert.ok(GEAR_SEED.items.some(g => g.name === 'Kifaru SuperTarp with annex'))
   assert.ok(GEAR_SEED.items.some(g => g.name === 'Crispi Laponia'))
+})
+
+test('a backup written before gear existed comes back with an empty closet', () => {
+  // Codex round 2: validateImport lets a missing gearLibrary through, and the
+  // import/sync paths assign the blob straight to state — so migration is the
+  // one place that can stop the gear screen crashing on `.map`.
+  const state = { schemaVersion: 1, trips: [], library: [] }
+  applySeedMigrations(state)
+  assert.ok(Array.isArray(state.gearLibrary))
+  assert.equal(state.gearLibrary.length, 0)
+  assert.doesNotThrow(() => state.gearLibrary.map(g => g.id))
+})
+
+test('a gear library that already exists is migrated, not replaced', () => {
+  const state = {
+    schemaVersion: 1, trips: [], library: [],
+    gearSeedVersion: 1,
+    gearLibrary: [{ id: 'x', name: 'Old bag', category: 'Pack', weightOz: 30 }],
+  }
+  applySeedMigrations(state)
+  assert.equal(state.gearLibrary.length, 1)
+  assert.equal(state.gearLibrary[0].category, 'Backpack')
 })

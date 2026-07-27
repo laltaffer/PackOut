@@ -136,3 +136,28 @@ test('validateImport: the gear library is gated like everything else that render
   assert.equal(withGear('nope').ok, false)
   assert.equal(withGear([null]).ok, false)
 })
+
+test('validateImport: gear categories and weights must be usable, not merely typed', () => {
+  // Codex round 2: an unknown category makes an item invisible in the gear
+  // screen's fixed grouping while still counting toward weight and packed
+  // totals; a zero or negative ounce subtracts from the pack.
+  const base = {
+    schemaVersion: 1, library: [], trips: [{
+      id: 't', name: 'T', startDate: '2026-08-01', weightLbs: 200, days: [{ intensity: 'medium' }],
+    }],
+  }
+  const g = extra => validateImport({
+    ...base,
+    gearLibrary: [{ id: 'ob-tent', name: 'Tent', category: 'Shelter/Sleeping', weightOz: 40, ...extra }],
+  }).ok
+  assert.equal(g({}), true)
+  assert.equal(g({ weightOz: null }), true)
+  assert.equal(g({ category: 'Pack' }), true, 'legacy names pass the gate, migration renames them')
+  assert.equal(g({ category: 'Food kit' }), true)
+
+  assert.equal(g({ category: 'Nowhere' }), false)
+  assert.equal(g({ category: '' }), false)
+  assert.equal(g({ weightOz: 0 }), false)
+  assert.equal(g({ weightOz: -5 }), false)
+  assert.equal(g({ weightOz: Infinity }), false)
+})
