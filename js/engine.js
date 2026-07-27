@@ -177,11 +177,17 @@ export function plannedDayOptions(trips, library) {
   return out
 }
 
+// What you wear is weight on your body, not weight in your pack (Lawrence,
+// 2026-07-27). It still gets packed-checked like everything else — it just
+// never lands in the number you carry.
+export const WORN_CATEGORY = 'Clothing worn'
+
 // Trip gear rollup: packed vs total against the gear library, named unpacked
-// items, and total known pack weight. Entries whose gear was deleted are ignored.
+// items, pack weight and worn weight kept apart. Entries whose gear was
+// deleted are ignored.
 export function gearStats(trip, gearLibrary) {
   const byId = new Map(gearLibrary.map(g => [g.id, g]))
-  const stats = { total: 0, packed: 0, unpacked: [], weightOz: 0, missingWeightCount: 0 }
+  const stats = { total: 0, packed: 0, unpacked: [], weightOz: 0, wornOz: 0, missingWeightCount: 0 }
   for (const entry of trip.gear ?? []) {
     const g = byId.get(entry.gearId)
     if (!g) continue
@@ -189,9 +195,11 @@ export function gearStats(trip, gearLibrary) {
     if (entry.packed) stats.packed += 1
     else stats.unpacked.push({ gearId: g.id, name: g.name, category: g.category })
     if (g.weightOz === null) stats.missingWeightCount += 1
+    else if (g.category === WORN_CATEGORY) stats.wornOz += g.weightOz
     else stats.weightOz += g.weightOz
   }
   stats.weightOz = Math.round(stats.weightOz * 100) / 100
+  stats.wornOz = Math.round(stats.wornOz * 100) / 100
   return stats
 }
 
@@ -514,6 +522,16 @@ function numOrNull(v) { return v === null || num(v) }
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/
 function validId(v) { return typeof v === 'string' && SAFE_ID.test(v) }
 
+// The engine imports nothing (it's the pure core), so the trip-type vocabulary
+// is spelled out here as well as in seed.js — a test pins the two together.
+const TRIP_TYPE_VALUES = ['backpacking', 'rifle', 'bow', 'fishing']
+
+function validMealStyle(style) {
+  return style && typeof style === 'object' &&
+    Object.entries(style).every(([k, v]) =>
+      ['breakfast', 'lunch', 'dinner'].includes(k) && (v === 'mobile' || v === 'sitdown'))
+}
+
 function validEntries(entries) {
   return Array.isArray(entries) && entries.every(e =>
     e && validId(e.foodId) && num(e.qty) && e.qty >= 1)
@@ -548,14 +566,16 @@ export function validateImport(data) {
     if (!t.name || !Array.isArray(t.days) || t.days.length === 0 || !num(t.weightLbs) || t.weightLbs <= 0 || !t.startDate) {
       return { ok: false, error: `Trip "${t.name ?? '?'}" is malformed.` }
     }
-    if (t.type !== undefined && !['backpacking', 'rifle', 'bow', 'fishing'].includes(t.type)) {
+    // A trip can be several things at once — an Alaska hunt that also fishes.
+    // Legacy single `type` still validates: migration folds it into `types`.
+    if (t.type !== undefined && !TRIP_TYPE_VALUES.includes(t.type)) {
       return { ok: false, error: `Trip "${t.name}" has an unknown trip type.` }
     }
-    if (t.mealStyle !== undefined) {
-      const ok = t.mealStyle && typeof t.mealStyle === 'object' &&
-        Object.entries(t.mealStyle).every(([k, v]) =>
-          ['breakfast', 'lunch', 'dinner'].includes(k) && (v === 'mobile' || v === 'sitdown'))
-      if (!ok) return { ok: false, error: `Trip "${t.name}" has an invalid meal style.` }
+    if (t.types !== undefined && (!Array.isArray(t.types) || !t.types.every(v => TRIP_TYPE_VALUES.includes(v)))) {
+      return { ok: false, error: `Trip "${t.name}" has an unknown trip type.` }
+    }
+    if (t.mealStyle !== undefined && !validMealStyle(t.mealStyle)) {
+      return { ok: false, error: `Trip "${t.name}" has an invalid meal style.` }
     }
     for (const [i, day] of t.days.entries()) {
       if (!validDay(day)) return { ok: false, error: `Trip "${t.name}", day ${i + 1} is malformed.` }
@@ -576,11 +596,17 @@ export function validateImport(data) {
       return { ok: false, error: `Food "${f.name}" has an invalid prep value.` }
     }
   }
-  if (data.onboarding !== undefined) {
-    const o = data.onboarding
+  if (data.profile !== undefined) {
+    const p = data.profile
     const strArr = a => Array.isArray(a) && a.every(s => typeof s === 'string' && SAFE_ID.test(s))
-    if (!o || typeof o !== 'object' || !num(o.at) || !num(o.step) || !strArr(o.tripTypes) || !strArr(o.brands)) {
-      return { ok: false, error: 'Onboarding record is malformed.' }
+    if (!p || typeof p !== 'object' || !num(p.setupAt) || !strArr(p.brands) || !strArr(p.tripTypes)) {
+      return { ok: false, error: 'Profile is malformed.' }
+    }
+    if (p.weightLbs !== null && (!num(p.weightLbs) || p.weightLbs <= 0)) {
+      return { ok: false, error: 'Profile body weight is malformed.' }
+    }
+    if (p.mealStyle !== undefined && p.mealStyle !== null && !validMealStyle(p.mealStyle)) {
+      return { ok: false, error: 'Profile meal style is malformed.' }
     }
   }
   return { ok: true }

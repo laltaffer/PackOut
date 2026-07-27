@@ -38,6 +38,24 @@ test('gearStats counts packed vs total, names unpacked items, sums known weights
   assert.equal(g.missingWeightCount, 1)
 })
 
+test('gearStats keeps what you wear off your back', () => {
+  const lib = [
+    ...GEAR_LIB,
+    { id: 'boots', name: 'Crispi Laponia', category: 'Clothing worn', weightOz: 62 },
+    { id: 'shell', name: 'Rain shell', category: 'Clothing packed', weightOz: 11 },
+  ]
+  const trip = {
+    weightLbs: 200,
+    days: [fueledDay()],
+    gear: [{ gearId: 'tent' }, { gearId: 'boots', packed: true }, { gearId: 'shell' }],
+  }
+  const g = gearStats(trip, lib)
+  assert.equal(g.weightOz, 51, 'tent + packed shell ride in the pack')
+  assert.equal(g.wornOz, 62, 'boots are on your feet')
+  assert.equal(g.total, 3, 'worn clothing still gets packed-checked')
+  assert.equal(g.packed, 1)
+})
+
 test('readiness blocks on unpacked gear and pending actions', () => {
   const trip = {
     weightLbs: 200,

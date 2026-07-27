@@ -126,6 +126,30 @@ export const SEED = {
 
 export const TRIP_TYPES = ['backpacking', 'rifle', 'bow', 'fishing']
 
+// Who makes the food, kept as an explicit table rather than read off id
+// prefixes: 'pro-bolt-chews' and 'probar-peanut-butter' are the same company,
+// and snack brands never prefixed cleanly at all. Starring a brand stars every
+// food it makes, so drafting reaches for it first.
+export const BRANDS = [
+  { id: 'peak', label: 'Peak Refuel', kind: 'meal', ids: ['peak-'] },
+  { id: 'stowaway', label: 'Stowaway Gourmet', kind: 'meal', ids: ['stowaway-'] },
+  { id: 'packit', label: 'Packit Gourmet', kind: 'meal', ids: ['packit-'] },
+  { id: 'fatty', label: 'FATTY', kind: 'snack', ids: ['fatty-'] },
+  { id: 'probar', label: 'ProBar', kind: 'snack', ids: ['probar-', 'pro-bolt'] },
+  { id: 'honey-stinger', label: 'Honey Stinger', kind: 'snack', ids: ['honey-stinger-'] },
+  { id: 'gu', label: 'GU Energy', kind: 'snack', ids: ['gu-'] },
+  { id: 'packaroon', label: 'Packaroon', kind: 'snack', ids: ['packaroon'] },
+  { id: 'haribo', label: 'Haribo', kind: 'snack', ids: ['haribo-'] },
+  { id: 'justins', label: "Justin's", kind: 'snack', ids: ['justins-'] },
+  { id: 'skratch', label: 'Skratch Labs', kind: 'snack', ids: ['skratch-'] },
+  { id: 'liquid-iv', label: 'Liquid IV', kind: 'snack', ids: ['liquid-iv-'] },
+]
+
+// A food belongs to the brand whose id patterns it starts with, or to none.
+export function brandOf(foodId) {
+  return BRANDS.find(b => b.ids.some(p => foodId.startsWith(p)))?.id ?? null
+}
+
 // Onboarding (spec #24, reworked 2026-07-27): the gear step asks how someone
 // actually camps and builds the slots their answers imply — no pre-checked
 // list of everything. Each option owns the rows it creates, so overlaps
@@ -150,8 +174,8 @@ const KILL_KIT = [
 export const GEAR_QUESTIONS = [
   {
     id: 'pack',
-    prompt: 'What do you carry it all in?',
-    hint: 'Pick every pack you use — a day pack and a hauler are two slots, not a choice.',
+    categories: ['Backpack'],
+    prompt: 'Which pack are you taking?',
     options: [
       { value: 'daypack', label: 'Day pack', rows: [{ id: 'ob-daypack', name: 'Day pack', category: 'Backpack' }] },
       { value: 'multiday', label: 'Multi-day pack', rows: [{ id: 'ob-multiday-pack', name: 'Multi-day pack', category: 'Backpack' }] },
@@ -161,8 +185,9 @@ export const GEAR_QUESTIONS = [
   },
   {
     id: 'sleep',
-    prompt: 'How do you sleep out?',
-    hint: 'Pick everything you own — any answer also adds a sleeping bag and a pad.',
+    categories: ['Shelter/Sleeping'],
+    prompt: 'How are you sleeping?',
+    hint: 'Any answer also adds a sleeping bag and a pad.',
     rows: [
       { id: 'ob-sleeping-bag', name: 'Sleeping bag or quilt', category: 'Shelter/Sleeping' },
       { id: 'ob-sleeping-pad', name: 'Sleeping pad', category: 'Shelter/Sleeping' },
@@ -176,8 +201,9 @@ export const GEAR_QUESTIONS = [
   },
   {
     id: 'water',
-    prompt: 'How do you handle water?',
-    hint: 'Pick what you actually carry — a filter bottle is one item, not two.',
+    categories: ['Water'],
+    prompt: 'How are you handling water?',
+    hint: 'A filter bottle is one item, not two.',
     options: [
       { value: 'filter', label: 'Filter', rows: [{ id: 'ob-water-filter', name: 'Water filter', category: 'Water' }] },
       { value: 'chem', label: 'Chemical or UV', rows: [{ id: 'ob-water-treatment', name: 'Chemical / UV treatment', category: 'Water' }] },
@@ -189,8 +215,8 @@ export const GEAR_QUESTIONS = [
   },
   {
     id: 'cook',
-    prompt: 'Do you cook in camp?',
-    hint: 'Both is a real answer — hot dinners on some trips, cold food on others.',
+    categories: ['Cooking'],
+    prompt: 'Are you cooking on this trip?',
     options: [
       { value: 'hot', label: 'Hot meals', note: 'stove, fuel, pot, utensil',
         rows: [
@@ -206,7 +232,8 @@ export const GEAR_QUESTIONS = [
   {
     id: 'rifle',
     when: 'rifle',
-    prompt: 'On a rifle hunt, what goes with you?',
+    categories: ['Weapon', 'Optics/Bino Pouch', 'Kill kit'],
+    prompt: 'Rifle hunt — what is going with you?',
     options: [
       { value: 'rifle', label: 'Rifle and ammunition',
         rows: [{ id: 'ob-rifle', name: 'Rifle', category: 'Weapon' }, { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' }] },
@@ -218,7 +245,8 @@ export const GEAR_QUESTIONS = [
   {
     id: 'bow',
     when: 'bow',
-    prompt: 'On a bow hunt, what goes with you?',
+    categories: ['Weapon', 'Optics/Bino Pouch', 'Kill kit'],
+    prompt: 'Bow hunt — what is going with you?',
     options: [
       { value: 'bow', label: 'Bow and release',
         rows: [{ id: 'ob-bow', name: 'Bow', category: 'Weapon' }, { id: 'ob-release', name: 'Release', category: 'Weapon' }] },
@@ -231,7 +259,8 @@ export const GEAR_QUESTIONS = [
   {
     id: 'fishing',
     when: 'fishing',
-    prompt: 'When you fish, what goes with you?',
+    categories: ['Fishing'],
+    prompt: 'Fishing — what is going with you?',
     options: [
       { value: 'rod', label: 'Rod and reel',
         rows: [{ id: 'ob-rod', name: 'Rod', category: 'Fishing' }, { id: 'ob-reel', name: 'Reel', category: 'Fishing' }] },
@@ -241,36 +270,86 @@ export const GEAR_QUESTIONS = [
     ],
   },
   {
+    id: 'worn',
+    categories: ['Clothing worn'],
+    prompt: 'What are you wearing out?',
+    hint: 'Worn weight is on your body, not in your pack — PackOut counts it separately.',
+    options: [
+      { value: 'boots', label: 'Boots', rows: [{ id: 'ob-boots', name: 'Boots', category: 'Clothing worn' }] },
+      { value: 'socks', label: 'Socks', rows: [{ id: 'ob-socks-worn', name: 'Socks', category: 'Clothing worn' }] },
+      { value: 'base', label: 'Base layer', rows: [{ id: 'ob-base-layer', name: 'Base layer', category: 'Clothing worn' }] },
+      { value: 'pants', label: 'Pants', rows: [{ id: 'ob-pants', name: 'Pants', category: 'Clothing worn' }] },
+      { value: 'hoody', label: 'Sun hoody or shirt', rows: [{ id: 'ob-hoody', name: 'Sun hoody', category: 'Clothing worn' }] },
+      { value: 'cap', label: 'Cap or brimmed hat', rows: [{ id: 'ob-cap', name: 'Cap', category: 'Clothing worn' }] },
+    ],
+  },
+  {
+    id: 'packed',
+    categories: ['Clothing packed'],
+    prompt: 'What clothing is going in the pack?',
+    options: [
+      { value: 'rain', label: 'Rain shell', rows: [{ id: 'ob-rain-shell', name: 'Rain shell', category: 'Clothing packed' }] },
+      { value: 'rain-pants', label: 'Rain pants', rows: [{ id: 'ob-rain-pants', name: 'Rain pants', category: 'Clothing packed' }] },
+      { value: 'puffy', label: 'Puffy or insulation', rows: [{ id: 'ob-puffy', name: 'Puffy', category: 'Clothing packed' }] },
+      { value: 'spare-socks', label: 'Spare socks', rows: [{ id: 'ob-spare-socks', name: 'Spare socks', category: 'Clothing packed' }] },
+      { value: 'gloves', label: 'Gloves', rows: [{ id: 'ob-gloves', name: 'Gloves', category: 'Clothing packed' }] },
+      { value: 'beanie', label: 'Beanie', rows: [{ id: 'ob-beanie', name: 'Beanie', category: 'Clothing packed' }] },
+    ],
+  },
+  {
     id: 'safety',
-    prompt: 'What safety gear do you carry?',
+    categories: ['First aid & Safety'],
+    prompt: 'What safety gear are you carrying?',
     options: [
       { value: 'headlamp', label: 'Headlamp', rows: [{ id: 'ob-headlamp', name: 'Headlamp', category: 'First aid & Safety' }] },
       { value: 'first-aid', label: 'First aid kit', rows: [{ id: 'ob-first-aid', name: 'First aid kit', category: 'First aid & Safety' }] },
       { value: 'sat-comm', label: 'Satellite communicator', rows: [{ id: 'ob-sat-comm', name: 'Satellite communicator', category: 'First aid & Safety' }] },
     ],
   },
+  {
+    id: 'extras',
+    categories: ['Luxuries'],
+    prompt: 'Anything else worth the weight?',
+    options: [
+      { value: 'poles', label: 'Trekking poles', rows: [{ id: 'ob-poles', name: 'Trekking poles', category: 'Luxuries' }] },
+      { value: 'pillow', label: 'Pillow', rows: [{ id: 'ob-pillow', name: 'Pillow', category: 'Luxuries' }] },
+      { value: 'camp-shoes', label: 'Camp shoes', rows: [{ id: 'ob-camp-shoes', name: 'Camp shoes', category: 'Luxuries' }] },
+      { value: 'camera', label: 'Camera', rows: [{ id: 'ob-camera', name: 'Camera', category: 'Luxuries' }] },
+    ],
+  },
 ]
 
-// The questions worth asking someone who picked these trip types: the base
-// camp questions always, activity questions only for the activities they do.
-export function gearQuestions(tripTypes) {
-  const picked = TRIP_TYPES.filter(t => tripTypes.includes(t))
-  return GEAR_QUESTIONS.filter(q => !q.when || picked.includes(q.when))
+// What to ask about THIS trip: the camp questions always, activity questions
+// only for what the trip is. Each block carries the gear you already own in
+// its categories, so the questions read with your own kit ("Kifaru SuperTarp",
+// not "Tent"), plus the generic options for gear you have never logged. An
+// option whose slots all exist already is dropped — it would be a duplicate of
+// an item listed right above it.
+export function tripGearQuestions(trip, gearLibrary = []) {
+  const types = tripTypes(trip)
+  const owned = new Set(gearLibrary.map(g => g.id))
+  return GEAR_QUESTIONS
+    .filter(q => !q.when || types.includes(q.when))
+    .map(q => ({
+      ...q,
+      items: gearLibrary.filter(g => q.categories.includes(g.category)),
+      options: q.options.filter(o => !o.rows.every(r => owned.has(r.id))),
+    }))
+    .filter(q => q.items.length > 0 || q.options.length > 0)
 }
 
-// Runs exactly once: a state that has never synced (no updatedAt stamp) and
-// carries no onboarding record belongs to a brand-new account.
-export function needsOnboarding(state) {
-  return !state.updatedAt && !state.onboarding
+// A trip's types, tolerating the legacy single `type` so a state that has not
+// been migrated yet still asks the right questions.
+export function tripTypes(trip) {
+  const raw = Array.isArray(trip?.types) ? trip.types : (trip?.type ? [trip.type] : [])
+  return TRIP_TYPES.filter(t => raw.includes(t))
 }
 
 // The gear slots a set of answers implies. `answers` maps question id →
-// chosen option values; unknown ids and values are ignored, so a stale or
-// hand-edited answer set can never inject rows. Question order, deduped by
-// id — the FIRST answer to claim an id names it (a filter bottle picked
-// alongside a filter still leaves both slots, but the same shelter id can't
-// appear twice).
-export function onboardingGear(answers) {
+// chosen values; a value is either an owned gear id or a generic option value.
+// Unknown ids and values are ignored, so a stale or hand-edited answer set can
+// never inject rows. Question order, deduped by id.
+export function kitRows(answers, questions = GEAR_QUESTIONS) {
   const seen = new Set()
   const rows = []
   const take = row => {
@@ -278,40 +357,88 @@ export function onboardingGear(answers) {
     seen.add(row.id)
     rows.push(row)
   }
-  for (const q of GEAR_QUESTIONS) {
-    const picked = (answers?.[q.id] ?? []).filter(v => q.options.some(o => o.value === v))
-    if (picked.length === 0) continue
-    for (const value of picked) {
-      for (const row of q.options.find(o => o.value === value).rows) take(row)
+  for (const q of questions) {
+    const picked = (answers?.[q.id] ?? [])
+    const chosen = picked.filter(v => q.options.some(o => o.value === v))
+    const ownedPicks = picked.filter(v => (q.items ?? []).some(g => g.id === v))
+    if (chosen.length === 0 && ownedPicks.length === 0) continue
+    for (const v of ownedPicks) take((q.items ?? []).find(g => g.id === v))
+    for (const v of chosen) {
+      for (const row of q.options.find(o => o.value === v).rows) take(row)
     }
-    // Question-level rows ride along with any answer (a shelter answer always
-    // means a bag and a pad).
-    for (const row of q.rows ?? []) take(row)
+    // Question-level rows scaffold a first kit (a shelter answer always means a
+    // bag and a pad). Once the question lists gear you own, you are choosing
+    // explicitly — nothing rides along uninvited.
+    if (!(q.items?.length)) for (const row of q.rows ?? []) take(row)
   }
   return rows
 }
 
-// Applies the answers a user actually gave. step counts completed steps
-// (0 = skipped everything, 1 = trips, 2 = +brands, 3 = +gear); kit null
-// = never reached/skipped the gear step. Completing the brands step always
-// resets stars so the library reflects the user's brands, not Lawrence's
-// pre-starred order — an empty pick is neutral.
-export function applyOnboarding(state, { tripTypes, brands, kit, step, at }) {
-  if (step >= 2) {
-    const prefixes = brands.map(b => `${b}-`)
-    for (const f of state.library) {
-      f.favorite = prefixes.some(p => f.id.startsWith(p))
+// Answering builds the trip's kit AND grows the closet: slots that do not
+// exist yet are added to the gear library as blank rows (name, category, no
+// weight) and everything picked joins the trip, unpacked.
+export function applyTripKit(state, trip, answers, questions) {
+  const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
+  const rows = kitRows(answers, questions)
+  trip.gear ??= []
+  const inKit = new Set(trip.gear.map(e => e.gearId))
+  for (const row of rows) {
+    if (!byId.has(row.id)) {
+      const item = { id: row.id, name: row.name, category: row.category, weightOz: null }
+      state.gearLibrary.push(item)
+      byId.set(row.id, item)
+    }
+    if (!inKit.has(row.id)) {
+      trip.gear.push({ gearId: row.id })
+      inKit.add(row.id)
     }
   }
-  if (kit) {
-    // Answering the gear questions at all replaces the inherited seed library
-    // with the slots those answers imply — answering nothing empties it, which
-    // is a real answer ("I'll add my own").
-    state.gearLibrary = onboardingGear(kit)
-      .map(r => ({ id: r.id, name: r.name, category: r.category, weightOz: null }))
-    state.gearSeedVersion = GEAR_SEED.version
+  return trip
+}
+
+// Taking the same kit as another trip copies the items, never the packed
+// marks — a new trip starts unpacked (Lawrence, 2026-07-27).
+export function copyKit(fromTrip, toTrip) {
+  toTrip.gear ??= []
+  const inKit = new Set(toTrip.gear.map(e => e.gearId))
+  for (const entry of fromTrip.gear ?? []) {
+    if (inKit.has(entry.gearId)) continue
+    inKit.add(entry.gearId)
+    toTrip.gear.push({ gearId: entry.gearId })
   }
-  state.onboarding = { at, step, tripTypes, brands }
+  return toTrip
+}
+
+// Runs exactly once: a state that has never synced (no updatedAt stamp) and
+// carries no profile belongs to a brand-new account.
+export function needsProfile(state) {
+  return !state.updatedAt && !state.profile
+}
+
+export function emptyProfile() {
+  return { weightLbs: null, brands: [], tripTypes: [], mealStyle: null, setupAt: 0 }
+}
+
+// "Skip for now" records that we asked without answering for them: no stars
+// are touched, and the welcome never returns.
+export function skipProfile(state, at) {
+  state.profile = { ...emptyProfile(), setupAt: at }
+  return state
+}
+
+// Saving the profile is what stars food: the library reflects the brands the
+// user reaches for, not Lawrence's pre-starred order. An empty pick is a
+// neutral answer, not a no-op — it clears the stars.
+export function applyProfile(state, { weightLbs, brands, tripTypes, mealStyle, at }) {
+  const picked = BRANDS.filter(b => brands.includes(b.id)).map(b => b.id)
+  for (const f of state.library) f.favorite = picked.includes(brandOf(f.id))
+  state.profile = {
+    weightLbs: typeof weightLbs === 'number' && weightLbs > 0 ? weightLbs : null,
+    brands: picked,
+    tripTypes: TRIP_TYPES.filter(t => tripTypes.includes(t)),
+    mealStyle: mealStyle ?? null,
+    setupAt: at,
+  }
   return state
 }
 
@@ -450,7 +577,32 @@ function migrateGear(state) {
   state.gearSeedVersion = GEAR_SEED.version
 }
 
+// Shape migrations that answer to no version counter because they are
+// idempotent conversions: a trip's single `type` becomes a `types` list, and
+// the one-day-lived onboarding record becomes the profile that replaced it.
+function migrateShape(state) {
+  for (const trip of state.trips ?? []) {
+    if (trip.type === undefined) continue
+    const types = Array.isArray(trip.types) ? trip.types : []
+    trip.types = TRIP_TYPES.filter(t => types.includes(t) || t === trip.type)
+    delete trip.type
+  }
+  if (state.onboarding && !state.profile) {
+    const o = state.onboarding
+    state.profile = {
+      weightLbs: null,
+      brands: BRANDS.filter(b => (o.brands ?? []).includes(b.id)).map(b => b.id),
+      tripTypes: TRIP_TYPES.filter(t => (o.tripTypes ?? []).includes(t)),
+      mealStyle: null,
+      setupAt: o.at ?? 0,
+    }
+  }
+  delete state.onboarding
+  return state
+}
+
 export function applySeedMigrations(state) {
+  migrateShape(state)
   migrateGear(state)
   const from = state.seedVersion ?? 1
   if (from >= SEED.version) return sweepRetired(state)

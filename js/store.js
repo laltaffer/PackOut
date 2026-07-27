@@ -16,7 +16,10 @@ function ensureLibrary(state) {
     state.seedVersion = SEED.version
   }
   if (!Array.isArray(state.gearLibrary)) {
-    state.gearLibrary = GEAR_SEED.items.map(g => ({ ...g }))
+    // A new account's closet starts empty (Lawrence, 2026-07-27): the trip's
+    // gear questions fill it with the user's own answers. GEAR_SEED remains
+    // Lawrence's Montana list — nobody else should inherit a stranger's Kifaru.
+    state.gearLibrary = []
     state.gearSeedVersion = GEAR_SEED.version
   }
   return state

@@ -595,6 +595,10 @@ main:has(.trip-surface) { max-width: none; }
 .gate .gsi-holder { min-height: 44px; }
 
 .onboard { max-width: 30rem; }
+/* The kit questions carry your own gear names, so they need room the profile
+   doesn't — and the heading stays on one line. */
+.kit-ask { max-width: 44rem; }
+.kit-or { color: var(--soft); margin: 0.5rem 0 1.2rem; }
 .onboard form { display: grid; gap: 0.35rem; justify-items: start; width: 100%; }
 .onboard-option { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; min-height: 32px; }
 
@@ -606,6 +610,12 @@ main:has(.trip-surface) { max-width: none; }
 .onboard-q legend { font-weight: 700; color: var(--head); font-size: 1.05rem; padding: 0; margin-bottom: 0.1rem; }
 .onboard-q-hint { color: var(--soft); font-size: 0.85rem; margin-bottom: 0.4rem; }
 .onboard-q .onboard-option { font-weight: 400; }
+/* Short answers flow two-up once there's room, so a long question set stays
+   one screen instead of a scroll. */
+.onboard-opts { display: grid; gap: 0 1.2rem; }
+@media (min-width: 34rem) { .onboard-opts { grid-template-columns: 1fr 1fr; } }
+.onboard-q .onboard-q { margin-bottom: 0.9rem; }
+.onboard-q legend + .onboard-opts { margin-top: 0.2rem; }
 .onboard-note { color: var(--soft); font-size: 0.85rem; font-weight: 400; }
 .onboard-actions { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
 .onboard-progress { color: var(--soft); font-size: 0.8rem; }

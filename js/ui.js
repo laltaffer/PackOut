@@ -2,7 +2,7 @@
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations, needsOnboarding, gearQuestions, applyOnboarding, TRIP_TYPES } from './seed.js'
+import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, applyTripKit, copyKit, BRANDS, TRIP_TYPES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -35,6 +35,11 @@ function route() {
   if (gearAddMatch) {
     const trip = state.trips.find(t => t.id === gearAddMatch[1])
     if (trip) return renderGearPicker(trip)
+  }
+  const kitMatch = hash.match(/^#\/trip\/(.+)\/gear\/kit$/)
+  if (kitMatch) {
+    const trip = state.trips.find(t => t.id === kitMatch[1])
+    if (trip) return renderKitQuestions(trip)
   }
   const outMatch = hash.match(/^#\/trip\/(.+)\/(grocery|pack|ready|gear)$/)
   if (outMatch) {
@@ -75,6 +80,7 @@ function route() {
   if (hash === '#/library/new') return renderFoodForm(null)
   if (hash === '#/library') return renderLibrary()
   if (hash === '#/new') return renderNewTrip()
+  if (hash === '#/profile') return renderProfile()
   renderDashboard()
 }
 
@@ -83,7 +89,9 @@ window.addEventListener('hashchange', route)
 // Masthead nav is navigation, not tabs/filters — mark the active section.
 function updateNav() {
   const inLibrary = (location.hash || '#/').startsWith('#/library')
-  document.querySelectorAll('.masthead-nav a').forEach(a => {
+  // Direct children only — the account chip's profile link is navigation for
+  // the person, not a section, and must never wear the active underline.
+  document.querySelectorAll('.masthead-nav > a').forEach(a => {
     const isLibrary = a.getAttribute('href') === '#/library'
     a.classList.toggle('is-active', isLibrary === inLibrary)
   })
@@ -266,6 +274,23 @@ function mealStyleFields(style) {
     </fieldset>`
 }
 
+// A trip can be several things at once — an Alaska hunt that also fishes.
+// The picks decide which gear questions its kit screen asks.
+function tripTypeFields(selected) {
+  return `
+    <fieldset class="onboard-q trip-types">
+      <legend>What kind of trip is this?</legend>
+      <p class="onboard-q-hint">Pick everything you'll do — each one adds its own gear questions.</p>
+      <div class="onboard-opts">
+        ${TRIP_TYPES.map(t => `
+          <label class="onboard-option">
+            <input type="checkbox" name="tripType" value="${t}"${selected.includes(t) ? ' checked' : ''}>
+            <span>${TRIP_TYPE_LABELS[t]}</span>
+          </label>`).join('')}
+      </div>
+    </fieldset>`
+}
+
 function mealStyleFromForm(f) {
   const pick = v => v === 'sitdown' ? 'sitdown' : 'mobile'
   return {
@@ -288,12 +313,7 @@ function renderNewTrip() {
         <label>Destination
           <input name="destination" required placeholder="Brooks Range, AK">
         </label>
-        <label>Trip type
-          <select name="type">
-            <option value="">&mdash; optional &mdash;</option>
-            ${TRIP_TYPES.map(t => `<option value="${t}">${TRIP_TYPE_LABELS[t]}</option>`).join('')}
-          </select>
-        </label>
+        ${tripTypeFields(state.profile?.tripTypes ?? [])}
         <label>Start date
           <input name="startDate" type="date" required>
         </label>
@@ -301,10 +321,10 @@ function renderNewTrip() {
           <input name="days" type="number" min="1" max="30" required value="5">
         </label>
         <label>Your body weight (lbs)
-          <input name="weightLbs" type="number" min="50" max="400" required value="${last ? last.weightLbs : ''}">
-          <small>Drives your daily calorie and macro targets. Use goal weight if you prefer.</small>
+          <input name="weightLbs" type="number" min="50" max="400" required value="${state.profile?.weightLbs ?? (last ? last.weightLbs : '')}">
+          <small>From your profile. Changing it here only affects this trip.</small>
         </label>
-        ${mealStyleFields(mealStyleOf(last))}
+        ${mealStyleFields(state.profile?.mealStyle ?? mealStyleOf(last))}
         <button class="btn btn-primary" type="submit">Create Trip</button>
       </form>
     </section>
@@ -322,10 +342,12 @@ function renderNewTrip() {
       mealStyle: mealStyleFromForm(f),
       days: Array.from({ length: Number(f.get('days')) }, () => ({ intensity: 'medium' })),
     }
-    if (f.get('type')) trip.type = f.get('type')
+    trip.types = f.getAll('tripType')
     state.trips.push(trip)
     persist()
-    location.hash = `#/trip/${trip.id}`
+    // A new trip's kit is the next question, so land on the gear screen — it
+    // asks rather than showing an empty list.
+    location.hash = `#/trip/${trip.id}/gear`
   })
 }
 
@@ -350,6 +372,7 @@ function renderEditTrip(trip) {
           <input name="days" type="number" min="1" max="30" required value="${trip.days.length}">
           <small>Adding days appends empty ones; removing days deletes them from the end.</small>
         </label>
+        ${tripTypeFields(tripTypes(trip))}
         <label>Your body weight (lbs)
           <input name="weightLbs" type="number" min="50" max="400" required value="${trip.weightLbs}">
         </label>
@@ -379,6 +402,7 @@ function renderEditTrip(trip) {
     trip.destination = f.get('destination').trim()
     trip.startDate = f.get('startDate')
     trip.weightLbs = Number(f.get('weightLbs'))
+    trip.types = f.getAll('tripType')
     trip.mealStyle = mealStyleFromForm(f)
     persist()
     location.hash = `#/trip/${trip.id}`
@@ -1056,8 +1080,14 @@ const GEAR_CATEGORIES = [
   'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
 ]
 
+// A trip whose kit is empty gets asked rather than shown an empty list. This
+// remembers the trips where the user said "I'll add them myself" so the ask
+// doesn't reappear on every visit — session-only, deliberately not synced.
+const kitAskSkipped = new Set()
+
 function renderGear(trip) {
   trip.gear ??= []
+  if (trip.gear.length === 0 && !kitAskSkipped.has(trip.id)) return renderKitQuestions(trip)
   // The gear screen is the only door to the picker — arriving here clears
   // any category scope a section CTA set on a previous visit, and any
   // half-open library edit.
@@ -1078,11 +1108,12 @@ function renderGear(trip) {
         <button class="btn" id="print">Print</button>
       </div>
       ${trip.gear.length ? `
-      <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.weightOz ? ` · ${stats.weightOz} oz known weight` : ''}${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>` : `
+      <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.weightOz ? ` · ${stats.weightOz} oz on your back` : ''}${stats.wornOz ? ` · ${stats.wornOz} oz worn` : ''}${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>` : `
       <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
       <div class="backup-actions gear-actions">
-        <button class="btn" id="gear-full-kit">Add full kit</button>
+        <a class="btn" href="#/trip/${trip.id}/gear/kit">Build from questions</a>
         <a class="btn" href="#/trip/${trip.id}/gear/add">Add item</a>
+        <button class="btn" id="gear-full-kit">Add everything I own</button>
         ${otherTrips.length ? `
         <label class="gear-import-label">Import kit from
           <select id="gear-import-source">
@@ -1144,6 +1175,76 @@ function renderGear(trip) {
     trip.gear = trip.gear.filter(x => x.gearId !== btn.dataset.gearRm)
     commit()
   }))
+}
+
+// The kit questions (spec #24, reworked 2026-07-27): what's going on THIS
+// trip, asked in plain language and scoped by the trip's types. Gear you
+// already own is listed under the question that owns its category, so the
+// questions read with your own kit; the generic options below build blank
+// slots for anything you've never logged.
+function renderKitQuestions(trip) {
+  trip.gear ??= []
+  const questions = tripGearQuestions(trip, state.gearLibrary)
+  const source = [...state.trips]
+    .filter(t => t.id !== trip.id && (t.gear?.length ?? 0) > 0)
+    .sort((a, b) => b.createdAt - a.createdAt)[0]
+
+  const option = (name, value, label, note) => `
+    <label class="onboard-option">
+      <input type="checkbox" name="${esc(name)}" value="${esc(value)}">
+      <span>${esc(label)}${note ? ` <span class="onboard-note">${esc(note)}</span>` : ''}</span>
+    </label>`
+
+  app.replaceChildren(el(`
+    <section class="gate onboard kit-ask">
+      <a href="#/trip/${trip.id}" class="crumb">&larr; ${esc(trip.name)}</a>
+      <h1>What's going on this trip?</h1>
+      <p>Anything you pick that PackOut hasn't seen becomes a blank slot in your gear list — name it and weigh it whenever you like.</p>
+      ${source ? `
+      <button class="btn" id="kit-copy">Same kit as ${esc(source.name)} (${source.gear.length} items)</button>
+      <p class="kit-or mono">or answer again</p>` : ''}
+      <form id="kit-form">
+        ${questions.map(q => `
+          <fieldset class="onboard-q">
+            <legend>${esc(q.prompt)}</legend>
+            ${q.hint && !q.items.length ? `<p class="onboard-q-hint">${esc(q.hint)}</p>` : ''}
+            <div class="onboard-opts">
+              ${q.items.map(g => option(q.id, g.id, g.name, g.weightOz !== null ? `${g.weightOz} oz` : 'no weight yet')).join('')}
+              ${q.options.map(o => option(q.id, o.value, q.items.length ? `+ ${o.label}` : o.label, o.note)).join('')}
+            </div>
+          </fieldset>`).join('')}
+        <div class="onboard-actions">
+          <button class="btn btn-primary" type="submit">Build my kit</button>
+          <button class="btn-quiet" type="button" id="kit-skip">Add items myself</button>
+        </div>
+      </form>
+    </section>
+  `))
+  // Both paths land on the kit itself — the questions are a way in, not a
+  // screen to sit on.
+  const showKit = () => {
+    kitAskSkipped.add(trip.id)
+    persist()
+    const target = `#/trip/${trip.id}/gear`
+    if (location.hash === target) route()
+    else location.hash = target
+  }
+  const copy = document.getElementById('kit-copy')
+  if (copy) copy.addEventListener('click', () => {
+    copyKit(source, trip)
+    showKit()
+  })
+  document.getElementById('kit-skip').addEventListener('click', () => {
+    kitAskSkipped.add(trip.id)
+    renderGear(trip)
+  })
+  document.getElementById('kit-form').addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    const answers = Object.fromEntries(questions.map(q => [q.id, f.getAll(q.id)]))
+    applyTripKit(state, trip, answers, questions)
+    showKit()
+  })
 }
 
 let gearSearch = ''
@@ -1587,9 +1688,12 @@ async function afterSignIn() {
   // seeded state (or onboarding answers) with a fresh clock would overwrite
   // the real profile the moment connectivity returns.
   if (sync === 'empty') {
-    // Ask their preferences before anything persists — completing (or
-    // skipping) onboarding stamps and pushes the state.
-    if (needsOnboarding(state)) return renderOnboarding()
+    // Ask their preferences before anything persists — saving (or skipping)
+    // the profile stamps and pushes the state.
+    if (needsProfile(state)) {
+      welcomeProfile = true
+      return renderProfile()
+    }
     // A brand-new profile on a clean device: stamp the seeded state and push
     // it up so the next device pulls something.
     if (!state.updatedAt) persist()
@@ -1597,85 +1701,92 @@ async function afterSignIn() {
   route()
 }
 
-// ---------- onboarding (spec #24, first sign-in only) ----------
+// ---------- profile (spec #24, reworked: preferences live in one place) ----------
 
 const TRIP_TYPE_LABELS = { backpacking: 'Backpacking', rifle: 'Rifle hunt', bow: 'Bow hunt', fishing: 'Fishing' }
-const BRAND_LABELS = { peak: 'Peak Refuel', stowaway: 'Stowaway Gourmet', packit: 'Packit Gourmet' }
 
-// Three screens, in order: trip types → brands → how you camp. The gear step
-// asks plain questions and builds the slots the answers imply — nothing is
-// pre-checked, because a checked list isn't a question. Next with nothing
-// selected is a valid neutral answer; "Skip setup" bails and applies only the
-// steps already completed.
-function renderOnboarding() {
-  const answers = { tripTypes: [], brands: [], kit: null }
+// First sign-in lands on the profile with a welcome line; every visit after
+// that is a plain edit screen. One implementation, one home for preferences.
+let welcomeProfile = false
 
-  const finish = step => {
-    applyOnboarding(state, { ...answers, step, at: Date.now() })
-    persist()
-    route()
-  }
-
-  const checklist = (name, items, checked) => items.map(([value, label]) => `
-    <label class="onboard-option">
-      <input type="checkbox" name="${name}" value="${esc(value)}"${checked ? ' checked' : ''}> ${esc(label)}
-    </label>`).join('')
-
-  const screen = (step, title, hint, body, onNext) => {
-    app.replaceChildren(el(`
-      <section class="gate onboard">
-        <h1>${esc(title)}</h1>
-        <p>${esc(hint)}</p>
-        <form id="onboard-form">
-          ${body}
-          <div class="onboard-actions">
-            <button class="btn btn-primary" type="submit">${step === 2 ? 'Finish' : 'Next'}</button>
-            <button class="btn-quiet" type="button" id="onboard-skip">Skip setup</button>
-          </div>
-        </form>
-        <p class="mono onboard-progress">Step ${step + 1} of 3</p>
-      </section>
-    `))
-    document.getElementById('onboard-skip').addEventListener('click', () => finish(step))
-    document.getElementById('onboard-form').addEventListener('submit', e => {
-      e.preventDefault()
-      onNext(new FormData(e.target))
-    })
-  }
-
-  const stepTrips = () => screen(0, 'What kind of trips do you take?',
-    'Pick all that apply — this builds your starter gear checklist.',
-    checklist('type', TRIP_TYPES.map(t => [t, TRIP_TYPE_LABELS[t]]), false),
-    f => { answers.tripTypes = f.getAll('type'); stepBrands() })
-
-  const stepBrands = () => screen(1, 'Which meal brands do you like?',
-    'Their meals get starred, and drafting reaches for starred foods first.',
-    checklist('brand', Object.entries(BRAND_LABELS), false),
-    f => { answers.brands = f.getAll('brand'); stepGear() })
-
-  const questionBlock = q => `
+function renderProfile() {
+  const p = state.profile ?? emptyProfile()
+  const welcome = welcomeProfile
+  const style = p.mealStyle ?? mealStyleOf(null)
+  const brandBlock = kind => `
     <fieldset class="onboard-q">
-      <legend>${esc(q.prompt)}</legend>
-      ${q.hint ? `<p class="onboard-q-hint">${esc(q.hint)}</p>` : ''}
-      ${q.options.map(o => `
-        <label class="onboard-option">
-          <input type="checkbox" name="${esc(q.id)}" value="${esc(o.value)}">
-          <span>${esc(o.label)}${o.note ? ` <span class="onboard-note">${esc(o.note)}</span>` : ''}</span>
-        </label>`).join('')}
+      <legend>${kind === 'meal' ? 'Meals' : 'Snacks and drink mixes'}</legend>
+      <div class="onboard-opts">
+        ${BRANDS.filter(b => b.kind === kind).map(b => `
+          <label class="onboard-option">
+            <input type="checkbox" name="brand" value="${esc(b.id)}"${p.brands.includes(b.id) ? ' checked' : ''}>
+            <span>${esc(b.label)}</span>
+          </label>`).join('')}
+      </div>
     </fieldset>`
 
-  const stepGear = () => {
-    const questions = gearQuestions(answers.tripTypes)
-    screen(2, 'How do you camp?',
-    'Your answers become blank slots in your gear list — you name the real item and weigh it later. Leave anything blank you’d rather add yourself.',
-    questions.map(questionBlock).join(''),
-    f => {
-      answers.kit = Object.fromEntries(questions.map(q => [q.id, f.getAll(q.id)]))
-      finish(3)
-    })
+  app.replaceChildren(el(`
+    <section class="gate onboard profile">
+      ${welcome ? '' : '<a href="#/" class="crumb">&larr; Trips</a>'}
+      <h1>${welcome ? 'Welcome to PackOut' : 'Your profile'}</h1>
+      <p>${welcome
+        ? 'Set this up once — you can change any of it later under your name.'
+        : 'Changes apply to new trips. Trips you have already planned keep the weight and style you planned them with.'}</p>
+      <form id="profile-form">
+        <label>Body weight (lbs)
+          <input name="weightLbs" type="number" min="50" max="400" value="${p.weightLbs ?? ''}" placeholder="208">
+          <small>Drives your daily calorie and macro targets.</small>
+        </label>
+        <fieldset class="onboard-q">
+          <legend>Which brands do you reach for?</legend>
+          <p class="onboard-q-hint">Their foods get starred, and drafting reaches for starred foods first.</p>
+          ${brandBlock('meal')}
+          ${brandBlock('snack')}
+        </fieldset>
+        <fieldset class="onboard-q">
+          <legend>What kind of trips do you take?</legend>
+          <p class="onboard-q-hint">New trips start with these types selected — each one adds its own gear questions.</p>
+          <div class="onboard-opts">
+            ${TRIP_TYPES.map(t => `
+              <label class="onboard-option">
+                <input type="checkbox" name="tripType" value="${t}"${p.tripTypes.includes(t) ? ' checked' : ''}>
+                <span>${TRIP_TYPE_LABELS[t]}</span>
+              </label>`).join('')}
+          </div>
+        </fieldset>
+        ${mealStyleFields(style)}
+        <div class="onboard-actions">
+          <button class="btn btn-primary" type="submit">${welcome ? 'Save and start' : 'Save'}</button>
+          ${welcome ? '<button class="btn-quiet" type="button" id="profile-skip">Skip for now</button>' : ''}
+        </div>
+      </form>
+    </section>
+  `))
+  const leave = () => {
+    welcomeProfile = false
+    location.hash = '#/'
+    if ((location.hash || '#/') === '#/') route()
   }
-
-  stepTrips()
+  const skip = document.getElementById('profile-skip')
+  if (skip) skip.addEventListener('click', () => {
+    skipProfile(state, Date.now())
+    persist()
+    leave()
+  })
+  document.getElementById('profile-form').addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    const weight = Number(f.get('weightLbs'))
+    applyProfile(state, {
+      weightLbs: f.get('weightLbs') === '' ? null : weight,
+      brands: f.getAll('brand'),
+      tripTypes: f.getAll('tripType'),
+      mealStyle: mealStyleFromForm(f),
+      at: Date.now(),
+    })
+    persist()
+    leave()
+  })
 }
 
 function renderAccountChip() {
@@ -1693,7 +1804,7 @@ function renderAccountChip() {
   const s = syncStatus()
   const label = { idle: '', syncing: 'syncing…', synced: 'synced', error: 'sync failed' }[s]
   chip.innerHTML = `
-    <span class="mono account-name">${esc(p.name || 'Signed in')}</span>
+    <a class="mono account-name" href="#/profile">${esc(p.name || 'Profile')}</a>
     <span class="mono sync-note sync-${esc(s)}">${label}</span>
     <button class="btn-quiet" id="sign-out">Sign out</button>`
   chip.querySelector('#sign-out').addEventListener('click', async () => {
