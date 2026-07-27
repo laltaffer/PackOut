@@ -144,6 +144,61 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-27 (evening): **Seventeen-note dogfood round** (commit a8d3e16 +
+follow-ups, not deployed — awaiting Lawrence's word; Alaska is 2026-08-01 and
+his live data is the stake). 229 tests green (41 new). QA'd at 390px and
+1280px in both brands against a stubbed session (`.scratch/qa-server.mjs`,
+disposable); console clean. Seven groups:
+  - **Destination lookup** (`POST /api/place`, `functions/lib/place.js`):
+    Open-Meteo geocode + the trip window's own forecast, falling back to the
+    same calendar week last year and *labelled as history*. Keyless, and the
+    three upstream hosts are compile-time constants, so unlike `/api/scrape`
+    there is no user-controlled URL and no SSRF surface. Result lands on
+    `trip.place`; KV-cached by question (6 h forecast / 30 d history). It
+    **suggests, never selects**: a wet week flags the rain options in the gear
+    questions, a cold one flags insulation. This is the hook Lawrence asked
+    for — future suggestion work reads `trip.place`.
+  - **One day surface**: the separate day editor is deleted into the forecast
+    board — every meal lists its food inline with qty/remove, so seeing or
+    changing what you eat costs no navigation. `/day/N/edit` redirects.
+    **Protein floor leaves the UI entirely** (the Verdict still uses 0.6 g/lb
+    internally), and the duplicate target beside the effort selector goes.
+  - **Drafts respect removals** (the pico de gallo loop): taking a food off a
+    day records a per-trip `trip.declined`; drafting never hands it back, and
+    the day says "N foods excluded · allow them again". Per-trip on purpose —
+    a food with no place in Alaska may still belong in Montana.
+  - **Favorites are a preference, not a sort key**: every pick tries the
+    starred subset first and only widens when nothing starred fits. Tried
+    favorites-*only* for meal slots first; it broke four tuned behaviors
+    (breakfast bias, ±50, meal-sized lunch) and was reverted — **exhaust-then-
+    widen is the rule**, and the test asserts the ordering, not exclusivity.
+  - **Both questionnaires are boards** (profile + trip kit): `.q-grid` cards
+    with chip answers and a live tally, so a 13-question set is two screens
+    instead of six. Columns, not tighter type — the four dense redesigns of
+    2026-07-24 stand as the warning. The kit screen asks the **trip type
+    itself** and reveals dependent blocks live, asks **whether you're flying**,
+    and lets a checked answer **name its real product by URL** (reuses
+    `/api/scrape`).
+  - **Gear says what you're bringing**: every row edits in place (name, product
+    URL + Fetch, weight) and blank slots read as blank. A blank slot's name box
+    starts empty so Fetch can fill it — the generic name is the placeholder.
+    **Optics is its own question** (spotter, tripod, binos, range finder, shared
+    by both hunt types); **a pack is one object** (no bag + frame to add up);
+    rain gear can be **worn** as well as packed (different rows — worn weight
+    isn't pack weight); safety covers **bear spray and a sidearm** (filed under
+    First aid & Safety so a backpacking trip, which asks no weapon question,
+    can still declare them).
+  - **Flying** (`flyIssues`): names what can't fly at all (fuel, bear spray),
+    what flies checked (firearms, blades, poles) and what flies in the cabin
+    (lithium), on the gear screen and in Readiness. Rules match the item's
+    **name**, not its id, so a renamed "MSR IsoPro" is still caught; a
+    heuristic by nature, so it warns and never blocks.
+  - **Design system** (DESIGN.md "Component contract"): one `.back` control —
+    bordered, 44px, top-left, naming its destination — replaces the grey
+    `.crumb` everywhere. **Focus is not the action color**: pink at 3px read as
+    a form error, so focus owns `--focus`/`--focus-halo` (cool) and errors own
+    `--err` + ⚠ + a sentence. Check rows read **count-first, box-last** on
+    every screen.
 2026-07-27 (later): **Onboarding IS the profile; gear questions moved to the
 trip** (commit f8fe2aa, live). Decided in a grilling session with Lawrence.
 Key judgment, his: *almost nothing about gear is universal* — what shelter,

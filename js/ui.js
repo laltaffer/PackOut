@@ -1248,7 +1248,11 @@ function gearRow(item, entry) {
       </div>
       ${open ? `
       <form class="gear-inline" id="gear-inline">
-        <label>What is it?<input name="name" required value="${esc(item.name)}" placeholder="Kifaru SuperTarp"></label>
+        <label>What is it?
+          <!-- A blank slot's name is a placeholder, not an answer, so the box
+               starts empty and Fetch (which only fills blanks) can name it. -->
+          <input name="name" value="${blank ? '' : esc(item.name)}" placeholder="${esc(item.name)}">
+        </label>
         <label>Product page URL<input name="url" type="url" value="${esc(item.url ?? '')}" placeholder="https://kifaru.net/products/…"></label>
         <div class="fetch-row">
           <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
@@ -1297,7 +1301,8 @@ function wireGearRows(trip) {
     // The edit lands on the library row, so every trip sharing this slot gets
     // the real item — that is what makes naming it once worth doing.
     Object.assign(item, {
-      name: f.get('name').trim(),
+      // Leaving the name alone keeps the slot's own label — never blanks it.
+      name: f.get('name').trim() || item.name,
       category: f.get('category'),
       weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
       url: f.get('url').trim() || null,

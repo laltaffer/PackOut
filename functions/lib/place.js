@@ -26,6 +26,9 @@ const WET_DAY_IN = 0.1
 const METERS_TO_FEET = 3.28084
 const MAX_QUERY = 120
 const TIMEOUT_MS = 6000
+// Trip setup caps days at 30; the guard is here too so a hand-made request
+// can't ask the archive for a decade of daily rows.
+const MAX_DAYS = 30
 
 const iso = d => d.toISOString().slice(0, 10)
 
@@ -84,7 +87,7 @@ function summarize(daily, source) {
 async function conditionsFor(hit, startDate, days, fetcher, now) {
   const start = parseDay(startDate)
   if (!start || !(days > 0)) return null
-  const end = shiftDays(start, days - 1)
+  const end = shiftDays(start, Math.min(days, MAX_DAYS) - 1)
   const today = parseDay(iso(new Date(now)))
   const daysOut = Math.round((start.getTime() - today.getTime()) / 86400000)
   const coords = `latitude=${hit.latitude}&longitude=${hit.longitude}`

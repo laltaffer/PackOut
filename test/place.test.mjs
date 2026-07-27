@@ -166,3 +166,19 @@ test('the query is encoded, so a hostile destination cannot forge a request', as
   assert.ok(asked.includes('name=Denali%26latitude%3D0%23x'), asked)
   assert.equal(asked.split('&').length, 4, 'no injected parameters')
 })
+
+test('an absurd trip length is capped before it reaches the archive', async () => {
+  const s = stub({ 'geocoding-api': GEO, 'archive-api': daily(30) })
+  await lookupPlace({ query: 'x', startDate: '2027-01-01', days: 9999, fetcher: s.fetcher, now: NOW })
+  const asked = s.calls.find(u => u.includes('archive'))
+  assert.ok(asked.includes('start_date=2026-01-01') && asked.includes('end_date=2026-01-30'), asked)
+})
+
+test('a nonsense date or length simply yields no conditions', async () => {
+  const s = stub({ 'geocoding-api': GEO })
+  for (const args of [{ startDate: 'soon', days: 5 }, { startDate: '2026-08-01', days: 0 }, { startDate: '2026-08-01', days: -3 }]) {
+    const res = await lookupPlace({ query: 'x', ...args, fetcher: s.fetcher, now: NOW })
+    assert.equal(res.body.climate, null)
+  }
+  assert.equal(s.calls.length, 3, 'geocode only, never a weather call')
+})
