@@ -144,6 +144,37 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-27 (later): **Onboarding IS the profile; gear questions moved to the
+trip** (commit f8fe2aa, live). Decided in a grilling session with Lawrence.
+Key judgment, his: *almost nothing about gear is universal* — what shelter,
+water treatment or cook kit goes out depends on the trip. What is universal is
+the person: body weight, the brands they reach for (**snack brands too**, not
+just dehydrated meals), the kinds of trips they take. So:
+  - **First sign-in lands on `#/profile`** with a welcome line and "Skip for
+    now"; it is the same screen they return to under their name. One screen,
+    one home for preferences, nothing to keep in sync. The three-screen wizard
+    (one day old) is deleted; its records migrate to `state.profile`.
+  - **Profile holds** weight, meal + snack brands, trip types, default meal
+    style. New trips inherit them; **trips already planned keep the weight and
+    style they were planned with** — a January weigh-in must not silently
+    re-target a planned trip.
+  - **The trip's Gear screen asks** instead of showing an empty list. Blocks are
+    scoped by the trip's types; each lists the gear you already own in its
+    categories (by trip two the questions read "Kifaru SuperTarp", not "Tent")
+    and offers generic options only for gear never logged. Once a question
+    lists gear you own, nothing rides along uninvited — an unchecked bag stays
+    home. One tap takes the **same kit as the last trip, items only, never
+    packed marks** (a new trip starts unpacked).
+  - **Worn clothing is not pack weight** (Lawrence): `gearStats` splits carried
+    from worn; the gear screen reads "x oz on your back · y oz worn".
+  - **A trip can be several types at once** (`trip.type` → `trip.types`,
+    migrated) — an Alaska hunt that also fishes.
+  - **New accounts start with an empty gear library.** GEAR_SEED stays
+    Lawrence's Montana list; nobody inherits a stranger's Kifaru.
+  - Brands are an explicit table (meal/snack kinds), not id-prefix matching —
+    `pro-bolt-chews` and `probar-peanut-butter` are one company.
+  188 tests green. QA'd end-to-end at 390px and 1280px against a stubbed
+  session (see .scratch/, harness is disposable).
 2026-07-27: **Onboarding gear step reworked; sign-out moved to the masthead**
 (commits 2db0edc + 57b3e53 + 52c9ff1, live). Lawrence rejected the v1 gear
 screen on sight: a pre-checked list of every template row, each labelled
