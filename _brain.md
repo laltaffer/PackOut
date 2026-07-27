@@ -144,11 +144,29 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
-2026-07-27 (evening): **Seventeen-note dogfood round** (commit a8d3e16 +
-follow-ups, not deployed — awaiting Lawrence's word; Alaska is 2026-08-01 and
-his live data is the stake). 229 tests green (41 new). QA'd at 390px and
-1280px in both brands against a stubbed session (`.scratch/qa-server.mjs`,
-disposable); console clean. Seven groups:
+2026-07-27 (evening): **Seventeen-note dogfood round** (a8d3e16 → d4da21b, six
+commits, **not deployed** — awaiting Lawrence's word; Alaska is 2026-08-01 and
+his live data is the stake). 242 tests green (54 new). QA'd at 390px and
+1400px in both brands against a stubbed session (`.scratch/qa-server.mjs`,
+disposable); console clean. **Three Codex review rounds** — round 1 found 10
+(one HIGH), round 2 confirmed 7 and found 4 more, round 3 confirmed 4 and
+found 2. Convergence, not exhaustion: round 3's substantive finding was one I
+had already fixed independently, and its other was a test-coverage gap.
+  - **The HIGH was real and mine**: `validateImport` never covered
+    `gearLibrary`, and a gear weight is interpolated into `innerHTML` — a
+    crafted backup or a hostile KV blob could have executed markup and read
+    the synced state. Gear is now gated like food (ids, names, categories,
+    weights, urls) and every weight reaching `innerHTML` is escaped too.
+  - **Two would have bitten in the field**: drafting judged "is this day
+    empty?" against the decline-filtered library, so a day planned entirely
+    with a declined food read as empty and was silently overwritten; and
+    reopening the kit questions cleared `trip.flying`, disabling every airline
+    warning.
+  - **Lesson worth keeping**: the browser pass caught two crashes the 242-test
+    suite did not (a kitReset/kitTripId coupling I introduced while fixing the
+    flying flag, and the pre-gear-backup `.map`). Engine tests do not exercise
+    render paths — QA the screens, every round.
+Seven groups:
   - **Destination lookup** (`POST /api/place`, `functions/lib/place.js`):
     Open-Meteo geocode + the trip window's own forecast, falling back to the
     same calendar week last year and *labelled as history*. Keyless, and the
