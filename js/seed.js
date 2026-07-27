@@ -661,8 +661,14 @@ function migrateGear(state) {
   //   v2 (2026-07-25): 'Pack' → 'Backpack'
   //   v3 (2026-07-27): 'Food kit' → 'Cooking' — in an app whose other half
   //   plans food, a gear category named for food read as meals.
+  // hasOwn, because a category is user-reachable data and a bare lookup would
+  // find Object.prototype: an item filed under "toString" or "__proto__" would
+  // otherwise have a FUNCTION assigned as its category (Codex, 2026-07-27).
+  // The import gate refuses those names, but local state predates the gate.
   for (const g of state.gearLibrary) {
-    if (RETIRED_GEAR_CATEGORIES[g.category]) g.category = RETIRED_GEAR_CATEGORIES[g.category]
+    if (Object.hasOwn(RETIRED_GEAR_CATEGORIES, g.category)) {
+      g.category = RETIRED_GEAR_CATEGORIES[g.category]
+    }
   }
   const from = state.gearSeedVersion ?? 1
   if (from >= GEAR_SEED.version) return

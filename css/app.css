@@ -841,6 +841,9 @@ main:has(.kit-ask) { max-width: none; }
   h1, h2, h3, .check-name { color: #000; }
   .check-row, .food-row, .entry { border-color: #999; }
   main { max-width: none; padding: 0; }
+  /* The box is the last thing in a check row, so an unconstrained page width
+     strands it inches from the item it belongs to. Paper gets a measure. */
+  .check-list, .gear-stats, .ready-block { max-width: 44rem; }
 }
 
 /* ---------- narrow screens ---------- */

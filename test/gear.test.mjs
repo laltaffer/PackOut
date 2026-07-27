@@ -156,3 +156,25 @@ test('where a thing belongs stays a product judgment, not a rename', () => {
   applySeedMigrations(stale)
   assert.equal(stale.gearLibrary[0].category, 'Luxuries', 'an unmigrated state still gets the v2 call')
 })
+
+test('a category named after an Object.prototype key is left alone', () => {
+  // Codex round 4: the retired-category table is a plain object, so a bare
+  // lookup finds inherited keys — an item filed under "toString" had a
+  // FUNCTION assigned as its category. The import gate refuses those names,
+  // but local state predates the gate, and load() migrates without it.
+  const state = {
+    schemaVersion: 1, trips: [], library: [], gearSeedVersion: 3,
+    gearLibrary: [
+      { id: 'a', name: 'X', category: 'toString', weightOz: 1 },
+      { id: 'b', name: 'Y', category: 'constructor', weightOz: 1 },
+      { id: 'c', name: 'Z', category: '__proto__', weightOz: 1 },
+      { id: 'd', name: 'W', category: 'hasOwnProperty', weightOz: 1 },
+    ],
+  }
+  applySeedMigrations(state)
+  for (const g of state.gearLibrary) {
+    assert.equal(typeof g.category, 'string', `${g.id} category became a ${typeof g.category}`)
+  }
+  assert.deepEqual(state.gearLibrary.map(g => g.category),
+    ['toString', 'constructor', '__proto__', 'hasOwnProperty'], 'left exactly as found')
+})
