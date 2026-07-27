@@ -144,6 +144,25 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-27: **Onboarding gear step reworked; sign-out moved to the masthead**
+(commits 2db0edc + 57b3e53 + 52c9ff1, live). Lawrence rejected the v1 gear
+screen on sight: a pre-checked list of every template row, each labelled
+"Item — Category", asks nothing and leaks category vocabulary into item names,
+and it offered overlapping slots (water treatment AND water container for one
+filter bottle). It now asks plain questions — what you carry it in, how you
+sleep out, how you handle water, whether you cook, one block per activity
+picked, safety — and builds only the slots the answers imply. **Every question
+takes multiple answers (Lawrence, same day): onboarding maps a gear closet, not
+a trip** — a tent AND a tarp, a day pack AND a hauler, hot on some trips and
+cold on others; per-trip single answers are a different, later question.
+Options share a row id only when they name the same object (stakes, optics,
+kill kit, utensil), so answering twice never duplicates a slot. Gear category
+**'Food kit' → 'Cooking'** (gear seed v3, migrates custom items too): in an app
+whose other half plans food, a gear category named for food read as meals.
+Sign out was dashboard-only, so every other screen was a dead end — it rides in
+the masthead nav now, rendered on every route. 181 tests green. Still awaiting
+Lawrence's fresh-account smoke (his server state is wiped, backup in
+.scratch/state-backup-lawrence-2026-07-27.json — restore on his word).
 2026-07-26 (later): **Onboarding + canonical catalog LIVE** (specs #24/#25,
 commits 82ba27e + 119e65d, build 119e65d verified on the alias). First-sign-in
 flow (trip types → brands → starter gear blanks) runs only when the server
