@@ -359,6 +359,60 @@ export const GEAR_QUESTIONS = [
   },
 ]
 
+// ---------- shared gear catalog ----------
+// Gear anyone can look up, with the weight already on it. Seeded from the kit
+// Lawrence has actually weighed and linked (2026-07-27, his ask: "they should
+// be added to the shared library for any user").
+//
+// This is a CATALOG, not a closet. It is offered in the gear picker and
+// nothing more — nobody's library is pre-filled, which is what keeps the
+// 2026-07-27 rule intact: you adopt the gear you own, and a stranger never
+// inherits someone else's Kifaru. Entries are objective product facts (name,
+// category, weight, product page), the same standard as the scrape catalog.
+//
+// Ids are `gc-` slugs and become the gear id on adoption, so they must stay
+// stable: rename the `name`, never the `id`.
+export const GEAR_CATALOG = [
+  { id: "gc-k4-5000-pack-system", name: "K4 5000 Pack System", category: "Backpack", weightOz: 85, url: "https://exomtngear.com/products/k4-5000-pack-system?variant=44187692466483" },
+  { id: "gc-msr-reactor-stove-1-7l", name: "MSR Reactor\u00ae Stove 1.7L", category: "Cooking", weightOz: 17, url: null },
+  { id: "gc-titanium-long-handle-spork", name: "Titanium Long Handle Spork", category: "Cooking", weightOz: 0.7, url: null },
+  { id: "gc-inreach-mini-3-plus", name: "inReach Mini 3 Plus", category: "First aid & Safety", weightOz: 4.42, url: null },
+  { id: "gc-black-diamond-carbon-trekking-poles", name: "Black Diamond Carbon Trekking Poles", category: "Luxuries", weightOz: 17, url: null },
+  { id: "gc-exped-mega-pillow", name: "Exped Mega Pillow", category: "Luxuries", weightOz: 9, url: null },
+  { id: "gc-helinox-chair-zero", name: "Helinox Chair Zero", category: "Luxuries", weightOz: 18, url: "https://helinox.com/products/chair-zero?avad=18967_e4de3dce9&utm_source=avantlink&utm_medium=affiliate&avad_ttl=1785162650&gad_source=1&gad_campaignid=23730987035&gbraid=0AAAABAqdgigoESP-lHrephXwwVy1hKCwz&gclid=Cj0KCQjwg5zTBhCLARIsAP2AFU77Dyy5hfByuHH_JUVkTKqKmM4wvUT5YAVtNftHEoyG9R5ijHZQbXIaAjPUEALw_wcB&variant=16664192286790" },
+  { id: "gc-therm-a-rest-z-seat-pad", name: "Therm-a-rest Z-seat-pad", category: "Luxuries", weightOz: 2, url: "https://www.rei.com/product/C10933/therm-a-rest-z-seat-pad" },
+  { id: "gc-backcountry-lite-ball-head", name: "Backcountry Lite Ball Head", category: "Optics/Bino Pouch", weightOz: 4.8, url: "https://aziak.com/products/backcountry-lite-ball-head?pr_prod_strat=jac&pr_rec_id=3e30245ef&pr_rec_pid=8129139769517&pr_ref_pid=8129139835053&pr_seq=uniform?variant=44326028116141" },
+  { id: "gc-backcountry-lite-tripod", name: "Backcountry Lite Tripod", category: "Optics/Bino Pouch", weightOz: 18.9, url: "https://aziak.com/products/backcountry-lite-tripod" },
+  { id: "gc-enclosed-binocular-chest-pack", name: "Enclosed Binocular Chest Pack", category: "Optics/Bino Pouch", weightOz: null, url: "https://www.marsupialgear.com/collections/chest-packs-and-components/products/fully-enclosed-binocular-pack" },
+  { id: "gc-sig-kilo5k-rangefinder", name: "Sig Kilo5k rangefinder", category: "Optics/Bino Pouch", weightOz: null, url: "https://www.sigsauer.com/kilo5k-lrf-7x25mm-red-oled-ble-bdx-u-x-ranger-green-class-3r.html" },
+  { id: "gc-swarovski-65mm-spotting-scope", name: "Swarovski 65mm Spotting scope", category: "Optics/Bino Pouch", weightOz: 49.6, url: null },
+  { id: "gc-swarovski-nl-pure-10x42", name: "Swarovski NL Pure 10x42", category: "Optics/Bino Pouch", weightOz: null, url: null },
+  { id: "gc-11g-tent-stakes-15x", name: "11g Tent stakes - 15x", category: "Shelter/Sleeping", weightOz: 5.8, url: null },
+  { id: "gc-extra-tent-pole", name: "Extra tent pole", category: "Shelter/Sleeping", weightOz: 9, url: null },
+  { id: "gc-neoair-xlite-nxt-sleeping-pad", name: "NeoAir XLite NXT Sleeping Pad", category: "Shelter/Sleeping", weightOz: 16, url: null },
+  { id: "gc-rincon-2p-dyneema-half-insert", name: "Rincon 2P Dyneema Half Insert", category: "Shelter/Sleeping", weightOz: 15.8, url: "https://argalioutdoors.com/collections/argali-dyneema-tents/products/rincon-2p-dyneema-half-insert" },
+  { id: "gc-rincon-2p-pro-dyneema-tent", name: "Rincon 2P Pro Dyneema Tent", category: "Shelter/Sleeping", weightOz: 14.5, url: "https://argalioutdoors.com/collections/argali-dyneema-tents/products/rincon-2p-pro-dyneema-tent" },
+  { id: "gc-western-mountaineering-terralite-25-sleeping-bag", name: "Western Mountaineering Terralite 25\u00b0 Sleeping Bag", category: "Shelter/Sleeping", weightOz: 29, url: "https://shop.gohunt.com/products/western-mountaineering-terralite-25-sleeping-bag?variant=8645556109426" },
+  { id: "gc-big-zip-evo-reservoir-3-liters", name: "Big Zip EVO Reservoir - 3 Liters", category: "Water", weightOz: 6.5, url: "https://www.rei.com/product/145558/platypus-big-zip-evo-reservoir-3-liters" },
+  { id: "gc-katadyn-befree-water-filtration-system-1-0l", name: "Katadyn BeFree Water Filtration System 1.0L", category: "Water", weightOz: 2.3, url: "https://mountainpartisan.com/products/katadyn-befree-water-filtration-system-1-0l?variant=43720300920997" },
+  { id: "gc-seeker-3l", name: "Seeker\u2122+ 3L", category: "Water", weightOz: 4.5, url: "https://www.hydrapak.com/products/seeker%E2%84%A2-3-l-1?variant=44289339719913&country=US&currency=USD&utm_medium=product_sync&utm_source=google&utm_content=sag_organic&utm_campaign=sag_organic&nbt=nb%3Aadwords%3Ag%3A23752329012%3A196207079460%3A805470481840&nb_adtype=pla&nb_kwd=&nb_ti=pla-296303633664&nb_mi=136697758&nb_pc=online&nb_pi=shopify_US_8030288609513_44289339719913&nb_ppi=296303633664&nb_placement=&nb_li_ms=&nb_lp_ms=&nb_fii=&nb_ap=&nb_mt=&tw_source=google&tw_adid=805470481840&tw_campaign=23752329012&tw_kwdid=pla-296303633664&gad_source=1&gad_campaignid=23752329012&gbraid=0AAAAADKD9hcnOxufOCjEFl95J-K_7zI5k&gclid=Cj0KCQjwg5zTBhCLARIsAP2AFU4ZG8GtLH-yxrXn0ps594gSO9CF54Zc0POKBQdN_z0LyTSYijO3cvUaArouEALw_wcB" },
+  { id: "gc-ultralight-rifle-cover", name: "Ultralight rifle cover", category: "Weapon", weightOz: 1, url: null },
+]
+
+// Catalog entries the user has not already got, ranked for the picker. Match
+// on name and category so "tripod" and "Optics" both find the ball head.
+export function gearCatalogMatches(query, gearLibrary = []) {
+  const owned = new Set(gearLibrary.map(g => g.id))
+  const ownNames = new Set(gearLibrary.map(g => g.name.trim().toLowerCase()))
+  const q = query.trim().toLowerCase()
+  return GEAR_CATALOG
+    .filter(c => !owned.has(c.id) && !ownNames.has(c.name.toLowerCase()))
+    .filter(c => !q || c.name.toLowerCase().includes(q) || c.category.toLowerCase().includes(q))
+    .sort((a, b) =>
+      GEAR_CATEGORIES.indexOf(a.category) - GEAR_CATEGORIES.indexOf(b.category) ||
+      a.name.localeCompare(b.name))
+}
+
 // The label a question row is born with. A gear item still wearing it has not
 // been told what it actually is — which is what the gear screen means by a
 // blank slot. Built once from the catalog so the two can never drift.

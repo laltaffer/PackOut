@@ -886,3 +886,9 @@ main:has(.kit-ask) { max-width: none; }
   main { max-width: 64rem; }
   main:has(.trip-surface) { max-width: none; }
 }
+
+/* Known gear: the shared catalog, offered under your own library in the
+   picker. Separated by a rule so "yours" and "available" never blur. */
+.catalog { border-top: 3px solid var(--head); margin-top: 1.4rem; padding-top: 0.8rem; }
+.catalog h2 { font-weight: 800; text-transform: var(--h-case); font-size: 1.1rem; }
+.catalog .draft-note { margin-bottom: 0.4rem; }

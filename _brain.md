@@ -144,6 +144,29 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+2026-07-27 (shipped): **The round is LIVE** at packout.pages.dev (build e545f28,
+a8d3e16→f17c8f7). Pre-flight read Lawrence's live KV blob and ran it through the
+new import gate before deploying — the round added gear validation and
+`handleStatePut` runs that same gate on every sync push, so an incompatible
+shape would have locked him out of syncing five days before Alaska. It passed;
+his 1 trip / 84 foods / 60 gear items are untouched (a deploy never writes KV,
+confirmed by re-reading after).
+2026-07-27 (shipped): **Shared gear catalog** (`GEAR_CATALOG` in seed.js).
+Lawrence's 24 named products — the ones he has actually weighed and linked
+(K4 5000, Rincon 2P Dyneema, Swarovski NL Pure, Katadyn BeFree…) — are now
+available to every user, **as a catalog, not a closet**. His ask was "add them
+to the shared library for any user"; the reading chosen (his call, from three
+options) offers them in the gear picker under "Known gear" and copies one into
+your library only when you pick it. That satisfies the ask while keeping the
+2026-07-27 morning rule intact: nobody's closet is pre-filled, and a stranger
+never inherits someone else's Kifaru. Entries are objective product facts
+(name, category, weight, product page) — the same standard the scrape catalog
+already holds. Ids are `gc-` slugs and become the gear id on adoption, so they
+must stay stable: rename the `name`, never the `id`. A test proves an adopted
+entry survives the import gate, since adoption feeds the synced library.
+  - Deliberately NOT built: KV-backed growth (other users' gear auto-joining
+    the catalog). That is a privacy decision Lawrence has not made, and the
+    static catalog satisfies the request completely.
 2026-07-27 (evening): **Seventeen-note dogfood round** (a8d3e16 → d4da21b, six
 commits, **not deployed** — awaiting Lawrence's word; Alaska is 2026-08-01 and
 his live data is the stake). 242 tests green (54 new). QA'd at 390px and

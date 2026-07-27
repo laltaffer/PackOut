@@ -2,7 +2,7 @@
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, flyIssues, declinedIds, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, BRANDS, TRIP_TYPES, GEAR_CATEGORIES } from './seed.js'
+import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, gearCatalogMatches, BRANDS, TRIP_TYPES, GEAR_CATEGORIES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -1637,6 +1637,9 @@ function renderGearPicker(trip) {
     .filter(g => !inKit.has(g.id))
     .filter(g => !q || g.name.toLowerCase().includes(q) || g.category.toLowerCase().includes(q))
     .sort((a, b) => GEAR_CATEGORIES.indexOf(a.category) - GEAR_CATEGORIES.indexOf(b.category) || a.name.localeCompare(b.name))
+  // Gear anyone can look up, already weighed. Offered, never installed: it
+  // joins your library only when you pick it (Lawrence 2026-07-27).
+  const catalog = gearCatalogMatches(gearSearch, state.gearLibrary)
   app.replaceChildren(el(`
     <section class="picker">
       <a href="#/trip/${trip.id}/gear" class="back">&larr; Gear</a>
@@ -1652,6 +1655,20 @@ function renderGearPicker(trip) {
             <button class="btn-quiet" data-gear-edit="${g.id}" aria-label="Edit ${esc(g.name)}">&#9998;</button>
           </li>`).join('')}
       </ul>
+      ${catalog.length ? `
+      <section class="catalog">
+        <h2>Known gear</h2>
+        <p class="draft-note">Weighed already. Picking one copies it into your library — nothing arrives on its own.</p>
+        <ul class="food-list">
+          ${catalog.map(c => `
+            <li class="food-row">
+              <button class="food-pick" data-catalog="${esc(c.id)}">
+                <span class="food-name">${esc(c.name)} <span class="staple-tag">catalog</span></span>
+                <span class="food-macros mono">${esc(c.category)}${c.weightOz !== null ? ` · ${esc(c.weightOz)} oz` : ' · no weight yet'}</span>
+              </button>
+            </li>`).join('')}
+        </ul>
+      </section>` : ''}
       <form id="gear-new" class="gear-new">
         <h2>${editing ? `Edit: ${esc(editing.name)}` : 'New gear item'}</h2>
         <label>Product page URL (optional)<input name="url" type="url" placeholder="https://kifaru.net/products/…" value="${esc(editing?.url ?? '')}"></label>
@@ -1684,6 +1701,17 @@ function renderGearPicker(trip) {
   })
   app.querySelectorAll('[data-gear-pick]').forEach(btn => btn.addEventListener('click', () => {
     trip.gear.push({ gearId: btn.dataset.gearPick, packed: false })
+    persist()
+    gearSearch = ''
+    location.hash = `#/trip/${trip.id}/gear`
+  }))
+  app.querySelectorAll('[data-catalog]').forEach(btn => btn.addEventListener('click', () => {
+    const entry = gearCatalogMatches('', state.gearLibrary).find(c => c.id === btn.dataset.catalog)
+    if (!entry) return
+    // Adopting takes a copy: edits to your row are yours, and the catalog is
+    // never written back to from a trip.
+    state.gearLibrary.push({ id: entry.id, name: entry.name, category: entry.category, weightOz: entry.weightOz, url: entry.url })
+    trip.gear.push({ gearId: entry.id, packed: false })
     persist()
     gearSearch = ''
     location.hash = `#/trip/${trip.id}/gear`

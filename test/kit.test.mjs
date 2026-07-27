@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { validateImport } from '../js/engine.js'
-import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, GEAR_CATEGORIES, RETIRED_GEAR_CATEGORIES } from '../js/seed.js'
+import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, GEAR_CATEGORIES, RETIRED_GEAR_CATEGORIES, GEAR_CATALOG, gearCatalogMatches } from '../js/seed.js'
 
 const CATEGORIES = new Set(['Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon',
   'Optics/Bino Pouch', 'Kill kit', 'Fishing', 'First aid & Safety',
@@ -321,4 +321,58 @@ test('the import gate accepts exactly the categories the app can file', () => {
     assert.ok(GEAR_CATEGORIES.includes(RETIRED_GEAR_CATEGORIES[c]), `${c} retires into a category that exists`)
   }
   assert.equal(gear('Invented By Hand').ok, false)
+})
+
+// ---------- shared gear catalog ----------
+
+test('the catalog is objective product facts, filed where the app can show them', () => {
+  for (const c of GEAR_CATALOG) {
+    assert.match(c.id, /^gc-[a-z0-9-]{1,60}$/, `${c.id} must be a stable safe id`)
+    assert.ok(c.name.trim().length > 0)
+    assert.ok(GEAR_CATEGORIES.includes(c.category), `${c.name} files outside the cabinet`)
+    assert.ok(c.weightOz === null || (typeof c.weightOz === 'number' && c.weightOz > 0),
+      `${c.name} has an impossible weight`)
+    assert.ok(c.url === null || typeof c.url === 'string')
+  }
+  const ids = GEAR_CATALOG.map(c => c.id)
+  assert.equal(ids.length, new Set(ids).size, 'catalog ids are unique')
+})
+
+test('an adopted catalog item passes the import gate', () => {
+  // Adoption copies the entry into the user's gear library, which is synced
+  // and therefore re-validated on every push — a catalog entry that could not
+  // survive that round trip would lock the user out of syncing.
+  const check = validateImport({
+    schemaVersion: 1, library: [],
+    trips: [{ id: 't', name: 'T', startDate: '2026-08-01', weightLbs: 200, days: [{ intensity: 'medium' }] }],
+    gearLibrary: GEAR_CATALOG.map(c => ({ ...c })),
+  })
+  assert.equal(check.ok, true, check.error)
+})
+
+test('the catalog offers only what you do not already have', () => {
+  const all = gearCatalogMatches('')
+  assert.equal(all.length, GEAR_CATALOG.length)
+  // By id — you adopted it.
+  const byId = gearCatalogMatches('', [{ id: all[0].id, name: 'Renamed by me', category: all[0].category, weightOz: 1 }])
+  assert.equal(byId.length, all.length - 1)
+  // By name — you typed it in yourself before the catalog existed.
+  const byName = gearCatalogMatches('', [{ id: 'mine', name: all[0].name.toUpperCase(), category: all[0].category, weightOz: 1 }])
+  assert.equal(byName.length, all.length - 1, 'a duplicate under another id is still a duplicate')
+})
+
+test('catalog search matches the name or the category', () => {
+  const tripod = gearCatalogMatches('tripod')
+  assert.ok(tripod.length >= 1 && tripod.every(c => /tripod/i.test(c.name) || /tripod/i.test(c.category)))
+  assert.ok(gearCatalogMatches('Optics').length >= 2, 'searching a category finds its gear')
+  assert.equal(gearCatalogMatches('zzzznothing').length, 0)
+})
+
+test('the catalog never contains a question-row slot', () => {
+  // Slots are placeholders the questions already generate; sharing them would
+  // put "Tent" in a catalog whose whole point is that it is already weighed.
+  for (const c of GEAR_CATALOG) {
+    assert.equal(genericGearName(c.id), null, `${c.id} collides with a question row`)
+    assert.ok(!c.id.startsWith('ob-'))
+  }
 })
