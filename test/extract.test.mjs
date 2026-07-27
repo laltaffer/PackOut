@@ -92,7 +92,7 @@ test('extract: title-tag fallback as last resort', () => {
 
 test('extract: garbage in, nulls out', () => {
   const p = extractProduct('not even html')
-  assert.deepEqual(p, { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false })
+  assert.deepEqual(p, { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, weightOptions: [], perServing: false })
 })
 
 test('extract: malformed JSON-LD falls through to meta', () => {
@@ -164,4 +164,64 @@ test('extract: out-of-range numeric entities degrade instead of throwing', () =>
   const p = extractProduct(`<head><meta property="og:title" content="Bad &#1114112; Entity"></head>`)
   assert.equal(typeof p.name, 'string')
   assert.ok(p.name.includes('Bad'))
+})
+
+// ---------- weight from the page's own words (2026-07-27) ----------
+// Lawrence: "when I was doing fetch with URLs it wasn't pulling the weight on
+// any of the items." Storefronts do not put weight in JSON-LD; it lives in the
+// spec text. Every case below is taken from a page he actually saved gear from.
+
+const page = body => `<html><head><title>T</title></head><body>${body}</body></html>`
+
+test('a single stated weight answers the question', () => {
+  assert.equal(extractProduct(page('<p>Weight: 18.9 oz</p>')).weightOz, 18.9)
+  assert.equal(extractProduct(page('<dl><dt>Weight</dt><dd>2 lb 4 oz</dd></dl>')).weightOz, 36)
+  assert.equal(extractProduct(page('<p>Total Weight 5lb, 13oz</p>')).weightOz, 93,
+    'spec tables write compounds with a comma')
+  assert.equal(extractProduct(page('<p>Trail weight 1.5 kg</p>')).weightOz, 52.91)
+})
+
+test('a capacity or a bound is never mistaken for a weight', () => {
+  // Helinox states both; only one of them is the chair.
+  const r = extractProduct(page('<p>Weight Limit: 265lbs</p><p>Weight: Under 1.5lbs</p>'))
+  assert.equal(r.weightOz, null)
+  assert.deepEqual(r.weightOptions, [])
+  assert.equal(extractProduct(page('<p>Load rating: 150 lbs</p>')).weightOz, null)
+  assert.equal(extractProduct(page('<p>Weight capacity 300 lb</p>')).weightOz, null)
+})
+
+test('shipping weight is the retailer’s box, not the packer’s item', () => {
+  assert.equal(extractProduct(page('<p>Shipping weight: 15 lb</p>')).weightOz, null)
+  assert.equal(extractProduct(page('<p>Carton weight 6804 g</p>')).weightOz, null)
+})
+
+test('a page stating several weights offers them instead of guessing', () => {
+  // The Aziak tripod: two center-column configurations, and nothing in the
+  // markup says which one is on your tripod.
+  const r = extractProduct(page(
+    '<p>Weight: 20.4 oz (Long Center Column)</p><p>Weight: 18.9 oz (Short Center Column)</p>'))
+  assert.equal(r.weightOz, null, 'never pick one for the user')
+  assert.deepEqual(r.weightOptions, [20.4, 18.9])
+})
+
+test('repeats of the same weight are one answer, not an ambiguity', () => {
+  const r = extractProduct(page('<p>Weight: 18.9 oz</p><p>Item weight 18.9 oz</p>'))
+  assert.equal(r.weightOz, 18.9)
+  assert.deepEqual(r.weightOptions, [])
+})
+
+test('structured weight still wins when a site publishes one', () => {
+  const ld = JSON.stringify({ '@type': 'Product', name: 'X', weight: { value: 12, unitText: 'oz' } })
+  const r = extractProduct(page(`<script type="application/ld+json">${ld}</script><p>Weight: 99 oz</p>`))
+  assert.equal(r.weightOz, 12)
+})
+
+test('nonsense numbers are refused', () => {
+  assert.equal(extractProduct(page('<p>Weight: 0 oz</p>')).weightOz, null)
+  assert.equal(extractProduct(page('<p>Weight: 900 lb</p>')).weightOz, null)
+})
+
+test('script and style bodies are code, not copy', () => {
+  const r = extractProduct(page('<script>var meta={"weight":709};</script><p>Weight: 18.9 oz</p>'))
+  assert.equal(r.weightOz, 18.9, 'Shopify’s shipping weight must not leak in through a script tag')
 })

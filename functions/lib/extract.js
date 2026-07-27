@@ -67,7 +67,7 @@ function metaContent(html, property) {
 }
 
 function fieldsOf(product) {
-  const out = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
+  const out = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, weightOptions: [], perServing: false }
   out.name = String(product.name ?? '').trim() || null
   out.weightOz = weightOz(product.weight)
   const n = product.nutrition
@@ -81,6 +81,66 @@ function fieldsOf(product) {
     out.perServing = [out.kcal, out.proteinG, out.carbsG, out.fatG].some(v => v !== null)
   }
   return out
+}
+
+// ---------- labelled weight in the page's own words ----------
+// Storefronts almost never put weight in JSON-LD — Shopify's Product schema
+// has no weight field at all — so the number a packer wants lives in the spec
+// text: "Weight: 18.9 oz" (Lawrence 2026-07-27: fetch pulled no weights).
+//
+// Shopify DOES publish a `weight` in its own product JSON, and it is
+// deliberately ignored here: that is SHIPPING weight. The Exo K4 5000 reads
+// 6804 g there against an 85 oz item — trusting it would quietly add ten
+// pounds to a pack, which is worse than returning nothing.
+
+// Strip markup so a label and its value read as one string even when they sit
+// in <dt>/<dd> or separate spans. Script and style bodies go first: their
+// contents are code, not copy.
+function textOf(html) {
+  return decode(html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+}
+
+// Words that turn "weight" into something that is not this item's weight.
+// "Weight Limit: 265lbs" is a chair's capacity; "Weight: Under 1.5lbs" is a
+// bound, not a measurement — and rounding a bound into a pack total is the
+// kind of quiet error this whole app exists to prevent.
+const NOT_A_WEIGHT = /\b(?:limit|capacity|rating|rated|range|max|maximum|min\.?imum load|load|up to|under|over|less than|more than|starting|per)\b/i
+const WEIGHT_LABEL = /\b(?:trail|packed|minimum|min|total|item|product|carry|dry|shipping|carton)?\s*weight\b/gi
+// A number and unit, optionally a second pair for "1 lb 8 oz" — which spec
+// tables also write as "5lb, 13oz", so the separator allows a comma. Missing
+// it silently dropped the ounces and read 5lb 13oz as a flat 80.
+const WEIGHT_VALUE = /(\d[\d.,]*)\s*(oz|ounces?|lbs?|pounds?|kg|g|grams?)\b(?:[\s,]*(\d[\d.,]*)\s*(oz|ounces?)\b)?/i
+// A backcountry item under a twentieth of an ounce or over 125 lb is a parse
+// error, not a product.
+const SANE_MIN_OZ = 0.05
+const SANE_MAX_OZ = 2000
+
+// Every distinct weight the page states, in the order it states them. Plural
+// on purpose: a tripod page lists its long and short columns, a pack page
+// tables four models against three configurations, and NOTHING in the markup
+// says which one is on your back. Picking the first would be confidently
+// wrong — the same silent-error failure as trusting shipping weight — so the
+// caller is handed the choice instead.
+const MAX_WEIGHT_OPTIONS = 6
+
+export function labelledWeights(text) {
+  const found = []
+  for (const label of text.matchAll(WEIGHT_LABEL)) {
+    if (found.length >= MAX_WEIGHT_OPTIONS) break
+    // Shipping weight is the retailer's box, not the packer's item.
+    if (/shipping|carton/i.test(label[0])) continue
+    const after = text.slice(label.index + label[0].length, label.index + label[0].length + 48)
+    const m = after.match(WEIGHT_VALUE)
+    if (!m) continue
+    if (NOT_A_WEIGHT.test(after.slice(0, m.index))) continue
+    const oz = weightOz(m[0])
+    if (oz === null || oz < SANE_MIN_OZ || oz > SANE_MAX_OZ) continue
+    if (!found.includes(oz)) found.push(oz)
+  }
+  return found
 }
 
 const richness = f => ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].filter(k => f[k] !== null).length
@@ -105,6 +165,16 @@ export function extractProduct(html) {
   if (!out.name) {
     const t = src.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
     out.name = t ? decode(t[1]).trim() || null : null
+  }
+  // Structured weight is authoritative when a site publishes it; the spec text
+  // is the fallback, which in practice is the only place it ever appears.
+  // A page that states exactly one weight answers the question; a page that
+  // states several only narrows it, and says so rather than guessing.
+  out.weightOptions = []
+  if (out.weightOz === null) {
+    const found = labelledWeights(textOf(src))
+    if (found.length === 1) out.weightOz = found[0]
+    else if (found.length > 1) out.weightOptions = found
   }
   return out
 }

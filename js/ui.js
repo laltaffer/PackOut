@@ -1588,6 +1588,26 @@ function renderKitQuestions(trip) {
       nameInput.value = data.name
       kitDetails[rowId] = { ...kitDetails[rowId], name: data.name }
     }
+    if (Array.isArray(data.weightOptions) && data.weightOptions.length > 1) {
+      // Same rule as the gear form: offer, never guess.
+      status.textContent = `Lists ${data.weightOptions.join(' / ')} oz — tap yours:`
+      const holder = document.createElement('span')
+      holder.className = 'weight-options'
+      for (const oz of data.weightOptions) {
+        const b = document.createElement('button')
+        b.type = 'button'; b.className = 'btn'; b.textContent = `${oz} oz`
+        b.addEventListener('click', () => {
+          kitDetails[rowId] = { ...kitDetails[rowId], weightOz: oz }
+          renderKitQuestions(trip)
+          app.querySelector(`[data-fetch="${CSS.escape(rowId)}"]`)?.focus()
+          const said = document.getElementById(`fetch-${rowId}`)
+          if (said) said.textContent = `${oz} oz`
+        })
+        holder.appendChild(b)
+      }
+      status.insertAdjacentElement('afterend', holder)
+      return
+    }
     if (typeof data.weightOz === 'number') {
       kitDetails[rowId] = { ...kitDetails[rowId], weightOz: data.weightOz }
       // The foot tally counts this weight now, so the board has to redraw —
@@ -1923,12 +1943,43 @@ function wireScrape(form, fields) {
     })
     if (!filled.length) {
       say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
+      offerWeights(form, data, say)
       return
     }
     const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))
     say(`Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
       (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : ''))
+    offerWeights(form, data, say)
   })
+}
+
+// A page that states several weights (a tripod's two columns, a pack's model
+// table) has narrowed the answer without giving it. Offer what it said and let
+// the owner of the gear pick — guessing would put a wrong number in a pack
+// total, which is the one thing this app must not do (Lawrence 2026-07-27).
+function offerWeights(form, data, say) {
+  const row = form.querySelector('.fetch-row')
+  const input = form.elements['weightOz']
+  form.querySelector('.weight-options')?.remove()
+  const options = data.weightOptions ?? []
+  if (!row || !input || options.length < 2 || input.value !== '') return
+  say(`That page lists ${options.length} weights — pick the one that matches your setup.`)
+  const holder = document.createElement('div')
+  holder.className = 'weight-options'
+  for (const oz of options) {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'btn'
+    b.textContent = `${oz} oz`
+    b.addEventListener('click', () => {
+      input.value = oz
+      holder.remove()
+      say(`Weight set to ${oz} oz.`)
+      input.focus()
+    })
+    holder.appendChild(b)
+  }
+  row.insertAdjacentElement('afterend', holder)
 }
 
 function renderFoodForm(food) {

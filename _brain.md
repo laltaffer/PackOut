@@ -164,9 +164,37 @@ never inherits someone else's Kifaru. Entries are objective product facts
 already holds. Ids are `gc-` slugs and become the gear id on adoption, so they
 must stay stable: rename the `name`, never the `id`. A test proves an adopted
 entry survives the import gate, since adoption feeds the synced library.
-  - Deliberately NOT built: KV-backed growth (other users' gear auto-joining
-    the catalog). That is a privacy decision Lawrence has not made, and the
-    static catalog satisfies the request completely.
+  - **Curated, never crowd-sourced (Lawrence, 2026-07-27):** "I don't think we
+    need to bring in other's gear, I can help build a healthy catalog of the
+    top products most everyone is using." So the catalog stays a hand-picked
+    list in `seed.js` — no KV growth, no other users' gear ever joining it.
+    Growing it is a content job (add entries to `GEAR_CATALOG`), not a feature.
+2026-07-27 (shipped): **Fetch pulls weights now — and refuses to guess.**
+Lawrence: "when I was doing fetch with URLs it wasn't pulling the weight on
+any of the items." Diagnosed against his own saved pages, all Shopify:
+  - **Storefronts do not put weight in JSON-LD** (Shopify's Product schema has
+    no weight field), so the extractor found nothing. It now reads the spec
+    text — "Weight: 18.9 oz" — after stripping markup so `<dt>/<dd>` pairs read
+    as one string.
+  - **Shopify's own `weight` field is SHIPPING weight and is deliberately
+    ignored.** The Exo K4 5000 reads 6804 g there against an 85 oz item —
+    trusting it would have quietly added ten pounds to a pack. Aziak: 709 g
+    (25 oz) vs a real 18.9 oz. Only Helinox happened to match.
+  - **A page stating several weights offers them instead of picking one.** The
+    Aziak tripod lists long (20.4) and short (18.9) center columns; the Exo
+    page tables four models against three configurations. Nothing in the markup
+    says which is on your back, so `weightOptions` comes back and the UI shows
+    tappable chips. Filling one silently is the same class of error as the
+    shipping weight, and this app exists to prevent exactly that.
+  - Rejected by rule: "Weight Limit: 265 lbs" (capacity), "Weight: Under
+    1.5 lbs" (a bound, not a measurement), shipping/carton weight, and anything
+    outside 0.05–2000 oz. Compound weights parse including the comma form
+    spec tables use ("5lb, 13oz" was reading as a flat 80 oz).
+2026-07-27: **Pack bag / Pack frame deleted from Lawrence's live gear library**
+at his word (leftovers from before the pack question collapsed to one item).
+Done by editing the KV blob directly, validated through `validateImport` first
+and read back after; 60 → 58 items, nothing else touched. Pre-edit copy in
+`.scratch/live-state-before-packrow-delete.json`.
 2026-07-27 (evening): **Seventeen-note dogfood round** (a8d3e16 → d4da21b, six
 commits, **not deployed** — awaiting Lawrence's word; Alaska is 2026-08-01 and
 his live data is the stake). 242 tests green (54 new). QA'd at 390px and

@@ -892,3 +892,7 @@ main:has(.kit-ask) { max-width: none; }
 .catalog { border-top: 3px solid var(--head); margin-top: 1.4rem; padding-top: 0.8rem; }
 .catalog h2 { font-weight: 800; text-transform: var(--h-case); font-size: 1.1rem; }
 .catalog .draft-note { margin-bottom: 0.4rem; }
+
+/* A page that states several weights offers them rather than guessing. */
+.weight-options { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.weight-options .btn { font-size: 0.85rem; padding: 0.35rem 0.7rem; min-height: 40px; }
