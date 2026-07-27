@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, GEAR_CATEGORIES } from '../js/seed.js'
+import { validateImport } from '../js/engine.js'
+import { GEAR_QUESTIONS, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, GEAR_CATEGORIES, RETIRED_GEAR_CATEGORIES } from '../js/seed.js'
 
 const CATEGORIES = new Set(['Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon',
   'Optics/Bino Pouch', 'Kill kit', 'Fishing', 'First aid & Safety',
@@ -294,12 +295,30 @@ test('every question row can be recognised by its generic name', () => {
 })
 
 test('the gear category vocabulary has exactly one home', () => {
-  // engine.js is the pure core and imports nothing, so it spells the list out
-  // again; this pins the two together the way TRIP_TYPES already is.
   assert.deepEqual([...CATEGORIES].sort(), [...GEAR_CATEGORIES].sort())
   for (const q of GEAR_QUESTIONS) {
     for (const row of [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)]) {
       assert.ok(GEAR_CATEGORIES.includes(row.category), `${row.id} files outside the cabinet`)
     }
   }
+})
+
+test('the import gate accepts exactly the categories the app can file', () => {
+  // engine.js is the pure core and imports nothing, so it spells the category
+  // list out a second time. Comparing literals would not catch a divergence
+  // (Codex, 2026-07-27) — this drives the real validator, so adding a category
+  // to seed.js without teaching the gate about it fails right here.
+  const gear = category => validateImport({
+    schemaVersion: 1, library: [],
+    trips: [{ id: 't', name: 'T', startDate: '2026-08-01', weightLbs: 200, days: [{ intensity: 'medium' }] }],
+    gearLibrary: [{ id: 'g', name: 'Thing', category, weightOz: 10 }],
+  })
+  for (const c of GEAR_CATEGORIES) {
+    assert.equal(gear(c).ok, true, `the gate rejects a category the app files under: ${c}`)
+  }
+  for (const c of Object.keys(RETIRED_GEAR_CATEGORIES)) {
+    assert.equal(gear(c).ok, true, `a retired name must pass the gate — migration renames it after: ${c}`)
+    assert.ok(GEAR_CATEGORIES.includes(RETIRED_GEAR_CATEGORIES[c]), `${c} retires into a category that exists`)
+  }
+  assert.equal(gear('Invented By Hand').ok, false)
 })
