@@ -134,9 +134,10 @@ export const GEAR_CATEGORIES = [
   'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
 ]
 
-// Categories that no longer exist but still arrive in old backups; migrateGear
-// renames them, so the gate has to let them through the door first.
-export const LEGACY_GEAR_CATEGORIES = ['Pack', 'Food kit']
+// Categories that no longer exist but still arrive in old backups, and what
+// they became. migrateGear renames them on every load, so the import gate has
+// to let them through the door first.
+export const RETIRED_GEAR_CATEGORIES = { 'Pack': 'Backpack', 'Food kit': 'Cooking' }
 
 // Who makes the food, kept as an explicit table rather than read off id
 // prefixes: 'pro-bolt-chews' and 'probar-peanut-butter' are the same company,
@@ -651,22 +652,25 @@ function migrateGear(state) {
     state.gearSeedVersion = GEAR_SEED.version
     return
   }
+  // Retired categories are renamed on EVERY load, not behind the version gate.
+  // The gear screen groups by the live vocabulary, so an item filed under a
+  // category the UI no longer offers is invisible while still counting toward
+  // pack weight and packed totals — and a blob can arrive already stamped at
+  // the current version carrying one (Codex, 2026-07-27). The renames are
+  // idempotent string swaps, so running them always costs nothing.
+  //   v2 (2026-07-25): 'Pack' → 'Backpack'
+  //   v3 (2026-07-27): 'Food kit' → 'Cooking' — in an app whose other half
+  //   plans food, a gear category named for food read as meals.
+  for (const g of state.gearLibrary) {
+    if (RETIRED_GEAR_CATEGORIES[g.category]) g.category = RETIRED_GEAR_CATEGORIES[g.category]
+  }
   const from = state.gearSeedVersion ?? 1
   if (from >= GEAR_SEED.version) return
   if (from < 2) {
-    // Gear v2 (2026-07-25, Lawrence): 'Pack' → 'Backpack'; trekking poles
-    // are a luxury. Every Pack item moves, custom ones included — the gear
-    // screen renders only known categories, so strays would vanish.
+    // Where a thing belongs is a product judgment, not a rename, so it stays
+    // behind the gate: re-filing it every load would overrule the user.
     for (const g of state.gearLibrary) {
-      if (g.category === 'Pack') g.category = 'Backpack'
       if (g.id === 'trekking-poles' && g.category === 'Backpack') g.category = 'Luxuries'
-    }
-  }
-  if (from < 3) {
-    // Gear v3 (2026-07-27, Lawrence): 'Food kit' → 'Cooking'. In an app whose
-    // other half plans food, a gear category named for food read as meals.
-    for (const g of state.gearLibrary) {
-      if (g.category === 'Food kit') g.category = 'Cooking'
     }
   }
   state.gearSeedVersion = GEAR_SEED.version

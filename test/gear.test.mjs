@@ -125,3 +125,34 @@ test('a gear library that already exists is migrated, not replaced', () => {
   assert.equal(state.gearLibrary.length, 1)
   assert.equal(state.gearLibrary[0].category, 'Backpack')
 })
+
+test('a retired gear category is renamed even behind the version gate', () => {
+  // Codex round 3: the import gate accepts legacy category names, but the
+  // renames sat behind a version check — so a blob already stamped at the
+  // current version kept an item filed where the gear screen cannot show it,
+  // while it still counted toward pack weight and packed totals.
+  const state = {
+    schemaVersion: 1, trips: [], library: [], gearSeedVersion: 3,
+    gearLibrary: [
+      { id: 'a', name: 'Old bag', category: 'Pack', weightOz: 30 },
+      { id: 'b', name: 'Old pot', category: 'Food kit', weightOz: 5 },
+    ],
+  }
+  applySeedMigrations(state)
+  assert.deepEqual(state.gearLibrary.map(g => g.category), ['Backpack', 'Cooking'])
+})
+
+test('where a thing belongs stays a product judgment, not a rename', () => {
+  // The poles rule re-files an item the user may have deliberately moved, so
+  // unlike a rename it must run once and never again.
+  const settled = {
+    schemaVersion: 1, trips: [], library: [], gearSeedVersion: 3,
+    gearLibrary: [{ id: 'trekking-poles', name: 'Poles', category: 'Backpack', weightOz: 18 }],
+  }
+  applySeedMigrations(settled)
+  assert.equal(settled.gearLibrary[0].category, 'Backpack', 'a settled state is left alone')
+
+  const stale = { ...settled, gearSeedVersion: 1, gearLibrary: [{ ...settled.gearLibrary[0] }] }
+  applySeedMigrations(stale)
+  assert.equal(stale.gearLibrary[0].category, 'Luxuries', 'an unmigrated state still gets the v2 call')
+})
