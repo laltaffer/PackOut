@@ -131,8 +131,13 @@ export const TRIP_TYPES = ['backpacking', 'rifle', 'bow', 'fishing']
 // list of everything. Each option owns the rows it creates, so overlaps
 // resolve by construction: a filter bottle is ONE slot, not a filter plus a
 // container. Rows are blank slots (generic name, real category, no weight);
-// the user names the specific item and weighs it later. Shared ids (optics,
-// kill kit) mean rifle + bow union cleanly.
+// the user names the specific item and weighs it later.
+//
+// Every question takes multiple answers. Onboarding maps a gear closet, not a
+// trip: people own a tent AND a tarp, a day pack AND a hauler, and cook hot on
+// some trips and cold on others. Options that genuinely name the same object
+// share a row id (stakes, optics, kill kit, utensil), so answering twice never
+// duplicates a slot.
 const OPTICS = [
   { id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch' },
   { id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch' },
@@ -146,35 +151,33 @@ export const GEAR_QUESTIONS = [
   {
     id: 'pack',
     prompt: 'What do you carry it all in?',
-    pick: 'one',
+    hint: 'Pick every pack you use — a day pack and a hauler are two slots, not a choice.',
     options: [
-      { value: 'daypack', label: 'Day pack', rows: [{ id: 'ob-backpack', name: 'Day pack', category: 'Backpack' }] },
-      { value: 'multiday', label: 'Multi-day pack', rows: [{ id: 'ob-backpack', name: 'Multi-day pack', category: 'Backpack' }] },
+      { value: 'daypack', label: 'Day pack', rows: [{ id: 'ob-daypack', name: 'Day pack', category: 'Backpack' }] },
+      { value: 'multiday', label: 'Multi-day pack', rows: [{ id: 'ob-multiday-pack', name: 'Multi-day pack', category: 'Backpack' }] },
       { value: 'frame', label: 'Pack frame + bag', note: 'meat hauler',
-        rows: [{ id: 'ob-backpack', name: 'Pack bag', category: 'Backpack' }, { id: 'ob-pack-frame', name: 'Pack frame', category: 'Backpack' }] },
+        rows: [{ id: 'ob-pack-bag', name: 'Pack bag', category: 'Backpack' }, { id: 'ob-pack-frame', name: 'Pack frame', category: 'Backpack' }] },
     ],
   },
   {
     id: 'sleep',
     prompt: 'How do you sleep out?',
-    hint: 'Any answer also adds a sleeping bag and a pad.',
-    pick: 'one',
+    hint: 'Pick everything you own — any answer also adds a sleeping bag and a pad.',
     rows: [
       { id: 'ob-sleeping-bag', name: 'Sleeping bag or quilt', category: 'Shelter/Sleeping' },
       { id: 'ob-sleeping-pad', name: 'Sleeping pad', category: 'Shelter/Sleeping' },
     ],
     options: [
-      { value: 'tent', label: 'Tent', rows: [{ id: 'ob-shelter', name: 'Tent', category: 'Shelter/Sleeping' }, { id: 'ob-stakes', name: 'Stakes', category: 'Shelter/Sleeping' }] },
-      { value: 'tarp', label: 'Tarp or floorless shelter', rows: [{ id: 'ob-shelter', name: 'Tarp', category: 'Shelter/Sleeping' }, { id: 'ob-stakes', name: 'Stakes', category: 'Shelter/Sleeping' }, { id: 'ob-ground-cloth', name: 'Ground cloth', category: 'Shelter/Sleeping' }] },
-      { value: 'bivy', label: 'Bivy', rows: [{ id: 'ob-shelter', name: 'Bivy', category: 'Shelter/Sleeping' }] },
-      { value: 'hammock', label: 'Hammock', rows: [{ id: 'ob-shelter', name: 'Hammock', category: 'Shelter/Sleeping' }, { id: 'ob-suspension', name: 'Suspension straps', category: 'Shelter/Sleeping' }] },
+      { value: 'tent', label: 'Tent', rows: [{ id: 'ob-tent', name: 'Tent', category: 'Shelter/Sleeping' }, { id: 'ob-stakes', name: 'Stakes', category: 'Shelter/Sleeping' }] },
+      { value: 'tarp', label: 'Tarp or floorless shelter', rows: [{ id: 'ob-tarp', name: 'Tarp', category: 'Shelter/Sleeping' }, { id: 'ob-stakes', name: 'Stakes', category: 'Shelter/Sleeping' }, { id: 'ob-ground-cloth', name: 'Ground cloth', category: 'Shelter/Sleeping' }] },
+      { value: 'bivy', label: 'Bivy', rows: [{ id: 'ob-bivy', name: 'Bivy', category: 'Shelter/Sleeping' }] },
+      { value: 'hammock', label: 'Hammock', rows: [{ id: 'ob-hammock', name: 'Hammock', category: 'Shelter/Sleeping' }, { id: 'ob-suspension', name: 'Suspension straps', category: 'Shelter/Sleeping' }] },
     ],
   },
   {
     id: 'water',
     prompt: 'How do you handle water?',
     hint: 'Pick what you actually carry — a filter bottle is one item, not two.',
-    pick: 'many',
     options: [
       { value: 'filter', label: 'Filter', rows: [{ id: 'ob-water-filter', name: 'Water filter', category: 'Water' }] },
       { value: 'chem', label: 'Chemical or UV', rows: [{ id: 'ob-water-treatment', name: 'Chemical / UV treatment', category: 'Water' }] },
@@ -187,7 +190,7 @@ export const GEAR_QUESTIONS = [
   {
     id: 'cook',
     prompt: 'Do you cook in camp?',
-    pick: 'one',
+    hint: 'Both is a real answer — hot dinners on some trips, cold food on others.',
     options: [
       { value: 'hot', label: 'Hot meals', note: 'stove, fuel, pot, utensil',
         rows: [
@@ -204,7 +207,6 @@ export const GEAR_QUESTIONS = [
     id: 'rifle',
     when: 'rifle',
     prompt: 'On a rifle hunt, what goes with you?',
-    pick: 'many',
     options: [
       { value: 'rifle', label: 'Rifle and ammunition',
         rows: [{ id: 'ob-rifle', name: 'Rifle', category: 'Weapon' }, { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' }] },
@@ -217,7 +219,6 @@ export const GEAR_QUESTIONS = [
     id: 'bow',
     when: 'bow',
     prompt: 'On a bow hunt, what goes with you?',
-    pick: 'many',
     options: [
       { value: 'bow', label: 'Bow and release',
         rows: [{ id: 'ob-bow', name: 'Bow', category: 'Weapon' }, { id: 'ob-release', name: 'Release', category: 'Weapon' }] },
@@ -231,7 +232,6 @@ export const GEAR_QUESTIONS = [
     id: 'fishing',
     when: 'fishing',
     prompt: 'When you fish, what goes with you?',
-    pick: 'many',
     options: [
       { value: 'rod', label: 'Rod and reel',
         rows: [{ id: 'ob-rod', name: 'Rod', category: 'Fishing' }, { id: 'ob-reel', name: 'Reel', category: 'Fishing' }] },
@@ -243,7 +243,6 @@ export const GEAR_QUESTIONS = [
   {
     id: 'safety',
     prompt: 'What safety gear do you carry?',
-    pick: 'many',
     options: [
       { value: 'headlamp', label: 'Headlamp', rows: [{ id: 'ob-headlamp', name: 'Headlamp', category: 'First aid & Safety' }] },
       { value: 'first-aid', label: 'First aid kit', rows: [{ id: 'ob-first-aid', name: 'First aid kit', category: 'First aid & Safety' }] },

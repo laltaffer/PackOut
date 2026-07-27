@@ -1659,7 +1659,7 @@ function renderOnboarding() {
       ${q.hint ? `<p class="onboard-q-hint">${esc(q.hint)}</p>` : ''}
       ${q.options.map(o => `
         <label class="onboard-option">
-          <input type="${q.pick === 'one' ? 'radio' : 'checkbox'}" name="${esc(q.id)}" value="${esc(o.value)}">
+          <input type="checkbox" name="${esc(q.id)}" value="${esc(o.value)}">
           <span>${esc(o.label)}${o.note ? ` <span class="onboard-note">${esc(o.note)}</span>` : ''}</span>
         </label>`).join('')}
     </fieldset>`

@@ -52,7 +52,6 @@ test('questions: ids are unique, options are distinct, and every option builds s
     assert.ok(!qids.has(q.id), `duplicate question id ${q.id}`)
     qids.add(q.id)
     assert.match(q.id, /^[A-Za-z0-9_-]{1,64}$/)
-    assert.ok(['one', 'many'].includes(q.pick), `${q.id} pick ${q.pick}`)
     assert.ok(q.prompt.trim().endsWith('?'), `${q.id} prompt should ask something`)
     const values = q.options.map(o => o.value)
     assert.equal(values.length, new Set(values).size, `${q.id} has duplicate option values`)
@@ -62,15 +61,28 @@ test('questions: ids are unique, options are distinct, and every option builds s
   }
 })
 
-test('questions: a same-id row never contradicts itself across single-pick options', () => {
-  // Radio options share ids on purpose (one shelter slot, one pack slot) so
-  // the pick renames the slot; they must agree on where it files.
+test('questions: a shared row id means the same slot everywhere it appears', () => {
+  // Options share an id only when they name the same object (stakes for tent
+  // and tarp, one utensil hot or cold). Same id must mean same name and
+  // category, or answering twice would silently rewrite a slot.
   const byId = new Map()
   for (const q of GEAR_QUESTIONS) {
     for (const row of [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)]) {
-      if (byId.has(row.id)) assert.equal(byId.get(row.id), row.category, `${row.id} files in two categories`)
-      byId.set(row.id, row.category)
+      const seen = byId.get(row.id)
+      if (seen) {
+        assert.equal(seen.category, row.category, `${row.id} files in two categories`)
+        assert.equal(seen.name, row.name, `${row.id} has two names`)
+      }
+      byId.set(row.id, row)
     }
+  }
+})
+
+test('questions: every question takes more than one answer', () => {
+  // Onboarding maps a gear closet, not a trip — nothing here is exclusive.
+  for (const q of GEAR_QUESTIONS) {
+    assert.ok(q.options.length >= 2, `${q.id} needs options worth choosing among`)
+    assert.equal(q.pick, undefined, `${q.id} still declares a pick mode`)
   }
 })
 
@@ -92,12 +104,31 @@ test('onboardingGear: an answer builds exactly the slots it implies', () => {
   assert.ok(rows.every(r => !['Weapon', 'Fishing', 'Water'].includes(r.category)))
 })
 
-test('onboardingGear: the shelter pick names the slot — one shelter, never four', () => {
+test('onboardingGear: one shelter answer builds one shelter', () => {
   for (const [pick, name] of [['tent', 'Tent'], ['tarp', 'Tarp'], ['bivy', 'Bivy'], ['hammock', 'Hammock']]) {
-    const shelters = onboardingGear({ sleep: [pick] }).filter(r => r.id === 'ob-shelter')
-    assert.equal(shelters.length, 1)
-    assert.equal(shelters[0].name, name)
+    const rows = onboardingGear({ sleep: [pick] })
+    const shelters = rows.filter(r => ['Tent', 'Tarp', 'Bivy', 'Hammock'].includes(r.name))
+    assert.deepEqual(shelters.map(r => r.name), [name])
   }
+})
+
+test('onboardingGear: owning a tent AND a tarp gets both, with one set of stakes', () => {
+  const rows = onboardingGear({ sleep: ['tent', 'tarp'] })
+  const names = rows.map(r => r.name)
+  assert.ok(names.includes('Tent'))
+  assert.ok(names.includes('Tarp'))
+  assert.equal(names.filter(n => n === 'Stakes').length, 1, 'stakes are stakes')
+  assert.equal(names.filter(n => n === 'Sleeping bag or quilt').length, 1)
+})
+
+test('onboardingGear: a day pack and a hauler are two slots, not a choice', () => {
+  const rows = onboardingGear({ pack: ['daypack', 'frame'] })
+  assert.deepEqual(rows.map(r => r.name), ['Day pack', 'Pack bag', 'Pack frame'])
+})
+
+test('onboardingGear: cooking hot on some trips and cold on others keeps one utensil', () => {
+  const rows = onboardingGear({ cook: ['hot', 'cold'] })
+  assert.deepEqual(rows.map(r => r.name), ['Stove', 'Stove fuel', 'Cook pot', 'Utensil'])
 })
 
 test('onboardingGear: a filter bottle is one slot, not a filter plus a container', () => {
