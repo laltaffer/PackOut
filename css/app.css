@@ -596,7 +596,17 @@ main:has(.trip-surface) { max-width: none; }
 
 .onboard { max-width: 30rem; }
 .onboard form { display: grid; gap: 0.35rem; justify-items: start; width: 100%; }
-.onboard-option { display: flex; gap: 0.5rem; align-items: center; padding: 0.3rem 0; }
+.onboard-option { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; min-height: 32px; }
+
+/* One question per block: the prompt carries the meaning, so options stay
+   short and no category vocabulary leaks into the labels — the question is
+   what's bold, the answers are plain. */
+.onboard > p { margin-bottom: 1.6rem; }
+.onboard-q { border: 0; padding: 0; margin: 0 0 1.7rem; width: 100%; }
+.onboard-q legend { font-weight: 700; color: var(--head); font-size: 1.05rem; padding: 0; margin-bottom: 0.1rem; }
+.onboard-q-hint { color: var(--soft); font-size: 0.85rem; margin-bottom: 0.4rem; }
+.onboard-q .onboard-option { font-weight: 400; }
+.onboard-note { color: var(--soft); font-size: 0.85rem; font-weight: 400; }
 .onboard-actions { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
 .onboard-progress { color: var(--soft); font-size: 0.8rem; }
 

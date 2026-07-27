@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { validateImport } from '../js/engine.js'
-import { SEED, GEAR_SEED, GEAR_TEMPLATES, TRIP_TYPES, needsOnboarding, onboardingGear, applyOnboarding } from '../js/seed.js'
+import { SEED, GEAR_SEED, GEAR_QUESTIONS, TRIP_TYPES, needsOnboarding, gearQuestions, onboardingGear, applyOnboarding } from '../js/seed.js'
 
 const NOW = 1_800_000_000_000
 
@@ -28,58 +28,116 @@ test('onboarding: a state that has synced before never re-runs', () => {
 
 test('onboarding: a completed record suppresses it even without updatedAt', () => {
   const state = freshState()
-  applyOnboarding(state, { tripTypes: [], brands: [], gearIds: null, step: 0, at: NOW })
+  applyOnboarding(state, { tripTypes: [], brands: [], kit: null, step: 0, at: NOW })
   assert.equal(needsOnboarding(state), false)
 })
 
-// ---------- gear templates ----------
+// ---------- gear questions ----------
 
-test('templates: every row uses a real category and safe id', () => {
-  const cats = new Set(['Backpack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon',
+const ALL_ROWS = GEAR_QUESTIONS.flatMap(q => [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)])
+
+test('questions: every generated row uses a real category and a safe id', () => {
+  const cats = new Set(['Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon',
     'Optics/Bino Pouch', 'Kill kit', 'First aid & Safety', 'Fishing'])
-  for (const type of TRIP_TYPES) {
-    for (const row of GEAR_TEMPLATES[type]) {
-      assert.ok(cats.has(row.category), `${row.id} category ${row.category}`)
-      assert.match(row.id, /^[A-Za-z0-9_-]{1,64}$/)
+  for (const row of ALL_ROWS) {
+    assert.ok(cats.has(row.category), `${row.id} category ${row.category}`)
+    assert.match(row.id, /^[A-Za-z0-9_-]{1,64}$/)
+    assert.ok(row.name.trim().length > 0)
+  }
+})
+
+test('questions: ids are unique, options are distinct, and every option builds something', () => {
+  const qids = new Set()
+  for (const q of GEAR_QUESTIONS) {
+    assert.ok(!qids.has(q.id), `duplicate question id ${q.id}`)
+    qids.add(q.id)
+    assert.match(q.id, /^[A-Za-z0-9_-]{1,64}$/)
+    assert.ok(['one', 'many'].includes(q.pick), `${q.id} pick ${q.pick}`)
+    assert.ok(q.prompt.trim().endsWith('?'), `${q.id} prompt should ask something`)
+    const values = q.options.map(o => o.value)
+    assert.equal(values.length, new Set(values).size, `${q.id} has duplicate option values`)
+    // A question-level row set means every answer adds it, so an option may
+    // legitimately carry none — but only then.
+    if (!q.rows) assert.ok(q.options.every(o => o.rows.length > 0), `${q.id} has an empty option`)
+  }
+})
+
+test('questions: a same-id row never contradicts itself across single-pick options', () => {
+  // Radio options share ids on purpose (one shelter slot, one pack slot) so
+  // the pick renames the slot; they must agree on where it files.
+  const byId = new Map()
+  for (const q of GEAR_QUESTIONS) {
+    for (const row of [...(q.rows ?? []), ...q.options.flatMap(o => o.rows)]) {
+      if (byId.has(row.id)) assert.equal(byId.get(row.id), row.category, `${row.id} files in two categories`)
+      byId.set(row.id, row.category)
     }
   }
 })
 
-test('onboardingGear: backpacking alone has no weapon or fishing rows', () => {
-  const rows = onboardingGear(['backpacking'])
-  assert.ok(rows.length > 0)
-  assert.ok(rows.every(r => !['Weapon', 'Kill kit', 'Fishing'].includes(r.category)))
+test('gearQuestions: camp questions always ask; activity questions follow the trip picks', () => {
+  const base = gearQuestions([]).map(q => q.id)
+  assert.deepEqual(base, ['pack', 'sleep', 'water', 'cook', 'safety'])
+  assert.ok(gearQuestions(['rifle']).some(q => q.id === 'rifle'))
+  assert.ok(!gearQuestions(['rifle']).some(q => q.id === 'bow'))
+  const both = gearQuestions(['rifle', 'bow', 'fishing']).map(q => q.id)
+  assert.ok(['rifle', 'bow', 'fishing'].every(id => both.includes(id)))
+  assert.ok(!gearQuestions(['snowmobiling']).some(q => q.when))
 })
 
-test('onboardingGear: rifle and bow union shared optics/kill-kit rows without duplicates', () => {
-  const rows = onboardingGear(['rifle', 'bow'])
+test('onboardingGear: an answer builds exactly the slots it implies', () => {
+  const rows = onboardingGear({ sleep: ['tent'], cook: ['hot'] })
+  const names = rows.map(r => r.name)
+  assert.deepEqual(names, ['Tent', 'Stakes', 'Sleeping bag or quilt', 'Sleeping pad',
+    'Stove', 'Stove fuel', 'Cook pot', 'Utensil'])
+  assert.ok(rows.every(r => !['Weapon', 'Fishing', 'Water'].includes(r.category)))
+})
+
+test('onboardingGear: the shelter pick names the slot — one shelter, never four', () => {
+  for (const [pick, name] of [['tent', 'Tent'], ['tarp', 'Tarp'], ['bivy', 'Bivy'], ['hammock', 'Hammock']]) {
+    const shelters = onboardingGear({ sleep: [pick] }).filter(r => r.id === 'ob-shelter')
+    assert.equal(shelters.length, 1)
+    assert.equal(shelters[0].name, name)
+  }
+})
+
+test('onboardingGear: a filter bottle is one slot, not a filter plus a container', () => {
+  const combo = onboardingGear({ water: ['filter-bottle'] })
+  assert.deepEqual(combo.map(r => r.name), ['Filter bottle'])
+  // Someone who carries both still gets both — the question asks what you carry.
+  const separate = onboardingGear({ water: ['filter', 'bladder'] })
+  assert.deepEqual(separate.map(r => r.name), ['Water filter', 'Hydration bladder'])
+})
+
+test('onboardingGear: cold food means a utensil and no stove', () => {
+  const rows = onboardingGear({ cook: ['cold'] })
+  assert.deepEqual(rows.map(r => r.name), ['Utensil'])
+})
+
+test('onboardingGear: rifle and bow answers union their shared optics and kill kit once', () => {
+  const rows = onboardingGear({ rifle: ['rifle', 'optics', 'kill-kit'], bow: ['bow', 'optics', 'kill-kit'] })
   const ids = rows.map(r => r.id)
   assert.equal(ids.length, new Set(ids).size)
   assert.ok(rows.some(r => r.name === 'Rifle'))
   assert.ok(rows.some(r => r.name === 'Bow'))
-  assert.equal(rows.filter(r => r.category === 'Optics/Bino Pouch' && /binocular/i.test(r.name)).length, 1)
+  assert.equal(rows.filter(r => r.id === 'ob-binoculars').length, 1)
 })
 
-test('onboardingGear: any activity implies the backpacking base kit', () => {
-  for (const type of ['rifle', 'bow', 'fishing']) {
-    const rows = onboardingGear([type])
-    assert.ok(rows.some(r => r.category === 'Shelter/Sleeping'), `${type} has shelter`)
-    assert.ok(rows.some(r => r.category === 'Water'), `${type} has water`)
-    assert.ok(rows.some(r => r.category === 'Food kit'), `${type} has cooking`)
-    assert.ok(rows.some(r => r.category === 'First aid & Safety'), `${type} has first aid`)
-  }
-  assert.ok(onboardingGear(['rifle']).some(r => r.name === 'Shooting rest'))
+test('onboardingGear: unknown questions and unknown options build nothing', () => {
+  assert.deepEqual(onboardingGear({ snowmobiling: ['sled'] }), [])
+  assert.deepEqual(onboardingGear({ sleep: ['igloo'] }), [])
+  assert.deepEqual(onboardingGear({}), [])
+  assert.deepEqual(onboardingGear(null), [])
 })
 
-test('onboardingGear: unknown types are ignored', () => {
-  assert.deepEqual(onboardingGear(['snowmobiling']), [])
+test('onboardingGear: an unanswered question adds nothing, not even its shared rows', () => {
+  assert.equal(onboardingGear({ cook: ['hot'] }).some(r => r.id === 'ob-sleeping-bag'), false)
 })
 
 // ---------- applying answers ----------
 
 test('apply: picked brands star exactly those brands, clearing the seed defaults', () => {
   const state = freshState()
-  applyOnboarding(state, { tripTypes: [], brands: ['stowaway'], gearIds: null, step: 3, at: NOW })
+  applyOnboarding(state, { tripTypes: [], brands: ['stowaway'], kit: null, step: 3, at: NOW })
   const starred = state.library.filter(f => f.favorite)
   assert.ok(starred.length > 0)
   assert.ok(starred.every(f => f.id.startsWith('stowaway-')))
@@ -89,38 +147,44 @@ test('apply: picked brands star exactly those brands, clearing the seed defaults
 
 test('apply: no brands picked leaves nothing starred (neutral drafting)', () => {
   const state = freshState()
-  applyOnboarding(state, { tripTypes: [], brands: [], gearIds: null, step: 3, at: NOW })
+  applyOnboarding(state, { tripTypes: [], brands: [], kit: null, step: 3, at: NOW })
   assert.equal(state.library.filter(f => f.favorite).length, 0)
 })
 
-test('apply: checked gear rows replace the inherited seed as blank slots', () => {
+test('apply: the answers replace the inherited seed with blank slots', () => {
   const state = freshState()
-  const rows = onboardingGear(['backpacking', 'fishing'])
-  const keep = rows.slice(0, 5).map(r => r.id)
-  applyOnboarding(state, { tripTypes: ['backpacking', 'fishing'], brands: [], gearIds: keep, step: 3, at: NOW })
-  assert.equal(state.gearLibrary.length, 5)
+  const kit = { sleep: ['tarp'], water: ['filter'], cook: ['hot'], fishing: ['rod'] }
+  applyOnboarding(state, { tripTypes: ['backpacking', 'fishing'], brands: [], kit, step: 3, at: NOW })
+  assert.equal(state.gearLibrary.length, onboardingGear(kit).length)
   assert.ok(state.gearLibrary.every(g => g.weightOz === null))
   assert.ok(!state.gearLibrary.some(g => g.name === 'MaDuece'))
+  assert.ok(state.gearLibrary.some(g => g.name === 'Tarp'))
   // migrations must not resurrect or rewrite the fresh library
   assert.equal(state.gearSeedVersion, GEAR_SEED.version)
 })
 
 test('apply: gear step skipped (null) keeps the existing gear library', () => {
   const state = freshState()
-  applyOnboarding(state, { tripTypes: ['backpacking'], brands: [], gearIds: null, step: 2, at: NOW })
+  applyOnboarding(state, { tripTypes: ['backpacking'], brands: [], kit: null, step: 2, at: NOW })
   assert.equal(state.gearLibrary.length, GEAR_SEED.items.length)
+})
+
+test('apply: answering nothing empties the library — "I\'ll add my own" is an answer', () => {
+  const state = freshState()
+  applyOnboarding(state, { tripTypes: [], brands: [], kit: { sleep: [], cook: [] }, step: 3, at: NOW })
+  assert.deepEqual(state.gearLibrary, [])
 })
 
 test('apply: writes a syncable record of the answers', () => {
   const state = freshState()
-  applyOnboarding(state, { tripTypes: ['bow'], brands: ['peak'], gearIds: [], step: 3, at: NOW })
+  applyOnboarding(state, { tripTypes: ['bow'], brands: ['peak'], kit: {}, step: 3, at: NOW })
   assert.deepEqual(state.onboarding, { at: NOW, step: 3, tripTypes: ['bow'], brands: ['peak'] })
 })
 
 test('apply: full skip records only the bail point and touches nothing else', () => {
   const state = freshState()
   const starsBefore = state.library.filter(f => f.favorite).map(f => f.id)
-  applyOnboarding(state, { tripTypes: [], brands: [], gearIds: null, step: 0, at: NOW })
+  applyOnboarding(state, { tripTypes: [], brands: [], kit: null, step: 0, at: NOW })
   assert.deepEqual(state.library.filter(f => f.favorite).map(f => f.id), starsBefore)
   assert.equal(state.gearLibrary.length, GEAR_SEED.items.length)
   assert.equal(state.onboarding.step, 0)

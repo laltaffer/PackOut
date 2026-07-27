@@ -124,53 +124,139 @@ export const SEED = {
   ],
 }
 
-// Onboarding (spec #24): starter gear templates per trip type. Rows are blank
-// slots — generic name, real category, no weight — the user fills in with
-// their specific gear later. Rifle and bow share optics/kill-kit rows by id,
-// so picking both unions cleanly.
 export const TRIP_TYPES = ['backpacking', 'rifle', 'bow', 'fishing']
 
-const HUNT_SHARED = [
+// Onboarding (spec #24, reworked 2026-07-27): the gear step asks how someone
+// actually camps and builds the slots their answers imply — no pre-checked
+// list of everything. Each option owns the rows it creates, so overlaps
+// resolve by construction: a filter bottle is ONE slot, not a filter plus a
+// container. Rows are blank slots (generic name, real category, no weight);
+// the user names the specific item and weighs it later. Shared ids (optics,
+// kill kit) mean rifle + bow union cleanly.
+const OPTICS = [
   { id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch' },
   { id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch' },
+]
+const KILL_KIT = [
   { id: 'ob-knife', name: 'Knife', category: 'Kill kit' },
   { id: 'ob-game-bags', name: 'Game bags', category: 'Kill kit' },
 ]
 
-export const GEAR_TEMPLATES = {
-  backpacking: [
-    { id: 'ob-backpack', name: 'Backpack', category: 'Backpack' },
-    { id: 'ob-shelter', name: 'Tent / shelter', category: 'Shelter/Sleeping' },
-    { id: 'ob-sleeping-bag', name: 'Sleeping bag', category: 'Shelter/Sleeping' },
-    { id: 'ob-sleeping-pad', name: 'Sleeping pad', category: 'Shelter/Sleeping' },
-    { id: 'ob-water-treatment', name: 'Water treatment', category: 'Water' },
-    { id: 'ob-water-container', name: 'Water container', category: 'Water' },
-    { id: 'ob-stove', name: 'Stove', category: 'Food kit' },
-    { id: 'ob-fuel', name: 'Stove fuel', category: 'Food kit' },
-    { id: 'ob-cook-pot', name: 'Cook pot', category: 'Food kit' },
-    { id: 'ob-utensil', name: 'Utensil', category: 'Food kit' },
-    { id: 'ob-headlamp', name: 'Headlamp', category: 'First aid & Safety' },
-    { id: 'ob-first-aid', name: 'First aid kit', category: 'First aid & Safety' },
-  ],
-  rifle: [
-    { id: 'ob-rifle', name: 'Rifle', category: 'Weapon' },
-    { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' },
-    { id: 'ob-shooting-rest', name: 'Shooting rest', category: 'Weapon' },
-    ...HUNT_SHARED,
-  ],
-  bow: [
-    { id: 'ob-bow', name: 'Bow', category: 'Weapon' },
-    { id: 'ob-release', name: 'Release', category: 'Weapon' },
-    { id: 'ob-arrows', name: 'Arrows', category: 'Weapon' },
-    { id: 'ob-broadheads', name: 'Broadheads', category: 'Weapon' },
-    ...HUNT_SHARED,
-  ],
-  fishing: [
-    { id: 'ob-rod', name: 'Rod', category: 'Fishing' },
-    { id: 'ob-reel', name: 'Reel', category: 'Fishing' },
-    { id: 'ob-tackle', name: 'Tackle', category: 'Fishing' },
-    { id: 'ob-waders', name: 'Waders', category: 'Fishing' },
-  ],
+export const GEAR_QUESTIONS = [
+  {
+    id: 'pack',
+    prompt: 'What do you carry it all in?',
+    pick: 'one',
+    options: [
+      { value: 'daypack', label: 'Day pack', rows: [{ id: 'ob-backpack', name: 'Day pack', category: 'Backpack' }] },
+      { value: 'multiday', label: 'Multi-day pack', rows: [{ id: 'ob-backpack', name: 'Multi-day pack', category: 'Backpack' }] },
+      { value: 'frame', label: 'Pack frame + bag', note: 'meat hauler',
+        rows: [{ id: 'ob-backpack', name: 'Pack bag', category: 'Backpack' }, { id: 'ob-pack-frame', name: 'Pack frame', category: 'Backpack' }] },
+    ],
+  },
+  {
+    id: 'sleep',
+    prompt: 'How do you sleep out?',
+    hint: 'Any answer also adds a sleeping bag and a pad.',
+    pick: 'one',
+    rows: [
+      { id: 'ob-sleeping-bag', name: 'Sleeping bag or quilt', category: 'Shelter/Sleeping' },
+      { id: 'ob-sleeping-pad', name: 'Sleeping pad', category: 'Shelter/Sleeping' },
+    ],
+    options: [
+      { value: 'tent', label: 'Tent', rows: [{ id: 'ob-shelter', name: 'Tent', category: 'Shelter/Sleeping' }, { id: 'ob-stakes', name: 'Stakes', category: 'Shelter/Sleeping' }] },
+      { value: 'tarp', label: 'Tarp or floorless shelter', rows: [{ id: 'ob-shelter', name: 'Tarp', category: 'Shelter/Sleeping' }, { id: 'ob-stakes', name: 'Stakes', category: 'Shelter/Sleeping' }, { id: 'ob-ground-cloth', name: 'Ground cloth', category: 'Shelter/Sleeping' }] },
+      { value: 'bivy', label: 'Bivy', rows: [{ id: 'ob-shelter', name: 'Bivy', category: 'Shelter/Sleeping' }] },
+      { value: 'hammock', label: 'Hammock', rows: [{ id: 'ob-shelter', name: 'Hammock', category: 'Shelter/Sleeping' }, { id: 'ob-suspension', name: 'Suspension straps', category: 'Shelter/Sleeping' }] },
+    ],
+  },
+  {
+    id: 'water',
+    prompt: 'How do you handle water?',
+    hint: 'Pick what you actually carry — a filter bottle is one item, not two.',
+    pick: 'many',
+    options: [
+      { value: 'filter', label: 'Filter', rows: [{ id: 'ob-water-filter', name: 'Water filter', category: 'Water' }] },
+      { value: 'chem', label: 'Chemical or UV', rows: [{ id: 'ob-water-treatment', name: 'Chemical / UV treatment', category: 'Water' }] },
+      { value: 'bladder', label: 'Bladder', rows: [{ id: 'ob-bladder', name: 'Hydration bladder', category: 'Water' }] },
+      { value: 'bottles', label: 'Bottles', rows: [{ id: 'ob-bottles', name: 'Water bottles', category: 'Water' }] },
+      { value: 'filter-bottle', label: 'Filter bottle', note: 'treats and carries',
+        rows: [{ id: 'ob-filter-bottle', name: 'Filter bottle', category: 'Water' }] },
+    ],
+  },
+  {
+    id: 'cook',
+    prompt: 'Do you cook in camp?',
+    pick: 'one',
+    options: [
+      { value: 'hot', label: 'Hot meals', note: 'stove, fuel, pot, utensil',
+        rows: [
+          { id: 'ob-stove', name: 'Stove', category: 'Cooking' },
+          { id: 'ob-fuel', name: 'Stove fuel', category: 'Cooking' },
+          { id: 'ob-cook-pot', name: 'Cook pot', category: 'Cooking' },
+          { id: 'ob-utensil', name: 'Utensil', category: 'Cooking' },
+        ] },
+      { value: 'cold', label: 'Cold food only', note: 'no stove to carry',
+        rows: [{ id: 'ob-utensil', name: 'Utensil', category: 'Cooking' }] },
+    ],
+  },
+  {
+    id: 'rifle',
+    when: 'rifle',
+    prompt: 'On a rifle hunt, what goes with you?',
+    pick: 'many',
+    options: [
+      { value: 'rifle', label: 'Rifle and ammunition',
+        rows: [{ id: 'ob-rifle', name: 'Rifle', category: 'Weapon' }, { id: 'ob-ammo', name: 'Ammunition', category: 'Weapon' }] },
+      { value: 'rest', label: 'Shooting rest', rows: [{ id: 'ob-shooting-rest', name: 'Shooting rest', category: 'Weapon' }] },
+      { value: 'optics', label: 'Binoculars and range finder', rows: OPTICS },
+      { value: 'kill-kit', label: 'Kill kit', note: 'knife, game bags', rows: KILL_KIT },
+    ],
+  },
+  {
+    id: 'bow',
+    when: 'bow',
+    prompt: 'On a bow hunt, what goes with you?',
+    pick: 'many',
+    options: [
+      { value: 'bow', label: 'Bow and release',
+        rows: [{ id: 'ob-bow', name: 'Bow', category: 'Weapon' }, { id: 'ob-release', name: 'Release', category: 'Weapon' }] },
+      { value: 'arrows', label: 'Arrows and broadheads',
+        rows: [{ id: 'ob-arrows', name: 'Arrows', category: 'Weapon' }, { id: 'ob-broadheads', name: 'Broadheads', category: 'Weapon' }] },
+      { value: 'optics', label: 'Binoculars and range finder', rows: OPTICS },
+      { value: 'kill-kit', label: 'Kill kit', note: 'knife, game bags', rows: KILL_KIT },
+    ],
+  },
+  {
+    id: 'fishing',
+    when: 'fishing',
+    prompt: 'When you fish, what goes with you?',
+    pick: 'many',
+    options: [
+      { value: 'rod', label: 'Rod and reel',
+        rows: [{ id: 'ob-rod', name: 'Rod', category: 'Fishing' }, { id: 'ob-reel', name: 'Reel', category: 'Fishing' }] },
+      { value: 'tackle', label: 'Tackle', rows: [{ id: 'ob-tackle', name: 'Tackle', category: 'Fishing' }] },
+      { value: 'waders', label: 'Waders', rows: [{ id: 'ob-waders', name: 'Waders', category: 'Fishing' }] },
+      { value: 'net', label: 'Net', rows: [{ id: 'ob-net', name: 'Net', category: 'Fishing' }] },
+    ],
+  },
+  {
+    id: 'safety',
+    prompt: 'What safety gear do you carry?',
+    pick: 'many',
+    options: [
+      { value: 'headlamp', label: 'Headlamp', rows: [{ id: 'ob-headlamp', name: 'Headlamp', category: 'First aid & Safety' }] },
+      { value: 'first-aid', label: 'First aid kit', rows: [{ id: 'ob-first-aid', name: 'First aid kit', category: 'First aid & Safety' }] },
+      { value: 'sat-comm', label: 'Satellite communicator', rows: [{ id: 'ob-sat-comm', name: 'Satellite communicator', category: 'First aid & Safety' }] },
+    ],
+  },
+]
+
+// The questions worth asking someone who picked these trip types: the base
+// camp questions always, activity questions only for the activities they do.
+export function gearQuestions(tripTypes) {
+  const picked = TRIP_TYPES.filter(t => tripTypes.includes(t))
+  return GEAR_QUESTIONS.filter(q => !q.when || picked.includes(q.when))
 }
 
 // Runs exactly once: a state that has never synced (no updatedAt stamp) and
@@ -179,45 +265,50 @@ export function needsOnboarding(state) {
   return !state.updatedAt && !state.onboarding
 }
 
-// Union of the picked types' template rows, TRIP_TYPES order, deduped by id.
-// Backpacking is the base kit: any valid pick implies it — a rifle hunter
-// still sleeps, drinks, and cooks.
-export function onboardingGear(tripTypes) {
-  const picked = TRIP_TYPES.filter(t => tripTypes.includes(t))
-  if (picked.length === 0) return []
-  const wanted = new Set(['backpacking', ...picked])
+// The gear slots a set of answers implies. `answers` maps question id →
+// chosen option values; unknown ids and values are ignored, so a stale or
+// hand-edited answer set can never inject rows. Question order, deduped by
+// id — the FIRST answer to claim an id names it (a filter bottle picked
+// alongside a filter still leaves both slots, but the same shelter id can't
+// appear twice).
+export function onboardingGear(answers) {
   const seen = new Set()
   const rows = []
-  for (const type of TRIP_TYPES) {
-    if (!wanted.has(type)) continue
-    for (const row of GEAR_TEMPLATES[type]) {
-      if (seen.has(row.id)) continue
-      seen.add(row.id)
-      rows.push(row)
+  const take = row => {
+    if (seen.has(row.id)) return
+    seen.add(row.id)
+    rows.push(row)
+  }
+  for (const q of GEAR_QUESTIONS) {
+    const picked = (answers?.[q.id] ?? []).filter(v => q.options.some(o => o.value === v))
+    if (picked.length === 0) continue
+    for (const value of picked) {
+      for (const row of q.options.find(o => o.value === value).rows) take(row)
     }
+    // Question-level rows ride along with any answer (a shelter answer always
+    // means a bag and a pad).
+    for (const row of q.rows ?? []) take(row)
   }
   return rows
 }
 
 // Applies the answers a user actually gave. step counts completed steps
-// (0 = skipped everything, 1 = trips, 2 = +brands, 3 = +gear); gearIds null
+// (0 = skipped everything, 1 = trips, 2 = +brands, 3 = +gear); kit null
 // = never reached/skipped the gear step. Completing the brands step always
 // resets stars so the library reflects the user's brands, not Lawrence's
 // pre-starred order — an empty pick is neutral.
-export function applyOnboarding(state, { tripTypes, brands, gearIds, step, at }) {
+export function applyOnboarding(state, { tripTypes, brands, kit, step, at }) {
   if (step >= 2) {
     const prefixes = brands.map(b => `${b}-`)
     for (const f of state.library) {
       f.favorite = prefixes.some(p => f.id.startsWith(p))
     }
   }
-  if (gearIds !== null) {
-    // Filter the union of ALL templates: gearIds only ever come from rows the
-    // user was shown, and this keeps the answer valid even when the trip-type
-    // step was skipped.
-    const keep = new Set(gearIds)
-    state.gearLibrary = onboardingGear(TRIP_TYPES)
-      .filter(r => keep.has(r.id))
+  if (kit) {
+    // Answering the gear questions at all replaces the inherited seed library
+    // with the slots those answers imply — answering nothing empties it, which
+    // is a real answer ("I'll add my own").
+    state.gearLibrary = onboardingGear(kit)
       .map(r => ({ id: r.id, name: r.name, category: r.category, weightOz: null }))
     state.gearSeedVersion = GEAR_SEED.version
   }
@@ -230,7 +321,7 @@ export function applyOnboarding(state, { tripTypes, brands, gearIds, step, at })
 // they stay null until weighed. name = the sheet's item (brand/model) when
 // present, else its slot label.
 export const GEAR_SEED = {
-  version: 2,
+  version: 3,
   items: [
     { id: 'pack-maduece', name: 'MaDuece', category: 'Backpack', weightOz: null },
     { id: 'trekking-poles', name: 'Alpine Carbon Cork Trekking Poles', category: 'Luxuries', weightOz: null },
@@ -245,10 +336,10 @@ export const GEAR_SEED = {
     { id: 'water-purification', name: 'SteriPen', category: 'Water', weightOz: null },
     { id: 'water-container', name: 'Platypus bladder + spare', category: 'Water', weightOz: null },
     { id: 'water-filter', name: 'BeFree Filter', category: 'Water', weightOz: null },
-    { id: 'fuel', name: 'Stove fuel', category: 'Food kit', weightOz: null },
-    { id: 'stove', name: 'MSR Reactor', category: 'Food kit', weightOz: null },
-    { id: 'cook-pot', name: 'Reactor 1.5L pot', category: 'Food kit', weightOz: null },
-    { id: 'utensils', name: 'Titanium spork', category: 'Food kit', weightOz: null },
+    { id: 'fuel', name: 'Stove fuel', category: 'Cooking', weightOz: null },
+    { id: 'stove', name: 'MSR Reactor', category: 'Cooking', weightOz: null },
+    { id: 'cook-pot', name: 'Reactor 1.5L pot', category: 'Cooking', weightOz: null },
+    { id: 'utensils', name: 'Titanium spork', category: 'Cooking', weightOz: null },
     { id: 'bow', name: 'Mathews Lift', category: 'Weapon', weightOz: null },
     { id: 'release', name: 'Carter Like Mike release', category: 'Weapon', weightOz: null },
     { id: 'arrows', name: 'RIP TKO arrows', category: 'Weapon', weightOz: null },
@@ -348,6 +439,13 @@ function migrateGear(state) {
     for (const g of state.gearLibrary) {
       if (g.category === 'Pack') g.category = 'Backpack'
       if (g.id === 'trekking-poles' && g.category === 'Backpack') g.category = 'Luxuries'
+    }
+  }
+  if (from < 3) {
+    // Gear v3 (2026-07-27, Lawrence): 'Food kit' → 'Cooking'. In an app whose
+    // other half plans food, a gear category named for food read as meals.
+    for (const g of state.gearLibrary) {
+      if (g.category === 'Food kit') g.category = 'Cooking'
     }
   }
   state.gearSeedVersion = GEAR_SEED.version

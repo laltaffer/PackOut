@@ -2,7 +2,7 @@
 
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
-import { applySeedMigrations, needsOnboarding, onboardingGear, applyOnboarding, TRIP_TYPES } from './seed.js'
+import { applySeedMigrations, needsOnboarding, gearQuestions, applyOnboarding, TRIP_TYPES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
 
 const app = document.getElementById('app')
@@ -1052,7 +1052,7 @@ function renderPack(trip) {
 // ---------- gear ----------
 
 const GEAR_CATEGORIES = [
-  'Backpack', 'Shelter/Sleeping', 'Water', 'Food kit', 'Weapon', 'Optics/Bino Pouch',
+  'Backpack', 'Shelter/Sleeping', 'Water', 'Cooking', 'Weapon', 'Optics/Bino Pouch',
   'Kill kit', 'Fishing', 'First aid & Safety', 'Clothing worn', 'Clothing packed', 'Luxuries',
 ]
 
@@ -1602,11 +1602,13 @@ async function afterSignIn() {
 const TRIP_TYPE_LABELS = { backpacking: 'Backpacking', rifle: 'Rifle hunt', bow: 'Bow hunt', fishing: 'Fishing' }
 const BRAND_LABELS = { peak: 'Peak Refuel', stowaway: 'Stowaway Gourmet', packit: 'Packit Gourmet' }
 
-// Three screens, in order: trip types → brands → starter gear (built from the
-// trip-type picks, pre-checked). Next with nothing selected is a valid neutral
-// answer; "Skip setup" bails and applies only the steps already completed.
+// Three screens, in order: trip types → brands → how you camp. The gear step
+// asks plain questions and builds the slots the answers imply — nothing is
+// pre-checked, because a checked list isn't a question. Next with nothing
+// selected is a valid neutral answer; "Skip setup" bails and applies only the
+// steps already completed.
 function renderOnboarding() {
-  const answers = { tripTypes: [], brands: [], gearIds: null }
+  const answers = { tripTypes: [], brands: [], kit: null }
 
   const finish = step => {
     applyOnboarding(state, { ...answers, step, at: Date.now() })
@@ -1651,12 +1653,26 @@ function renderOnboarding() {
     checklist('brand', Object.entries(BRAND_LABELS), false),
     f => { answers.brands = f.getAll('brand'); stepGear() })
 
+  const questionBlock = q => `
+    <fieldset class="onboard-q">
+      <legend>${esc(q.prompt)}</legend>
+      ${q.hint ? `<p class="onboard-q-hint">${esc(q.hint)}</p>` : ''}
+      ${q.options.map(o => `
+        <label class="onboard-option">
+          <input type="${q.pick === 'one' ? 'radio' : 'checkbox'}" name="${esc(q.id)}" value="${esc(o.value)}">
+          <span>${esc(o.label)}${o.note ? ` <span class="onboard-note">${esc(o.note)}</span>` : ''}</span>
+        </label>`).join('')}
+    </fieldset>`
+
   const stepGear = () => {
-    const rows = onboardingGear(answers.tripTypes.length ? answers.tripTypes : ['backpacking'])
-    screen(2, 'Your starter gear list',
-    'Uncheck anything you don’t carry. Each item is a blank slot — add your specific gear and weights later.',
-    checklist('gear', rows.map(r => [r.id, `${r.name} — ${r.category}`]), true),
-    f => { answers.gearIds = f.getAll('gear'); finish(3) })
+    const questions = gearQuestions(answers.tripTypes)
+    screen(2, 'How do you camp?',
+    'Your answers become blank slots in your gear list — you name the real item and weigh it later. Leave anything blank you’d rather add yourself.',
+    questions.map(questionBlock).join(''),
+    f => {
+      answers.kit = Object.fromEntries(questions.map(q => [q.id, f.getAll(q.id)]))
+      finish(3)
+    })
   }
 
   stepTrips()

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SEED, applySeedMigrations } from '../js/seed.js'
+import { SEED, GEAR_SEED, applySeedMigrations } from '../js/seed.js'
 
 const SLOTS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snack']
 
@@ -192,7 +192,38 @@ test('gear v2: Pack renames to Backpack and the poles move to Luxuries', () => {
   assert.equal(s.gearLibrary.find(g => g.id === 'custom-1').category, 'Backpack', 'custom Pack items move too')
   assert.equal(s.gearLibrary.find(g => g.id === 'trekking-poles').category, 'Luxuries')
   assert.equal(s.gearLibrary.find(g => g.id === 'tent').category, 'Shelter/Sleeping', 'other categories untouched')
-  assert.equal(s.gearSeedVersion, 2)
+  assert.equal(s.gearSeedVersion, GEAR_SEED.version)
+})
+
+// Gear v3 (2026-07-27, Lawrence): 'Food kit' becomes 'Cooking'. In an app whose
+// other half plans food, a gear category named for food read as meals.
+test('gear v3: Food kit renames to Cooking, custom items included', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [],
+    gearSeedVersion: 2,
+    gearLibrary: [
+      { id: 'stove', name: 'MSR Reactor', category: 'Food kit', weightOz: null },
+      { id: 'custom-mug', name: 'Ti mug', category: 'Food kit', weightOz: 2 },
+      { id: 'tent', name: 'Kifaru SuperTarp', category: 'Shelter/Sleeping', weightOz: null },
+    ],
+  })
+  assert.equal(s.gearLibrary.find(g => g.id === 'stove').category, 'Cooking')
+  assert.equal(s.gearLibrary.find(g => g.id === 'custom-mug').category, 'Cooking')
+  assert.equal(s.gearLibrary.find(g => g.id === 'tent').category, 'Shelter/Sleeping')
+  assert.equal(s.gearSeedVersion, GEAR_SEED.version)
+})
+
+test('gear v3: a library that never saw v2 gets both moves in one pass', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: SEED.version, trips: [], library: [],
+    gearSeedVersion: 1,
+    gearLibrary: [
+      { id: 'pack-maduece', name: 'MaDuece', category: 'Pack', weightOz: null },
+      { id: 'stove', name: 'MSR Reactor', category: 'Food kit', weightOz: null },
+    ],
+  })
+  assert.equal(s.gearLibrary.find(g => g.id === 'pack-maduece').category, 'Backpack')
+  assert.equal(s.gearLibrary.find(g => g.id === 'stove').category, 'Cooking')
 })
 
 test('gear v2 runs even when the food seed is already current, and only once', () => {
