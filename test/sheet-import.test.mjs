@@ -94,3 +94,64 @@ test('a trailing question mark is a human hedge, not part of the name', () => {
 test('a packing list yields no day plan', () => {
   assert.equal(montanaResult().plan, null)
 })
+
+// --- interpretSheet: the tabular food shape ---
+
+const TABULAR = [
+  'Item,Calories,Protein (g),Carbs (g),Fat (g),Weight (oz)',
+  'Peak Refuel Chicken Alfredo,960,53,73,49,5.4',
+  'Granola,520,12,62,24,4.2',
+  'Mystery bar,lots,1,2,3,1.0',
+].join('\n')
+
+test('a header row with nutrition columns imports foods with macros', () => {
+  const { groups, plan } = interpretSheet(parseCsv(TABULAR))
+  assert.equal(plan, null)
+  assert.equal(groups.length, 1)
+  const g = groups[0]
+  assert.equal(g.kind, 'food')
+  const alfredo = g.items.find(i => i.name === 'Peak Refuel Chicken Alfredo')
+  assert.deepEqual(
+    [alfredo.kcal, alfredo.proteinG, alfredo.carbsG, alfredo.fatG, alfredo.weightOz],
+    [960, 53, 73, 49, 5.4])
+})
+
+test('a tabular row without a readable calorie number is reported, not guessed', () => {
+  const { groups, warnings } = interpretSheet(parseCsv(TABULAR))
+  assert.ok(!groups[0].items.some(i => i.name === 'Mystery bar'))
+  assert.ok(warnings.some(w => w.includes('Mystery bar')))
+})
+
+// --- interpretSheet: day plans, only when unambiguous ---
+
+const PLAN = [
+  'DAY 1,,DAY 2',
+  'Breakfast,,Breakfast',
+  'Oatmeal,,Granola',
+  'Dinner,,Dinner',
+  'Chicken Alfredo,,Beef Stroganoff',
+  'Snacks,,Snacks',
+  'Goldbears,,Trail mix',
+  'Goldbears,,',
+].join('\n')
+
+test('explicit day headers with meal labels read as a plan', () => {
+  const { plan } = interpretSheet(parseCsv(PLAN))
+  assert.equal(plan.days.length, 2)
+  assert.deepEqual(plan.days[0].meals.breakfast, ['Oatmeal'])
+  assert.deepEqual(plan.days[0].meals.dinner, ['Chicken Alfredo'])
+  assert.deepEqual(plan.days[0].meals.snacks, ['Goldbears', 'Goldbears'])
+  assert.deepEqual(plan.days[1].meals.dinner, ['Beef Stroganoff'])
+})
+
+test('day columns are consumed by the plan, not read again as gear groups', () => {
+  const { groups } = interpretSheet(parseCsv(PLAN))
+  assert.ok(!groups.some(g => /^day/i.test(g.header)))
+})
+
+test('gapped day numbering is ambiguous: no plan, and the import says why', () => {
+  const csv = PLAN.replace('DAY 2', 'DAY 3')
+  const { plan, warnings } = interpretSheet(parseCsv(csv))
+  assert.equal(plan, null)
+  assert.ok(warnings.some(w => /day/i.test(w)))
+})

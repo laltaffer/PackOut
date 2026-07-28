@@ -81,11 +81,110 @@ function cleanName(cell) {
   return cell.trim().replace(/\?+$/, '').trim()
 }
 
+// Tabular shape: a header row naming an item column plus nutrition columns.
+// Calories are the one non-negotiable — a food without kcal cannot enter the
+// library, so a row whose calorie cell doesn't read as a number is reported.
+const TABULAR_COLS = [
+  ['name', /^(item|name|food|product|description)s?\b/i],
+  ['kcal', /cal(orie)?s?|kcal/i],
+  ['proteinG', /protein/i],
+  ['carbsG', /carb|cho\b/i],
+  ['fatG', /fat/i],
+  ['weightOz', /weight|\boz\b|ounce/i],
+]
+
+function findTabularHeader(grid) {
+  for (const [r, row] of grid.entries()) {
+    const map = {}
+    for (const [c, cell] of row.entries()) {
+      const t = cell.trim()
+      if (!t) continue
+      const hit = TABULAR_COLS.find(([key, re]) => !(key in map) && re.test(t))
+      if (hit) map[hit[0]] = c
+    }
+    if ('name' in map && 'kcal' in map) return { row: r, map }
+  }
+  return null
+}
+
+function readTabular(grid, { row, map }, warnings) {
+  const items = []
+  for (const cells of grid.slice(row + 1)) {
+    const name = cleanName(cells[map.name] ?? '')
+    if (!name) continue
+    const numAt = key => {
+      if (!(key in map)) return null
+      const v = parseFloat((cells[map[key]] ?? '').replace(/,/g, ''))
+      return Number.isFinite(v) ? v : null
+    }
+    const kcal = numAt('kcal')
+    if (!kcal || kcal <= 0) {
+      warnings.push(`"${name}" has no readable calorie number — add it by hand from the Library.`)
+      continue
+    }
+    items.push({
+      name, note: '', kcal,
+      proteinG: numAt('proteinG'), carbsG: numAt('carbsG'),
+      fatG: numAt('fatG'), weightOz: numAt('weightOz'),
+    })
+  }
+  return [{ header: 'Foods', kind: 'food', items }]
+}
+
+// Day plans import only from one unmistakable shape: "Day N" header cells
+// with meal-label rows below. Anything less explicit is refused with a
+// reason — a guessed plan is worse than no plan.
+const DAY_HEADER = /^day\s*(\d+)\b/i
+const MEAL_LABEL = /^(electrolytes?|breakfast|lunch|dinner|snacks?)[:.]?$/i
+const MEAL_KEY = { electrolyte: 'electrolytes', snack: 'snacks' }
+
+function readPlan(grid, warnings) {
+  const dayCells = []
+  for (const [r, row] of grid.entries()) {
+    for (const [c, cell] of row.entries()) {
+      const m = cell.trim().match(DAY_HEADER)
+      if (m) dayCells.push({ r, c, n: parseInt(m[1], 10) })
+    }
+  }
+  if (!dayCells.length) return { plan: null, planCols: new Set() }
+  const planCols = new Set(dayCells.map(d => d.c))
+  const ns = dayCells.map(d => d.n).sort((a, b) => a - b)
+  const contiguous = ns.every((n, i) => n === i + 1)
+  if (!contiguous) {
+    warnings.push(`Found day headers (${ns.map(n => `Day ${n}`).join(', ')}) but not a clear Day 1…N sequence — the day plan was not imported.`)
+    return { plan: null, planCols }
+  }
+  const days = dayCells.sort((a, b) => a.n - b.n).map(({ r, c, n }) => {
+    const meals = { electrolytes: [], breakfast: [], lunch: [], dinner: [], snacks: [] }
+    let meal = 'snacks'
+    for (const row of grid.slice(r + 1)) {
+      const cell = (row[c] ?? '').trim()
+      if (!cell) continue
+      if (DAY_HEADER.test(cell)) break // stacked layout: next day starts below
+      const label = cell.match(MEAL_LABEL)
+      if (label) {
+        const raw = label[1].toLowerCase()
+        meal = MEAL_KEY[raw] ?? raw
+        continue
+      }
+      meals[meal].push(cleanName(cell))
+    }
+    return { n, meals }
+  })
+  return { plan: { days }, planCols }
+}
+
 export function interpretSheet(grid) {
   const warnings = []
+  const tabular = findTabularHeader(grid)
+  if (tabular) {
+    return { groups: readTabular(grid, tabular, warnings), plan: null, warnings }
+  }
+  const { plan, planCols } = readPlan(grid, warnings)
   const cols = Math.max(0, ...grid.map(r => r.length))
   const itemCols = []
   for (let c = 0; c < cols; c++) {
+    if (planCols.has(c)) continue
     if (grid.some(r => isHeader(r[c] ?? ''))) itemCols.push(c)
   }
   const groups = []
@@ -103,7 +202,7 @@ export function interpretSheet(grid) {
       const name = cleanName(cell)
       if (!name) continue
       const noteCol = c + 1
-      const note = itemCols.includes(noteCol) ? '' : (row[noteCol] ?? '').trim()
+      const note = itemCols.includes(noteCol) || planCols.has(noteCol) ? '' : (row[noteCol] ?? '').trim()
       const item = { name, note }
       if (group.kind === 'gear') {
         item.category = firstMatch(HEADER_CATEGORY, group.header) ??
@@ -112,5 +211,5 @@ export function interpretSheet(grid) {
       group.items.push(item)
     }
   }
-  return { groups, plan: null, warnings }
+  return { groups, plan, warnings }
 }
