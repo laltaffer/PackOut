@@ -74,3 +74,10 @@ test('sheet: an upstream failure is reported plainly', async () => {
   const res = await handleSheet({ request: await sheetReq(SHARE_URL), env: env(), fetcher: answer('missing', 'text/plain', 404), now: NOW })
   assert.equal(res.status, 502)
 })
+
+test('sheet: a CSV at the size cap is refused, never silently truncated', async () => {
+  const big = 'a,b\n'.repeat(400_000) // 1.6M chars > the 1.5M cap
+  const res = await handleSheet({ request: await sheetReq(SHARE_URL), env: env(), fetcher: answer(big, 'text/csv'), now: NOW })
+  assert.equal(res.status, 413)
+  assert.match((await res.json()).error, /too large/i)
+})

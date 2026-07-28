@@ -270,7 +270,11 @@ export async function handleSheet({ request, env, fetcher = fetch, now = Date.no
     return json({ error: 'That sheet is not shared. In Google Sheets: Share → General access → "Anyone with the link", then try again.' }, 403)
   }
   if (!res.ok) return json({ error: `Google Sheets answered ${res.status}.` }, 502)
+  // A body that fills the cap was cut mid-sheet. A silently truncated list
+  // reads as complete and imports as one — refusing is the honest answer
+  // (Codex, 2026-07-28). Real packing sheets are kilobytes.
   const csv = await readCapped(res, MAX_FETCH_BYTES)
+  if (csv.length >= MAX_FETCH_BYTES) return json({ error: 'That sheet is too large to import.' }, 413)
   return json({ csv })
 }
 

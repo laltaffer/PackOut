@@ -225,3 +225,34 @@ test('day headers with no meal labels are a guess, not a plan', () => {
   assert.equal(plan, null)
   assert.ok(warnings.some(w => /meal label/i.test(w)))
 })
+
+// --- Codex round: hostile-scale and misclassification guards ---
+
+test('an absurd item count is capped and disclosed, not imported whole', () => {
+  const rows = ['GEAR LIST', ...Array.from({ length: 600 }, (_, i) => `Item number ${i}`)]
+  const { groups, warnings } = interpretSheet(parseCsv(rows.join('\n')))
+  const total = groups.reduce((a, g) => a + g.items.length, 0)
+  assert.equal(total, 500)
+  assert.ok(warnings.some(w => w.includes('500')))
+})
+
+test('more day headers than any real trip is not a plan', () => {
+  const csv = Array.from({ length: 40 }, (_, i) => `DAY ${i + 1}`).join('\n')
+  const { plan, warnings } = interpretSheet(parseCsv(csv))
+  assert.equal(plan, null)
+  assert.ok(warnings.length > 0)
+})
+
+test('day headers with no foods anywhere are not a plan', () => {
+  const { plan, warnings } = interpretSheet(parseCsv('DAY 1,,DAY 2\nBreakfast,,Breakfast'))
+  assert.equal(plan, null)
+  assert.ok(warnings.some(w => /food/i.test(w)))
+})
+
+test('a Caliber column is not a calorie column', () => {
+  const csv = 'Item,Caliber\nRifle,.308\nShotgun,12 gauge'
+  const { groups } = interpretSheet(parseCsv(csv))
+  // Not tabular food — and with no shouty headers it is not a packing list
+  // either: nothing to import, which the screen reports as "no lists found".
+  assert.ok(!groups.some(g => g.kind === 'food' && g.items.length))
+})

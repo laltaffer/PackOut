@@ -51,7 +51,7 @@ function renderLinkForm(error = '') {
     const res = await fetchSheet(sheetUrl)
     if (!res.ok) return renderLinkForm(res.error)
     const parsed = interpretSheet(parseCsv(res.csv))
-    if (!parsed.groups.length && !parsed.plan) {
+    if (!parsed.groups.some(g => g.items.length) && !parsed.plan) {
       return renderLinkForm('No lists found in that sheet — PackOut reads header groups (CLOTHING, FOOD, …), nutrition tables, or Day 1…N plans.')
     }
     result = markDuplicates(parsed, { library: state.library, gearLibrary: state.gearLibrary })
@@ -116,10 +116,13 @@ function renderPreview() {
 }
 
 function commit() {
-  // The preview may be minutes old and this module's state survives
-  // route-aways — re-check duplicates against the library as it is NOW, so
-  // a food added (or synced in) since the preview never imports twice.
-  markDuplicates(result, { library: state.library, gearLibrary: state.gearLibrary })
+  // Duplicates are decided here, against the EDITED names and the library as
+  // it is NOW — the preview's flags may be minutes stale (a synced-in food)
+  // or dodged by a rename onto an existing name (Codex, 2026-07-28).
+  const seen = {
+    food: new Set(state.library.map(f => f.name.trim().toLowerCase())),
+    gear: new Set(state.gearLibrary.map(g => g.name.trim().toLowerCase())),
+  }
   const { groups, plan } = result
   const counts = { foods: 0, gear: 0, dups: 0, needKcal: [] }
   for (const [gi, g] of groups.entries()) {
@@ -131,6 +134,8 @@ function commit() {
       if (!document.querySelector(`[data-item="${gi}:${ii}"]`).checked) continue
       const name = document.querySelector(`[data-name="${gi}:${ii}"]`).value.trim().slice(0, 200)
       if (!name) continue
+      if (seen[g.kind].has(name.toLowerCase())) { counts.dups++; continue }
+      seen[g.kind].add(name.toLowerCase())
       if (g.kind === 'gear') {
         state.gearLibrary.push({
           id: newId(), name,
@@ -186,7 +191,7 @@ function renderSummary(s) {
         ${s.needKcal.length ? `<li>${s.needKcal.length} food${s.needKcal.length > 1 ? 's' : ''} had no calories and did not import: ${esc(s.needKcal.join(', '))}. Add them from the Library when you know the numbers.</li>` : ''}
         ${s.plan?.tripId ? `<li>Day plan imported as <a href="#/trip/${s.plan.tripId}">${esc(s.plan.tripName)}</a> (${s.plan.days} days)${s.plan.defaultWeight ? ' — set your body weight in Edit Trip so the targets are yours' : ''}.</li>` : ''}
         ${s.plan?.missing ? `<li>The day plan did not import — it names food${s.plan.missing.length > 1 ? 's' : ''} with no calories on the sheet or in your library: ${esc(s.plan.missing.join(', '))}.</li>` : ''}
-        ${!s.gear && !s.foods && !s.plan ? '<li>Nothing was selected.</li>' : ''}
+        ${!s.gear && !s.foods && !s.plan && !s.dups && !s.needKcal.length ? '<li>Nothing was selected.</li>' : ''}
       </ul>
       <div class="onboard-actions">
         <button class="btn" id="import-again">Import another sheet</button>

@@ -64,6 +64,12 @@ const NAME_CATEGORY = [
   [/\bpacks?\b/i, 'Backpack'],
 ]
 
+// Scale guards (Codex, 2026-07-28): a 40,000-row hostile CSV must not become
+// 4 MB of gear JSON that trips the server's state-size gate and locks the
+// account out of syncing. Real packing sheets run well under both caps.
+const MAX_ITEMS = 500
+const MAX_PLAN_DAYS = 31
+
 function isHeader(cell) {
   const t = cell.trim()
   if (!t) return false
@@ -86,7 +92,9 @@ function cleanName(cell) {
 // library, so a row whose calorie cell doesn't read as a number is reported.
 const TABULAR_COLS = [
   ['name', /^(item|name|food|product|description)s?\b/i],
-  ['kcal', /cal(orie)?s?|kcal/i],
+  // Word-bounded: "Caliber" contains cal and must never make a rifle table
+  // read as food (Codex, 2026-07-28).
+  ['kcal', /\b(cal(orie)?s?|kcal|energy)\b/i],
   ['proteinG', /protein/i],
   ['carbsG', /carb|cho\b/i],
   ['fatG', /fat/i],
@@ -152,6 +160,12 @@ function readPlan(grid, warnings) {
     warnings.push(`Found day headers (${ns.map(n => `Day ${n}`).join(', ')}) but not a clear Day 1…N sequence — the day plan was not imported.`)
     return { plan: null, planCols }
   }
+  // No pack trip runs a month-plus; past that this is an itinerary or a
+  // calendar, not a food plan.
+  if (ns.length > MAX_PLAN_DAYS) {
+    warnings.push(`Found ${ns.length} day headers — more than any packable trip, so the day plan was not imported.`)
+    return { plan: null, planCols }
+  }
   let unlabeled = false
   const days = dayCells.sort((a, b) => a.n - b.n).map(({ r, c, n }) => {
     const meals = { electrolytes: [], breakfast: [], lunch: [], dinner: [], snacks: [] }
@@ -175,6 +189,10 @@ function readPlan(grid, warnings) {
     warnings.push('Found day headers but no meal labels (Breakfast, Lunch, Dinner, Snacks) under them — the day plan was not imported.')
     return { plan: null, planCols }
   }
+  if (!days.some(d => Object.values(d.meals).some(m => m.length))) {
+    warnings.push('Found day headers but no foods under them — the day plan was not imported.')
+    return { plan: null, planCols }
+  }
   return { plan: { days }, planCols }
 }
 
@@ -182,7 +200,9 @@ export function interpretSheet(grid) {
   const warnings = []
   const tabular = findTabularHeader(grid)
   if (tabular) {
-    return { groups: readTabular(grid, tabular), plan: null, warnings }
+    const groups = readTabular(grid, tabular)
+    capItems(groups, warnings)
+    return { groups, plan: null, warnings }
   }
   const { plan, planCols } = readPlan(grid, warnings)
   const cols = Math.max(0, ...grid.map(r => r.length))
@@ -215,7 +235,20 @@ export function interpretSheet(grid) {
       group.items.push(item)
     }
   }
+  capItems(groups, warnings)
   return { groups, plan, warnings }
+}
+
+function capItems(groups, warnings) {
+  let kept = 0
+  let dropped = 0
+  for (const g of groups) {
+    const room = Math.max(0, MAX_ITEMS - kept)
+    dropped += Math.max(0, g.items.length - room)
+    g.items = g.items.slice(0, room)
+    kept += g.items.length
+  }
+  if (dropped) warnings.push(`This sheet lists more than ${MAX_ITEMS} items — the first ${MAX_ITEMS} are shown and the remaining ${dropped} were left out.`)
 }
 
 // A plan's food names must all resolve against the library (imported foods
