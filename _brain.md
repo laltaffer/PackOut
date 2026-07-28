@@ -148,6 +148,46 @@ worse than a stale cache.
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
 ## Status
+
+### Where things stand (end of 2026-07-27)
+LIVE at packout.pages.dev, build **a27b074**; repo HEAD differs only by log
+lines, so production carries every line of code. 268 tests green, both repos
+clean and pushed. 37 commits across ~12 deploys in one session.
+
+**Needs Lawrence, in rough priority order:**
+1. **Reload PackOut before editing anything.** His KV blob was edited directly
+   twice (Pack bag/frame deleted; 5 items marked `carry: harness`). The device
+   pulls on load, but editing first would push a copy predating both. Pre-edit
+   copies: `.scratch/live-state-before-packrow-delete.json`,
+   `.scratch/live-state-before-carry.json`.
+2. **The curated gear catalog.** His to supply: "I can help build a healthy
+   catalog of the top products most everyone is using." Adding entries to
+   `GEAR_CATALOG` in seed.js is a data edit plus a deploy, no engineering.
+3. **Duplicate optics rows** — blank `Binoculars` / `Range finder` slots sit
+   beside the real Swarovski NL Pure and Sig Kilo5k. Offered to delete, not
+   done. Naming the generics is now the intended path ("name yours").
+4. **Three specific products still unweighed**: Swarovski NL Pure, Sig Kilo5k,
+   Enclosed Binocular Chest Pack. Two have URLs, so Specify → Fetch lands them.
+
+**First outside user, 2026-07-27:** Lawrence shared the root URL with one
+friend. Sign-in gave a blank page — GIS had fallen back to redirect mode and
+POSTed to a static host answering 405 with an empty body. Fixed and
+**confirmed working by the friend the same night**. The bug lived in the one
+sign-in path no desktop dev browser ever takes.
+
+**Unverified / deferred, stated plainly:**
+- **Google consent-screen publishing status** could not be confirmed from here
+  (needs the Console or a gcloud alpha component). Recorded as published
+  2026-07-25 with basic scopes; a slip back to Testing would block friends with
+  an "unverified app" screen rather than a blank page.
+- **No rate limiting anywhere in `functions/`** — deferred on a "closed user
+  base" premise that sharing the root URL retires. Any signed-in stranger can
+  spend the Open-Meteo quota and the scrape proxy. Fine for a few buddies;
+  revisit before anything public.
+- **KV write ceiling**: free tier ~1,000 writes/day, and PackOut writes the
+  whole blob on every change. A handful of active planners could approach it;
+  the failure mode is sync errors mid-planning.
+
 2026-07-27 (shipped): **The round is LIVE** at packout.pages.dev (build e545f28,
 a8d3e16→f17c8f7). Pre-flight read Lawrence's live KV blob and ran it through the
 new import gate before deploying — the round added gear validation and
