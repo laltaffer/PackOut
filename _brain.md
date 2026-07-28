@@ -258,8 +258,8 @@ Done by editing the KV blob directly, validated through `validateImport` first
 and read back after; 60 → 58 items, nothing else touched. Pre-edit copy in
 `.scratch/live-state-before-packrow-delete.json`.
 2026-07-27 (evening): **Seventeen-note dogfood round** (a8d3e16 → d4da21b, six
-commits, **not deployed** — awaiting Lawrence's word; Alaska is 2026-08-01 and
-his live data is the stake). 242 tests green (54 new). QA'd at 390px and
+commits — SHIPPED later the same night along with everything after it; the
+"not deployed" note this line used to carry is void). 242 tests green (54 new). QA'd at 390px and
 1400px in both brands against a stubbed session (`.scratch/qa-server.mjs`,
 disposable); console clean. **Three Codex review rounds** — round 1 found 10
 (one HIGH), round 2 confirmed 7 and found 4 more, round 3 confirmed 4 and
