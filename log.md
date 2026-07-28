@@ -3,3 +3,4 @@
 ## [2026-07-27] shipped | PackOut fetch-weight fix (0728078) — reads spec text, ignores Shopify shipping weight, offers a choice when a page lists several; Pack bag/frame removed from live state; 256 tests green
 ## [2026-07-27] shipped | PackOut: multiple-weight pages report a message instead of a chip picker (10bf387); 256 tests green
 ## [2026-07-27] shipped | PackOut Library gains a Gear shelf (5ca1bbd) — gear is browsable, editable and deletable outside a trip; 256 tests green
+## [2026-07-27] shipped | PackOut carry modes (22a7635) — gear rides in the pack, on the harness or worn; pack weight excludes harness, total carried includes it. 261 tests green
