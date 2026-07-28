@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { gearStats, readiness, emptyMeals } from '../js/engine.js'
+import { gearStats, readiness, emptyMeals, carryModeOf, CARRY_MODES, validateImport } from '../js/engine.js'
 import { GEAR_SEED, applySeedMigrations } from '../js/seed.js'
 
 const GEAR_LIB = [
@@ -177,4 +177,71 @@ test('a category named after an Object.prototype key is left alone', () => {
   }
   assert.deepEqual(state.gearLibrary.map(g => g.category),
     ['toString', 'constructor', '__proto__', 'hasOwnProperty'], 'left exactly as found')
+})
+
+// ---------- where a thing rides (2026-07-27) ----------
+
+test('carryModeOf defaults from the category and yields to the item', () => {
+  assert.equal(carryModeOf({ category: 'Backpack' }), 'pack')
+  assert.equal(carryModeOf({ category: 'Clothing worn' }), 'worn')
+  assert.equal(carryModeOf({ category: 'Optics/Bino Pouch', carry: 'harness' }), 'harness')
+  // An item may override its category's default in either direction.
+  assert.equal(carryModeOf({ category: 'Clothing worn', carry: 'pack' }), 'pack')
+  // Junk falls back rather than inventing a bucket.
+  assert.equal(carryModeOf({ category: 'Backpack', carry: 'sled' }), 'pack')
+  assert.equal(carryModeOf(null), 'pack')
+})
+
+test('harness weight is carried but is not pack weight', () => {
+  // Lawrence 2026-07-27: binos, rangefinder and a sidearm hang on the chest.
+  // They are real weight — they are just not what a pack has to carry.
+  const lib = [
+    { id: 'tent', name: 'Tent', category: 'Shelter/Sleeping', weightOz: 40 },
+    { id: 'binos', name: 'Swarovski NL Pure', category: 'Optics/Bino Pouch', weightOz: 30, carry: 'harness' },
+    { id: 'rf', name: 'Sig Kilo5k', category: 'Optics/Bino Pouch', weightOz: 8, carry: 'harness' },
+    { id: 'spotter', name: 'Spotting scope', category: 'Optics/Bino Pouch', weightOz: 50 },
+    { id: 'boots', name: 'Crispi Laponia', category: 'Clothing worn', weightOz: 62 },
+  ]
+  const trip = { gear: lib.map(g => ({ gearId: g.id, packed: false })) }
+  const g = gearStats(trip, lib)
+  assert.equal(g.weightOz, 90, 'tent + spotter ride on your back')
+  assert.equal(g.harnessOz, 38, 'binos + rangefinder ride on your chest')
+  assert.equal(g.wornOz, 62)
+  assert.equal(g.carriedOz, 190, 'everything you move down the trail')
+})
+
+test('a category is not a location: the optics shelf splits between both', () => {
+  const lib = [
+    { id: 'binos', name: 'Binos', category: 'Optics/Bino Pouch', weightOz: 30, carry: 'harness' },
+    { id: 'tripod', name: 'Tripod', category: 'Optics/Bino Pouch', weightOz: 19 },
+  ]
+  const g = gearStats({ gear: lib.map(x => ({ gearId: x.id })) }, lib)
+  assert.equal(g.weightOz, 19)
+  assert.equal(g.harnessOz, 30)
+})
+
+test('gear with no carry field behaves exactly as it did before', () => {
+  const lib = [
+    { id: 'a', name: 'Tent', category: 'Shelter/Sleeping', weightOz: 40 },
+    { id: 'b', name: 'Boots', category: 'Clothing worn', weightOz: 62 },
+  ]
+  const g = gearStats({ gear: lib.map(x => ({ gearId: x.id })) }, lib)
+  assert.equal(g.weightOz, 40)
+  assert.equal(g.harnessOz, 0)
+  assert.equal(g.wornOz, 62)
+  assert.equal(g.carriedOz, 102)
+})
+
+test('validateImport gates the carry mode', () => {
+  const base = {
+    schemaVersion: 1, library: [],
+    trips: [{ id: 't', name: 'T', startDate: '2026-08-01', weightLbs: 200, days: [{ intensity: 'medium' }] }],
+  }
+  const withCarry = carry => validateImport({
+    ...base, gearLibrary: [{ id: 'g', name: 'Binos', category: 'Optics/Bino Pouch', weightOz: 30, ...(carry === undefined ? {} : { carry }) }],
+  }).ok
+  assert.equal(withCarry(undefined), true)
+  for (const m of CARRY_MODES) assert.equal(withCarry(m), true)
+  assert.equal(withCarry('sled'), false)
+  assert.equal(withCarry(null), false)
 })

@@ -169,6 +169,30 @@ entry survives the import gate, since adoption feeds the synced library.
     top products most everyone is using." So the catalog stays a hand-picked
     list in `seed.js` — no KV growth, no other users' gear ever joining it.
     Growing it is a content job (add entries to `GEAR_CATALOG`), not a feature.
+2026-07-27 (shipped): **Three places a thing can ride.** Lawrence: "let's not
+count bino harness items (range finder, pistol, binoculars) in the pack
+weight — we could consider it part of overall carry weight." So gear carries a
+`carry` mode: `pack` | `harness` | `worn`.
+  - **Carry mode is a property of the ITEM, not its category** — the key point.
+    A pistol files under safety and binoculars under optics, but both hang on
+    the chest; a spotting scope shares the optics category and goes in the
+    pack. A category-based rule could not express that without re-filing gear
+    across categories. `carryModeOf` defaults from the category (Clothing worn
+    → worn, else pack) so every existing item behaves exactly as before, and
+    the item overrides it.
+  - `gearStats` returns `weightOz` (still the pack number — every caller that
+    shows pack weight reads it), plus `harnessOz`, `wornOz` and `carriedOz`
+    (all three summed). The gear screen shows the split and the total.
+  - Question rows that are near-universally harness-carried ship that way:
+    binoculars, range finder, bino harness, pistol. Everything else defaults
+    to the pack.
+  - Editing "Where it rides" lives in `gearEditorFields`, one editor body now
+    shared by the trip gear row and the Library gear shelf — the duplication
+    was paid off by this change rather than doubled.
+  - Lawrence's live state: 5 items marked harness at his word (Binoculars,
+    Range finder, Enclosed Binocular Chest Pack, Sig Kilo5k, Swarovski NL
+    Pure). The spotter, tripod and ball head stay in the pack. Pre-edit copy
+    in `.scratch/live-state-before-carry.json`.
 2026-07-27 (shipped): **The Library holds gear, not just food.** Lawrence:
 "it's odd that when I add a new piece of gear it says it's in the library but
 when I look at the library tab it just lists food." Two libraries have always

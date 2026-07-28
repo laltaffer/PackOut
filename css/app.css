@@ -907,3 +907,21 @@ main:has(.kit-ask) { max-width: none; }
 .shelves a:hover { border-color: var(--act); color: var(--act); }
 .shelves a[aria-selected="true"] { background: var(--act); border-color: var(--act); color: var(--act-ink); }
 .shelves a[aria-selected="true"] .mono { color: var(--act-ink); opacity: 0.85; }
+
+/* Three places a thing can ride, and what they add up to. */
+.carry-split {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem;
+  margin-bottom: 1rem; padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+.carry-split div { display: flex; align-items: baseline; gap: 0.45rem; }
+.carry-split dt {
+  font-family: "Chivo Mono", monospace; font-size: var(--text-min);
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--soft);
+}
+.carry-split dd {
+  font-family: var(--data-face); font-variant-numeric: tabular-nums;
+  font-weight: var(--data-w); color: var(--data); font-size: 1.05rem;
+}
+.carry-total { margin-left: auto; }
+.carry-total dt { color: var(--head); font-weight: 600; }

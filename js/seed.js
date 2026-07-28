@@ -275,11 +275,11 @@ export const GEAR_QUESTIONS = [
     categories: ['Optics/Bino Pouch'],
     prompt: 'What optics are you glassing with?',
     options: [
-      { value: 'binos', label: 'Binoculars', rows: [{ id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch' }] },
+      { value: 'binos', label: 'Binoculars', rows: [{ id: 'ob-binoculars', name: 'Binoculars', category: 'Optics/Bino Pouch', carry: 'harness' }] },
       { value: 'spotter', label: 'Spotting scope', rows: [{ id: 'ob-spotting-scope', name: 'Spotting scope', category: 'Optics/Bino Pouch' }] },
       { value: 'tripod', label: 'Tripod', rows: [{ id: 'ob-tripod', name: 'Tripod', category: 'Optics/Bino Pouch' }] },
-      { value: 'range-finder', label: 'Range finder', rows: [{ id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch' }] },
-      { value: 'harness', label: 'Bino harness', rows: [{ id: 'ob-bino-harness', name: 'Bino harness', category: 'Optics/Bino Pouch' }] },
+      { value: 'range-finder', label: 'Range finder', rows: [{ id: 'ob-range-finder', name: 'Range finder', category: 'Optics/Bino Pouch', carry: 'harness' }] },
+      { value: 'harness', label: 'Bino harness', rows: [{ id: 'ob-bino-harness', name: 'Bino harness', category: 'Optics/Bino Pouch', carry: 'harness' }] },
     ],
   },
   {
@@ -342,7 +342,7 @@ export const GEAR_QUESTIONS = [
       // still declare it. Both fly badly; flyIssues catches them by name.
       { value: 'bear-spray', label: 'Bear spray', rows: [{ id: 'ob-bear-spray', name: 'Bear spray', category: 'First aid & Safety' }] },
       { value: 'sidearm', label: 'Pistol', note: 'bear defense',
-        rows: [{ id: 'ob-pistol', name: 'Pistol', category: 'First aid & Safety' }] },
+        rows: [{ id: 'ob-pistol', name: 'Pistol', category: 'First aid & Safety', carry: 'harness' }] },
       { value: 'fire', label: 'Fire starter', rows: [{ id: 'ob-fire-starter', name: 'Fire starter', category: 'First aid & Safety' }] },
     ],
   },
@@ -515,6 +515,7 @@ function detailFields(d) {
   return out
 }
 
+// Rows may declare where they ride; the default is the pack.
 export function applyTripKit(state, trip, answers, questions, details = {}) {
   const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
   const rows = kitRows(answers, questions)
@@ -523,7 +524,7 @@ export function applyTripKit(state, trip, answers, questions, details = {}) {
   for (const row of rows) {
     const fields = detailFields(details[row.id])
     if (!byId.has(row.id)) {
-      const item = { id: row.id, name: row.name, category: row.category, weightOz: null, ...fields }
+      const item = { id: row.id, name: row.name, category: row.category, weightOz: null, ...(row.carry ? { carry: row.carry } : {}), ...fields }
       state.gearLibrary.push(item)
       byId.set(row.id, item)
     } else if (Object.keys(fields).length) {

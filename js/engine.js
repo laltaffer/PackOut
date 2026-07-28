@@ -177,17 +177,33 @@ export function plannedDayOptions(trips, library) {
   return out
 }
 
-// What you wear is weight on your body, not weight in your pack (Lawrence,
-// 2026-07-27). It still gets packed-checked like everything else — it just
-// never lands in the number you carry.
+// Where a thing rides is not what kind of thing it is. A pistol files under
+// safety and binoculars under optics, but both hang on the harness; a spotting
+// scope shares the optics category and goes in the pack. So carry mode is a
+// property of the ITEM, defaulted from its category and overridable per item
+// (Lawrence, 2026-07-27: "let's not count bino harness items in the pack
+// weight — we could consider it part of overall carry weight").
+//
+//   pack    — on your back. The number a pack's comfort rating answers to.
+//   harness — on your chest: binos, rangefinder, sidearm. Carried, not packed.
+//   worn    — on your body. Never was pack weight.
 export const WORN_CATEGORY = 'Clothing worn'
+export const CARRY_MODES = ['pack', 'harness', 'worn']
+
+export function carryModeOf(item) {
+  if (CARRY_MODES.includes(item?.carry)) return item.carry
+  return item?.category === WORN_CATEGORY ? 'worn' : 'pack'
+}
 
 // Trip gear rollup: packed vs total against the gear library, named unpacked
 // items, pack weight and worn weight kept apart. Entries whose gear was
 // deleted are ignored.
 export function gearStats(trip, gearLibrary) {
   const byId = new Map(gearLibrary.map(g => [g.id, g]))
-  const stats = { total: 0, packed: 0, unpacked: [], weightOz: 0, wornOz: 0, missingWeightCount: 0 }
+  // `weightOz` stays the pack number — it has always meant "on your back", and
+  // every caller that shows a pack weight reads it.
+  const stats = { total: 0, packed: 0, unpacked: [], weightOz: 0, harnessOz: 0, wornOz: 0, carriedOz: 0, missingWeightCount: 0 }
+  const bucket = { pack: 'weightOz', harness: 'harnessOz', worn: 'wornOz' }
   for (const entry of trip.gear ?? []) {
     const g = byId.get(entry.gearId)
     if (!g) continue
@@ -195,11 +211,14 @@ export function gearStats(trip, gearLibrary) {
     if (entry.packed) stats.packed += 1
     else stats.unpacked.push({ gearId: g.id, name: g.name, category: g.category })
     if (g.weightOz === null) stats.missingWeightCount += 1
-    else if (g.category === WORN_CATEGORY) stats.wornOz += g.weightOz
-    else stats.weightOz += g.weightOz
+    else stats[bucket[carryModeOf(g)]] += g.weightOz
   }
-  stats.weightOz = Math.round(stats.weightOz * 100) / 100
-  stats.wornOz = Math.round(stats.wornOz * 100) / 100
+  const round = n => Math.round(n * 100) / 100
+  // Everything you move down the trail, however it is attached to you.
+  stats.carriedOz = round(stats.weightOz + stats.harnessOz + stats.wornOz)
+  stats.weightOz = round(stats.weightOz)
+  stats.harnessOz = round(stats.harnessOz)
+  stats.wornOz = round(stats.wornOz)
   return stats
 }
 
@@ -721,6 +740,9 @@ export function validateImport(data) {
       }
       if (g.url !== undefined && g.url !== null && typeof g.url !== 'string') {
         return { ok: false, error: `Gear item "${g.name}" has an invalid url.` }
+      }
+      if (g.carry !== undefined && !CARRY_MODES.includes(g.carry)) {
+        return { ok: false, error: `Gear item "${g.name}" has an unknown carry mode.` }
       }
     }
   }

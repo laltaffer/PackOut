@@ -1,6 +1,6 @@
 // UI layer — renders state, dispatches events. No nutrition logic lives here.
 
-import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, flyIssues, declinedIds, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
+import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, groceryList, dayPackList, readiness, validateImport, plannedDayOptions, gearStats, carryModeOf, CARRY_MODES, flyIssues, declinedIds, draftDay, draftEmptyDays, mealStyleOf, resolveSignIn } from './engine.js'
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
 import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, gearCatalogMatches, BRANDS, TRIP_TYPES, GEAR_CATEGORIES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
@@ -1222,7 +1222,14 @@ function renderGear(trip) {
         <button class="btn" id="print">Print</button>
       </div>
       ${trip.gear.length ? `
-      <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.weightOz ? ` · ${stats.weightOz} oz on your back` : ''}${stats.wornOz ? ` · ${stats.wornOz} oz worn` : ''}${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>` : `
+      <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>
+      ${stats.carriedOz ? `
+      <dl class="carry-split">
+        <div><dt>On your back</dt><dd>${stats.weightOz} oz</dd></div>
+        ${stats.harnessOz ? `<div><dt>On your harness</dt><dd>${stats.harnessOz} oz</dd></div>` : ''}
+        ${stats.wornOz ? `<div><dt>Worn</dt><dd>${stats.wornOz} oz</dd></div>` : ''}
+        <div class="carry-total"><dt>Total carried</dt><dd>${stats.carriedOz} oz</dd></div>
+      </dl>` : ''}` : `
       <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
       <label class="fly-toggle">
         <input type="checkbox" id="trip-flying" ${trip.flying ? 'checked' : ''}>
@@ -1301,29 +1308,14 @@ function gearRow(item, entry) {
     <li class="gear-item">
       <div class="check-row gear-row${blank ? ' is-blank' : ''}">
         <label class="check-name ${entry.packed ? 'is-done' : ''}" for="${cb}">${esc(item.name)}</label>
-        <span class="check-meta mono">${item.weightOz !== null ? `${esc(item.weightOz)} oz` : 'no weight'}</span>
+        <span class="check-meta mono">${item.weightOz !== null ? `${esc(item.weightOz)} oz` : 'no weight'}${carryModeOf(item) !== 'pack' ? ` · ${carryModeOf(item)}` : ''}</span>
         <button class="btn-quiet" data-gear-edit-row="${esc(item.id)}" aria-expanded="${open}">${blank ? 'Specify' : 'Edit'}</button>
         <button class="btn-quiet gear-rm" data-gear-rm="${esc(item.id)}" aria-label="Remove ${esc(item.name)} from this trip">&times;</button>
         <input id="${cb}" type="checkbox" data-gear-pack="${esc(item.id)}" ${entry.packed ? 'checked' : ''}>
       </div>
       ${open ? `
       <form class="gear-inline" id="gear-inline">
-        <label>What is it?
-          <!-- A blank slot's name is a placeholder, not an answer, so the box
-               starts empty and Fetch (which only fills blanks) can name it. -->
-          <input name="name" value="${blank ? '' : esc(item.name)}" placeholder="${esc(item.name)}">
-        </label>
-        <label>Product page URL<input name="url" type="url" value="${esc(item.url ?? '')}" placeholder="https://kifaru.net/products/…"></label>
-        <div class="fetch-row">
-          <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
-          <span class="fetch-status mono" role="status" id="scrape-status"></span>
-        </div>
-        <div class="macro-grid">
-          <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${esc(item.weightOz ?? '')}"></label>
-          <label>Category
-            <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === item.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
-          </label>
-        </div>
+        ${gearEditorFields(blank ? { ...item, name: '' } : item)}
         <div class="onboard-actions">
           <button class="btn btn-primary" type="submit">Save</button>
           <button class="btn-quiet" type="button" id="gear-inline-cancel">Cancel</button>
@@ -1357,21 +1349,52 @@ function wireGearRows(trip) {
   })
   form.addEventListener('submit', e => {
     e.preventDefault()
-    const f = new FormData(e.target)
     // The edit lands on the library row, so every trip sharing this slot gets
     // the real item — that is what makes naming it once worth doing.
-    Object.assign(item, {
-      // Leaving the name alone keeps the slot's own label — never blanks it.
-      name: f.get('name').trim() || item.name,
-      category: f.get('category'),
-      weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
-      url: f.get('url').trim() || null,
-    })
+    Object.assign(item, gearEditorValues(e.target, item))
     gearRowEditId = null
     persist()
     renderGear(trip)
   })
   wireScrape(form, ['name', 'weightOz'])
+}
+
+// One editor body for a gear item, wherever it is opened from. Adding a field
+// here reaches the trip's gear screen and the Library's gear shelf at once.
+const CARRY_LABELS = { pack: 'In the pack', harness: 'On my harness', worn: 'Worn' }
+
+function gearEditorFields(item) {
+  return `
+    <label>Name<input name="name" value="${esc(item.name)}" placeholder="${esc(item.name)}"></label>
+    <label>Product page URL<input name="url" type="url" value="${esc(item.url ?? '')}" placeholder="https://…"></label>
+    <div class="fetch-row">
+      <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
+      <span class="fetch-status mono" role="status" id="scrape-status"></span>
+    </div>
+    <div class="macro-grid">
+      <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${esc(item.weightOz ?? '')}"></label>
+      <label>Category
+        <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === item.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
+      </label>
+    </div>
+    <label>Where it rides
+      <select name="carry">${CARRY_MODES.map(m => `<option value="${m}"${m === carryModeOf(item) ? ' selected' : ''}>${CARRY_LABELS[m]}</option>`).join('')}</select>
+      <small>Only what's in the pack counts toward pack weight. Harness and worn
+      still count toward what you carry.</small>
+    </label>`
+}
+
+// What the editor's form says the item now is. Leaving the name blank keeps
+// the slot's own label rather than blanking it.
+function gearEditorValues(form, item) {
+  const f = new FormData(form)
+  return {
+    name: f.get('name').trim() || item.name,
+    category: f.get('category'),
+    weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
+    url: f.get('url').trim() || null,
+    carry: f.get('carry'),
+  }
 }
 
 // Deleting gear is one act wherever it is done: it leaves the library and
@@ -1946,23 +1969,12 @@ function renderGearLibrary(q, shelves) {
             <div class="food-row">
               <button class="food-pick" data-lib-gear="${esc(g.id)}" aria-expanded="${libraryGearEditId === g.id}">
                 <span class="food-name">${esc(g.name)}</span>
-                <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${esc(g.weightOz)} oz` : ' · no weight'}${g.url ? ' · linked' : ''}</span>
+                <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${esc(g.weightOz)} oz` : ' · no weight'}${carryModeOf(g) !== 'pack' ? ` · ${carryModeOf(g)}` : ''}${g.url ? ' · linked' : ''}</span>
               </button>
             </div>
             ${libraryGearEditId === g.id ? `
             <form class="gear-inline" id="gear-inline">
-              <label>Name<input name="name" value="${esc(g.name)}" placeholder="${esc(g.name)}"></label>
-              <label>Product page URL<input name="url" type="url" value="${esc(g.url ?? '')}" placeholder="https://…"></label>
-              <div class="fetch-row">
-                <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
-                <span class="fetch-status mono" role="status" id="scrape-status"></span>
-              </div>
-              <div class="macro-grid">
-                <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${esc(g.weightOz ?? '')}"></label>
-                <label>Category
-                  <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === g.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
-                </label>
-              </div>
+              ${gearEditorFields(g)}
               <div class="onboard-actions">
                 <button class="btn btn-primary" type="submit">Save</button>
                 <button class="btn-quiet" type="button" id="gear-lib-cancel">Cancel</button>
@@ -1995,13 +2007,7 @@ function renderGearLibrary(q, shelves) {
   })
   form.addEventListener('submit', e => {
     e.preventDefault()
-    const f = new FormData(e.target)
-    Object.assign(item, {
-      name: f.get('name').trim() || item.name,
-      category: f.get('category'),
-      weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
-      url: f.get('url').trim() || null,
-    })
+    Object.assign(item, gearEditorValues(e.target, item))
     libraryGearEditId = null
     persist()
     renderLibrary('gear')
