@@ -169,6 +169,25 @@ entry survives the import gate, since adoption feeds the synced library.
     top products most everyone is using." So the catalog stays a hand-picked
     list in `seed.js` — no KV growth, no other users' gear ever joining it.
     Growing it is a content job (add entries to `GEAR_CATALOG`), not a feature.
+2026-07-27 (shipped): **Weights read in pounds past a pound** (`fmtOz`, one
+helper behind every weight the app displays — carry split, gear rows, picker,
+catalog, Library shelf, kit chips and tally, the day's food weight). Under
+16 oz stays in ounces, where the tenths matter. Lawrence: "463.35 oz" is a
+number; "28 lb 15.4 oz" is a load.
+2026-07-27 (shipped): **A generic slot asks to be named.** Lawrence: "when we
+start with generic items listed we should let that be editable so someone can
+make them specific. I've been removing the generic and adding my specific."
+The edit had existed since the morning — it just did not READ as one, sitting
+in the same small mono caps as Edit and ×. A slot still wearing its catalog
+name is a question, not an item, and ticking "packed" on a tent you have not
+chosen means nothing — so the NAME became the control ("Tent · name yours"),
+with the generic name kept as the field's placeholder so the box starts empty
+and Fetch can fill it. Lesson: a capability nobody finds is not shipped.
+2026-07-27 (shipped): **Seed v13 — Chomps Smoky BBQ Beef Stick** (100 kcal,
+0 C / 7 F / 10 P, 1.15 oz), plus `chomps` in the brand table so it can be
+starred. Label read off the product page, not recalled: serving size is one
+stick (33 g), so the panel is the whole item as packed. Additive migration —
+never resurrects a deletion.
 2026-07-27 (shipped): **Three places a thing can ride.** Lawrence: "let's not
 count bino harness items (range finder, pistol, binoculars) in the pack
 weight — we could consider it part of overall carry weight." So gear carries a

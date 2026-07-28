@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SEED, GEAR_SEED, applySeedMigrations } from '../js/seed.js'
+import { SEED, GEAR_SEED, applySeedMigrations, BRANDS, brandOf, applyProfile } from '../js/seed.js'
 
 const SLOTS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snack']
 
@@ -237,4 +237,44 @@ test('gear v2 runs even when the food seed is already current, and only once', (
   once.gearLibrary[0].category = 'Backpack'
   const twice = applySeedMigrations(once)
   assert.equal(twice.gearLibrary[0].category, 'Backpack', 'version gate makes the move a one-time event')
+})
+
+test('seed v13: Chomps joins the snack shelf with its label intact', () => {
+  // Lawrence's ask, 2026-07-27. Read off the product page rather than recalled:
+  // serving size is 1 stick (33 g), so the panel IS the whole item as packed.
+  const f = SEED.foods.find(x => x.id === 'chomps-bbq-beef-stick')
+  assert.ok(f, 'the stick is in the seed')
+  assert.equal(f.kcal, 100)
+  assert.equal(f.carbsG, 0)
+  assert.equal(f.fatG, 7)
+  assert.equal(f.proteinG, 10)
+  assert.equal(f.weightOz, 1.15)
+  assert.equal(f.slotHint, 'snack')
+  // Atwater sanity: macros must roughly account for the stated calories.
+  const fromMacros = f.carbsG * 4 + f.proteinG * 4 + f.fatG * 9
+  assert.ok(Math.abs(fromMacros - f.kcal) <= 15, `macros imply ${fromMacros} kcal against a stated ${f.kcal}`)
+})
+
+test('seed v13: Chomps is a brand you can star', () => {
+  assert.ok(BRANDS.some(b => b.id === 'chomps' && b.kind === 'snack'))
+  assert.equal(brandOf('chomps-bbq-beef-stick'), 'chomps')
+  // Starring the brand stars the food, which is what makes drafts reach for it.
+  const state = { library: SEED.foods.map(f => ({ ...f, favorite: false })), trips: [] }
+  applyProfile(state, { weightLbs: 200, brands: ['chomps'], tripTypes: [], mealStyle: null, at: 1 })
+  assert.equal(state.library.find(f => f.id === 'chomps-bbq-beef-stick').favorite, true)
+})
+
+test('seed v13 migration is additive and respects a deletion', () => {
+  const base = () => ({ schemaVersion: 1, trips: [], seedVersion: 12, gearLibrary: [], gearSeedVersion: 3,
+    library: SEED.foods.filter(f => !f.id.startsWith('chomps-')).map(f => ({ ...f, favorite: false })) })
+  const fresh = base()
+  applySeedMigrations(fresh)
+  assert.ok(fresh.library.some(f => f.id === 'chomps-bbq-beef-stick'), 'a v12 library gains the stick')
+  // Running again must not double it.
+  applySeedMigrations(fresh)
+  assert.equal(fresh.library.filter(f => f.id === 'chomps-bbq-beef-stick').length, 1)
+  // And a user already at v13 who deleted it does not get it back.
+  const deleted = { ...base(), seedVersion: 13 }
+  applySeedMigrations(deleted)
+  assert.equal(deleted.library.some(f => f.id === 'chomps-bbq-beef-stick'), false)
 })

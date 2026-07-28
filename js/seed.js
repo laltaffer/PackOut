@@ -10,7 +10,7 @@
 // (reference/alaska-food-order.md) — his core meals, pre-starred so a fresh
 // state drafts from them with zero setup.
 export const SEED = {
-  version: 12,
+  version: 13,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -121,6 +121,11 @@ export const SEED = {
     // 15g F / 13g P per 56g (2 oz) stick — qty = sticks. The protein-dense
     // snack that closes residual floor gaps (Lawrence's brand, 2026-07-21).
     { id: 'fatty-original-2oz', name: 'FATTY Original Smoked Meat Stick (2 oz)', kcal: 200, carbsG: 2, fatG: 15, proteinG: 13, weightOz: 2, slotHint: 'snack' },
+    // Chomps Smoky BBQ Beef (seed v13, 2026-07-27, Lawrence's ask). Label read
+    // off chomps.com/products/bbq-beef-jerky-stick: serving size is 1 stick
+    // (33 g), so the panel's numbers ARE the whole item as packed — 100 kcal,
+    // 0 g carb, 7 g fat, 10 g protein. Package weight 1.15 oz.
+    { id: 'chomps-bbq-beef-stick', name: 'Chomps Smoky BBQ Beef Stick (1.15 oz)', kcal: 100, carbsG: 0, fatG: 7, proteinG: 10, weightOz: 1.15, slotHint: 'snack', url: 'https://chomps.com/products/bbq-beef-jerky-stick' },
   ],
 }
 
@@ -148,6 +153,7 @@ export const BRANDS = [
   { id: 'stowaway', label: 'Stowaway Gourmet', kind: 'meal', ids: ['stowaway-'] },
   { id: 'packit', label: 'Packit Gourmet', kind: 'meal', ids: ['packit-'] },
   { id: 'fatty', label: 'FATTY', kind: 'snack', ids: ['fatty-'] },
+  { id: 'chomps', label: 'Chomps', kind: 'snack', ids: ['chomps-'] },
   { id: 'probar', label: 'ProBar', kind: 'snack', ids: ['probar-', 'pro-bolt'] },
   { id: 'honey-stinger', label: 'Honey Stinger', kind: 'snack', ids: ['honey-stinger-'] },
   { id: 'gu', label: 'GU Energy', kind: 'snack', ids: ['gu-'] },
@@ -876,6 +882,13 @@ export function applySeedMigrations(state) {
       if ((f.id.startsWith('stowaway-') || f.id.startsWith('packit-')) && !have.has(f.id)) {
         state.library.push({ ...f, favorite: false })
       }
+    }
+  }
+  if (from < 13) {
+    // Additive: Chomps Smoky BBQ Beef stick — never resurrects a deletion.
+    const have = new Set(state.library.map(f => f.id))
+    for (const f of SEED.foods) {
+      if (f.id.startsWith('chomps-') && !have.has(f.id)) state.library.push({ ...f, favorite: false })
     }
   }
   return sweepRetired(state, () => { state.seedVersion = SEED.version })
