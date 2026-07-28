@@ -37,6 +37,29 @@ test('every seed food carries a brand name — no generic commodity items', () =
   assert.ok(SEED.foods.find(f => f.id === 'peak-strawberry-granola').name.startsWith('Peak Refuel '))
 })
 
+test('shape migration: legacy snack bundles fold into one flat list, duplicates merge qty', () => {
+  const day = {
+    intensity: 'medium',
+    meals: {
+      electrolytes: [], breakfast: [], lunch: [], dinner: [],
+      snacks: [
+        { items: [{ foodId: 'probar-peanut-butter', qty: 1 }, { foodId: 'gu-energy-gel', qty: 2 }] },
+        { items: [{ foodId: 'probar-peanut-butter', qty: 1 }] },
+      ],
+    },
+  }
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: SEED.version, gearSeedVersion: GEAR_SEED.version,
+    trips: [{ id: 't', name: 'T', startDate: '2026-08-01', weightLbs: 200, days: [day] }],
+    library: SEED.foods.map(f => ({ favorite: false, ...f })),
+    gearLibrary: [],
+  })
+  assert.deepEqual(s.trips[0].days[0].meals.snacks, [
+    { foodId: 'probar-peanut-butter', qty: 2 },
+    { foodId: 'gu-energy-gel', qty: 2 },
+  ])
+})
+
 // v9 (2026-07-20, Lawrence: "one wipe of the locally stored memory of the
 // foods … and a fully wipe … of the meal plans"): every pre-v9 state converges
 // to exactly the seed library and loses its planned days. This is the one

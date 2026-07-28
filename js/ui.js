@@ -26,7 +26,7 @@ function route() {
   if (!state) return renderGate()
   updateNav()
   const hash = location.hash || '#/'
-  const pickMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/add\/([a-z]+(?:-\d+)?)$/)
+  const pickMatch = hash.match(/^#\/trip\/(.+)\/day\/(\d+)\/add\/([a-z]+)$/)
   if (pickMatch) {
     const trip = state.trips.find(t => t.id === pickMatch[1])
     if (trip && trip.days[Number(pickMatch[2])]) return renderPicker(trip, Number(pickMatch[2]), pickMatch[3])

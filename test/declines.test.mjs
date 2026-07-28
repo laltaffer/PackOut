@@ -26,7 +26,7 @@ const mkTrip = (days = 3, extra = {}) => ({
 
 const allIds = meals => [
   ...meals.electrolytes, ...meals.breakfast, ...meals.lunch, ...meals.dinner,
-  ...meals.snacks.flatMap(s => s.items),
+  ...meals.snacks,
 ].map(e => e.foodId)
 
 test('declinedIds: tolerates a trip with no declines, or a junk value', () => {

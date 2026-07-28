@@ -45,11 +45,11 @@ test('entries pointing at deleted foods are ignored, not fatal', () => {
   assert.equal(t.kcal, 100)
 })
 
-test('dayTotals folds all slots and snack bundles', () => {
+test('dayTotals folds all slots, snacks included', () => {
   const meals = emptyMeals()
   meals.electrolytes.push({ foodId: 'gel', qty: 1 })
   meals.dinner.push({ foodId: 'strog', qty: 1 })
-  meals.snacks.push({ items: [{ foodId: 'probar', qty: 1 }] }, { items: [{ foodId: 'gel', qty: 2 }] })
+  meals.snacks.push({ foodId: 'probar', qty: 1 }, { foodId: 'gel', qty: 2 })
   const t = dayTotals({ intensity: 'medium', meals }, LIB)
   assert.equal(t.kcal, 100 + 810 + 390 + 200)
   assert.equal(t.proteinG, 0 + 41 + 12 + 0)

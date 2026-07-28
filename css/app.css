@@ -552,7 +552,7 @@ main:has(.trip-surface) { max-width: none; }
 }
 .entry-ctl button:hover { border-color: var(--act); }
 .entry-ctl .qty { min-width: 1.6rem; text-align: center; font-weight: 700; }
-.entry-ctl [data-rm], .snack-head [data-rm-snack] { border-color: var(--line); color: var(--soft); }
+.entry-ctl [data-rm] { border-color: var(--line); color: var(--soft); }
 
 .btn-add {
   font-weight: 700; font-size: 0.92rem; color: var(--add-link); text-decoration: none;
@@ -563,18 +563,6 @@ main:has(.trip-surface) { max-width: none; }
 .btn-add:hover { text-decoration: underline; }
 /* Section-foot add row on the gear screen: full check-row height target. */
 .gear-add { display: flex; align-items: center; min-height: 44px; }
-
-.slot-sub { color: var(--soft); font-size: var(--text-min); }
-
-.snack-bundle { border: 1px solid var(--line); border-radius: var(--r); padding: 0.5rem 0.75rem; margin: 0.6rem 0; }
-.snack-head { display: flex; align-items: center; gap: 0.6rem; }
-.snack-head h3 { font-weight: 700; text-transform: var(--h-case); font-size: 1rem; }
-.snack-head .slot-sub { flex: 1; }
-.snack-head button {
-  min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: var(--r-btn);
-  background: var(--panel); color: var(--soft); cursor: pointer;
-}
-#add-snack { margin-top: 0.5rem; }
 
 .picker input[type="search"] { width: 100%; max-width: none; margin-bottom: 0.9rem; }
 

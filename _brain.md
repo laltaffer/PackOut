@@ -112,7 +112,8 @@ worse than a stale cache.
 - **±50 kcal window (2026-07-20, "the plans are a suck" round):** a draft lands
   within ±50 kcal of the day target — overshoot to 115% was rebuilt out. Breakfast
   obeys 200–400 hard (that window + prep bias excludes every Peak Refuel pouch =
-  his "bias breakfast against Peak Refuel toward bars/no-prep"). Snacks: ≤3 bundles,
+  his "bias breakfast against Peak Refuel toward bars/no-prep"). Snacks: one flat
+  bucket per day (was ≤3 bundles until 2026-07-28; legacy data merges on load),
   repeats stack qty (Goldbears per-oz is the ±50 fine-tuner). Protein is maximized
   inside the window, never bought past it — a residual gap shows as Short (protein).
   Library gap (no protein-dense snack) closed 2026-07-21: FATTY Original 2 oz stick

@@ -744,14 +744,31 @@ function migrateGear(state) {
 }
 
 // Shape migrations that answer to no version counter because they are
-// idempotent conversions: a trip's single `type` becomes a `types` list, and
-// the one-day-lived onboarding record becomes the profile that replaced it.
+// idempotent conversions: a trip's single `type` becomes a `types` list,
+// snack bundles fold into one flat list, and the one-day-lived onboarding
+// record becomes the profile that replaced it.
 function migrateShape(state) {
   for (const trip of state.trips ?? []) {
     if (trip.type === undefined) continue
     const types = Array.isArray(trip.types) ? trip.types : []
     trip.types = TRIP_TYPES.filter(t => types.includes(t) || t === trip.type)
     delete trip.type
+  }
+  // Snacks were once up to 3 bundles per day ([{items: [...]}]); now they are
+  // one flat entry list like every other slot. Duplicate foods across the old
+  // bundles merge by summing qty.
+  for (const trip of state.trips ?? []) {
+    for (const day of trip.days ?? []) {
+      const snacks = day.meals?.snacks
+      if (!Array.isArray(snacks) || !snacks.some(s => Array.isArray(s?.items))) continue
+      const flat = []
+      for (const e of snacks.flatMap(s => Array.isArray(s?.items) ? s.items : [s])) {
+        const existing = flat.find(x => x.foodId === e.foodId)
+        if (existing) existing.qty += e.qty
+        else flat.push({ ...e })
+      }
+      day.meals.snacks = flat
+    }
   }
   if (state.onboarding && !state.profile) {
     const o = state.onboarding
@@ -778,10 +795,9 @@ export function applySeedMigrations(state) {
       for (const day of trip.days) {
         const m = day.meals
         if (!m) continue
-        for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+        for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']) {
           for (const e of m[k]) referenced.add(e.foodId)
         }
-        for (const s of m.snacks) for (const e of s.items) referenced.add(e.foodId)
       }
     }
     for (const f of state.library) {
@@ -807,10 +823,9 @@ export function applySeedMigrations(state) {
       for (const day of trip.days) {
         const m = day.meals
         if (!m) continue
-        for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+        for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']) {
           for (const e of m[k]) referenced.add(e.foodId)
         }
-        for (const sn of m.snacks) for (const e of sn.items) referenced.add(e.foodId)
       }
     }
     state.library = state.library.filter(f => !(KILLED_V4.includes(f.id) && !referenced.has(f.id)))
@@ -911,10 +926,9 @@ function sweepRetired(state, after) {
     for (const day of trip.days) {
       const m = day.meals
       if (!m) continue
-      for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+      for (const k of ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']) {
         for (const e of m[k]) stillReferenced.add(e.foodId)
       }
-      for (const sn of m.snacks) for (const e of sn.items) stillReferenced.add(e.foodId)
     }
   }
   state.library = state.library.filter(f =>

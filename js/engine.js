@@ -132,7 +132,7 @@ function flatEntries(day) {
   const meals = day.meals ?? emptyMeals()
   return [
     ...meals.electrolytes, ...meals.breakfast, ...meals.lunch, ...meals.dinner,
-    ...meals.snacks.flatMap(s => s.items),
+    ...meals.snacks,
   ]
 }
 
@@ -309,8 +309,6 @@ const MAIN_MIN_KCAL = 400
 // stacking into one is legitimate ("a ProBar plus gummy bears").
 const LUNCH_MIN_KCAL = 300
 const LUNCH_SHARE = 0.27
-// Snacks appear as at most 3 bundles; repeats grow qty inside a bundle.
-const SNACK_BUNDLES = 3
 
 // Per-trip Meal Style (issue #18): breakfast/lunch/dinner each draft as
 // 'mobile' (grab & go — cook foods never proposed) or 'sitdown' (time to
@@ -501,13 +499,12 @@ function buildDraft(trip, dayIndex, fullLibrary, staples, strategy, avoidMains, 
   // unknown items must not sink), repeats allowed — but only with kcal the
   // ±50 window can afford; a residual protein gap is the Verdict's to flag.
   // Then the kcal gap fills with round-robin variety until the day lands
-  // inside [target−50, target+50]. At most 3 bundles; repeats stack qty.
+  // inside [target−50, target+50]. Repeats stack qty on one line.
   const snackPool = hinted('snack')
   const addSnack = food => {
-    const bundle = meals.snacks.find(s => s.items.some(e => e.foodId === food.id))
-    if (bundle) bundle.items.find(e => e.foodId === food.id).qty += 1
-    else if (meals.snacks.length < SNACK_BUNDLES) meals.snacks.push({ items: [{ foodId: food.id, qty: 1 }] })
-    else meals.snacks[meals.snacks.length - 1].items.push({ foodId: food.id, qty: 1 })
+    const entry = meals.snacks.find(e => e.foodId === food.id)
+    if (entry) entry.qty += 1
+    else meals.snacks.push({ foodId: food.id, qty: 1 })
     kcal += food.kcal
     protein += food.proteinG ?? 0
   }
@@ -656,7 +653,11 @@ function validDay(day) {
     if (!m || typeof m !== 'object') return false
     if (!MEAL_KEYS.every(k => k in m)) return false
     if (!['electrolytes', 'breakfast', 'lunch', 'dinner'].every(k => validEntries(m[k]))) return false
-    if (!Array.isArray(m.snacks) || !m.snacks.every(s => s && validEntries(s.items))) return false
+    // Snacks are a flat entry list like every other slot, but backups written
+    // before the flatten carry the legacy bundle shape ([{items: [...]}]) —
+    // still accepted here; migrateShape folds them into one list after import.
+    if (!validEntries(m.snacks) &&
+        !(Array.isArray(m.snacks) && m.snacks.every(s => s && validEntries(s.items)))) return false
   }
   if (day.packed !== undefined) {
     if (!day.packed || typeof day.packed !== 'object') return false

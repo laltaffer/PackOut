@@ -9,10 +9,7 @@ const LIB = [
 
 function dayWith(spec) {
   const meals = emptyMeals()
-  for (const [slot, entries] of Object.entries(spec)) {
-    if (slot === 'snacks') meals.snacks = entries.map(items => ({ items }))
-    else meals[slot] = entries
-  }
+  for (const [slot, entries] of Object.entries(spec)) meals[slot] = entries
   return { intensity: 'medium', meals }
 }
 
@@ -20,7 +17,7 @@ test('grocery list aggregates the same food across days and slots into one line'
   const trip = {
     weightLbs: 200,
     days: [
-      dayWith({ dinner: [{ foodId: 'meal', qty: 1 }], snacks: [[{ foodId: 'bar', qty: 2 }]] }),
+      dayWith({ dinner: [{ foodId: 'meal', qty: 1 }], snacks: [{ foodId: 'bar', qty: 2 }] }),
       dayWith({ lunch: [{ foodId: 'bar', qty: 1 }] }),
     ],
   }
@@ -33,7 +30,7 @@ test('grocery list aggregates the same food across days and slots into one line'
 test('day pack list merges duplicate foods within the day and keeps quantities', () => {
   const day = dayWith({
     breakfast: [{ foodId: 'bar', qty: 1 }],
-    snacks: [[{ foodId: 'bar', qty: 2 }], [{ foodId: 'meal', qty: 1 }]],
+    snacks: [{ foodId: 'bar', qty: 2 }, { foodId: 'meal', qty: 1 }],
   })
   assert.deepEqual(dayPackList(day, LIB), [
     { foodId: 'bar', name: 'Bar', qty: 3 },
@@ -43,7 +40,7 @@ test('day pack list merges duplicate foods within the day and keeps quantities',
 
 test('readiness rolls up verdicts and packed state with named blockers', () => {
   const d0 = dayWith({ dinner: [{ foodId: 'meal', qty: 5 }, { foodId: 'bar', qty: 2 }] }) // 4800 kcal, 224P → fueled/heavy zone
-  const d1 = dayWith({ snacks: [[{ foodId: 'bar', qty: 1 }]] }) // short
+  const d1 = dayWith({ snacks: [{ foodId: 'bar', qty: 1 }] }) // short
   d0.packed = { meal: 5, bar: 1 } // bar was packed at qty 1, plan now wants 2 → stale
   const trip = { weightLbs: 200, days: [d0, d1] }
   const r = readiness(trip, LIB)
@@ -60,7 +57,7 @@ test('readiness rolls up verdicts and packed state with named blockers', () => {
 test('plannedDayOptions lists planned days across trips with kcal, skipping empty days', () => {
   const trips = [
     { id: 't1', name: 'Alaska', days: [dayWith({ dinner: [{ foodId: 'meal', qty: 1 }] }), { intensity: 'medium' }] },
-    { id: 't2', name: 'Montana', days: [dayWith({ snacks: [[{ foodId: 'bar', qty: 2 }]] })] },
+    { id: 't2', name: 'Montana', days: [dayWith({ snacks: [{ foodId: 'bar', qty: 2 }] })] },
   ]
   assert.deepEqual(plannedDayOptions(trips, LIB), [
     { tripId: 't1', tripName: 'Alaska', dayIndex: 0, kcal: 800 },

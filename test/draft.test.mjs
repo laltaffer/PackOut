@@ -53,14 +53,15 @@ test('a drafted day lands within ±50 kcal of the target', () => {
   assert.equal(dayVerdict({ intensity: 'medium', meals }, WEIGHT, LIB).status, 'fueled')
 })
 
-test('meals carry the day: real lunch, windowed breakfast, at most 3 snack bundles', () => {
+test('meals carry the day: real lunch, windowed breakfast, one snack line per food', () => {
   const meals = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
   const target = dailyTargets(WEIGHT, 'medium').kcal.target
   const bk = slotKcal(meals.breakfast, LIB)
   assert.ok(bk >= 200 && bk <= 400, `breakfast in window: ${bk}`)
   assert.ok(slotKcal(meals.lunch, LIB) >= 0.22 * target, `lunch is a real meal: ${slotKcal(meals.lunch, LIB)}`)
   assert.ok(meals.lunch.length > 1, 'lunch groups multiple items, like the sheet')
-  assert.ok(meals.snacks.length <= 3, `snacks stay in at most 3 bundles: ${meals.snacks.length}`)
+  const ids = meals.snacks.map(e => e.foodId)
+  assert.equal(new Set(ids).size, ids.length, `repeats stack qty, never duplicate lines: ${ids}`)
 })
 
 test('drafting is deterministic: same inputs, identical output', () => {
@@ -248,7 +249,8 @@ test('real-seed week: dinners rotate through the ordered core meals, every day w
     assert.ok(ordered.has(d.meals.dinner[0].foodId), `day ${d.dayIndex} main is an ordered meal`)
     const t = dayTotals({ intensity: 'medium', meals: d.meals }, lib)
     assert.ok(Math.abs(t.kcal - target) <= TOL, `day ${d.dayIndex}: |${t.kcal} - ${target}| <= ${TOL}`)
-    assert.ok(d.meals.snacks.length <= 3, `day ${d.dayIndex} snack bundles: ${d.meals.snacks.length}`)
+    const ids = d.meals.snacks.map(e => e.foodId)
+    assert.equal(new Set(ids).size, ids.length, `day ${d.dayIndex} snacks stay one line per food: ${ids}`)
   }
   const mains = drafts.map(d => d.meals.dinner[0].foodId)
   for (let i = 1; i < mains.length; i++) assert.notEqual(mains[i], mains[i - 1], 'no consecutive dinner repeats')

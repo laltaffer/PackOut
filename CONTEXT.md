@@ -40,10 +40,10 @@ to any meal by hand. Defaults: Breakfast and Lunch Mobile, Dinner Sit-down. A
 sit-down Breakfast may take one big hot item up to the Dinner share (~25% of day
 kcal) — the day window then simply leaves fewer Snacks.
 
-## Snack
-A bundle of one or more food items packed and eaten as a unit, judged as a whole
-against the per-snack target. A Day carries as many Snacks as the user will pack
-(V2P sheet shows five slots; the count is variable).
+## Snacks
+One flat bucket per Day (2026-07-28; formerly up to three numbered bundles). Each
+entry is a food plus a quantity — repeats of the same food stack qty on one line.
+Judged in aggregate as the day's between-meals calories, not per-slot.
 
 ## Verdict
 The per-Day sufficiency call. **Fueled** = day kcal ≥ 90% of target AND protein

@@ -104,10 +104,18 @@ test('meal style: accepts partial valid values, rejects unknown slots and styles
 test('accepts a valid full day plan with packed quantities', () => {
   const good = withDay({
     intensity: 'medium',
-    meals: { electrolytes: [], breakfast: [{ foodId: 'f1', qty: 2 }], lunch: [], dinner: [], snacks: [{ items: [{ foodId: 'f1', qty: 1 }] }] },
+    meals: { electrolytes: [], breakfast: [{ foodId: 'f1', qty: 2 }], lunch: [], dinner: [], snacks: [{ foodId: 'f1', qty: 1 }] },
     packed: { f1: 2 },
   })
   assert.equal(validateImport(good).ok, true)
+})
+
+test('accepts the legacy snack-bundle shape — old backups still import', () => {
+  const legacy = withDay({
+    intensity: 'medium',
+    meals: { electrolytes: [], breakfast: [], lunch: [], dinner: [], snacks: [{ items: [{ foodId: 'f1', qty: 1 }] }] },
+  })
+  assert.equal(validateImport(legacy).ok, true)
 })
 
 test('validateImport: the gear library is gated like everything else that renders', () => {

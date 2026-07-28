@@ -2,7 +2,7 @@
 
 export const INTENSITIES = ['easy', 'medium', 'hard']
 export const VERDICT_LABELS = { fueled: 'Fueled', short: 'Short', heavy: 'Heavy' }
-export const SLOT_LABELS = { electrolytes: 'Electrolytes / Fluid', breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
+export const SLOT_LABELS = { electrolytes: 'Electrolytes / Fluid', breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snacks: 'Snacks' }
 export const STYLE_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
 export const TRIP_TYPE_LABELS = { backpacking: 'Backpacking', rifle: 'Rifle hunt', bow: 'Bow hunt', fishing: 'Fishing' }
 

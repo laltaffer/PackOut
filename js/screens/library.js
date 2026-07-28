@@ -236,11 +236,8 @@ export function renderFoodForm(food) {
       for (const trip of state.trips) {
         for (const day of trip.days) {
           if (!day.meals) continue
-          for (const key of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+          for (const key of ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']) {
             if (day.meals[key].some(e => e.foodId === food.id)) { refs++; tripsHit.add(trip.name) }
-          }
-          for (const s of day.meals.snacks) {
-            if (s.items.some(e => e.foodId === food.id)) { refs++; tripsHit.add(trip.name) }
           }
         }
       }
@@ -254,11 +251,8 @@ export function renderFoodForm(food) {
         for (const day of trip.days) {
           delete day.packed?.[food.id]
           if (!day.meals) continue
-          for (const key of ['electrolytes', 'breakfast', 'lunch', 'dinner']) {
+          for (const key of ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snacks']) {
             day.meals[key] = day.meals[key].filter(e => e.foodId !== food.id)
-          }
-          for (const s of day.meals.snacks) {
-            s.items = s.items.filter(e => e.foodId !== food.id)
           }
         }
       }

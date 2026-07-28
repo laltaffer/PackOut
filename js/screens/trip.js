@@ -122,8 +122,7 @@ function fillBoard(trip, i, { focus = true } = {}) {
   const slotSub = key => sumEntries(day.meals[key], state.library)
   const b = slotSub('breakfast')
   const inWin = b.kcal >= st.breakfast.kcalMin && b.kcal <= st.breakfast.kcalMax
-  const snacks = day.meals.snacks.flatMap(s => s.items)
-  const snackSub = sumEntries(snacks, state.library)
+  const snackSub = slotSub('snacks')
   const din = slotSub('dinner')
   const staples = stapleIds(state.trips)
   const suggs = v?.status === 'short'
@@ -187,7 +186,7 @@ function fillBoard(trip, i, { focus = true } = {}) {
         b.kcal ? `<span class="w ${inWin ? 'in' : 'out'}">${inWin ? 'In window' : 'Outside window'} ${st.breakfast.kcalMin}–${st.breakfast.kcalMax}</span>` : '')}
       ${boardSlot(trip, i, 'lunch', 'Lunch', slotSub('lunch'), day.meals.lunch)}
       ${boardSlot(trip, i, 'dinner', 'Dinner', din, day.meals.dinner)}
-      ${boardSnacks(trip, i, day, snackSub)}
+      ${boardSlot(trip, i, 'snacks', 'Snacks', snackSub, day.meals.snacks)}
       ${boardSlot(trip, i, 'electrolytes', 'Electrolytes', slotSub('electrolytes'), day.meals.electrolytes)}
     </div>`
   wireBoard(trip, i, day)
@@ -211,28 +210,6 @@ function boardSlot(trip, i, key, label, sub, entries, extra = '') {
       </div>
       ${entries.length ? `<ul class="entries">${entryRows(entries, key)}</ul>` : ''}
       <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/${key}">+ Add to ${label.toLowerCase()}</a>
-    </section>`
-}
-
-function boardSnacks(trip, i, day, snackSub) {
-  const bundles = day.meals.snacks
-  return `
-    <section class="slotrow" data-slot="snacks">
-      <div class="slotrow-head">
-        <span class="t">Snacks${bundles.length ? ` · ${bundles.length}` : ''}</span>
-        <span class="n">${snackSub.kcal.toLocaleString()}</span>
-      </div>
-      ${bundles.map((s, sIdx) => `
-        <div class="snack-bundle" data-bundle="${sIdx}">
-          <div class="snack-head">
-            <h3>Snack ${sIdx + 1}</h3>
-            <span class="slot-sub mono">${sumEntries(s.items, state.library).kcal.toLocaleString()} kcal</span>
-            <button id="rm-snack-${sIdx}" data-rm-snack="${sIdx}" aria-label="Remove snack ${sIdx + 1}">×</button>
-          </div>
-          ${s.items.length ? `<ul class="entries">${entryRows(s.items, `snack-${sIdx}`)}</ul>` : ''}
-          <a class="btn-add" href="#/trip/${trip.id}/day/${i}/add/snack-${sIdx}">+ Add item</a>
-        </div>`).join('')}
-      <button class="btn-add" id="add-snack" type="button">+ Add snack</button>
     </section>`
 }
 
@@ -374,11 +351,9 @@ function foodName(id) {
   return f ? f.name : '(deleted food)'
 }
 
-// One place resolves a slot key ('breakfast', 'snack-2', …) to its entry list.
+// One place resolves a slot key ('breakfast', 'snacks', …) to its entry list.
 function resolveEntries(day, key) {
-  return key.startsWith('snack-')
-    ? day.meals.snacks[Number(key.slice(6))].items
-    : day.meals[key]
+  return day.meals[key]
 }
 
 // Ids are stable across a re-render so a qty tap keeps focus on its own button
@@ -408,13 +383,9 @@ function decline(trip, foodId) {
   if (!trip.declined.includes(foodId)) trip.declined.push(foodId)
 }
 
-// The Add control belonging to a given entry list: a snack key addresses its
-// own bundle, everything else its slot.
+// The Add control belonging to a given entry list's slot.
 function slotAddControl(key) {
-  const m = /^snack-(\d+)$/.exec(key)
-  return m
-    ? document.querySelector(`[data-bundle="${m[1]}"] .btn-add`)
-    : document.querySelector(`[data-slot="${CSS.escape(key)}"] .btn-add`)
+  return document.querySelector(`[data-slot="${CSS.escape(key)}"] .btn-add`)
 }
 
 function wireBoard(trip, i, day) {
@@ -434,7 +405,6 @@ function wireBoard(trip, i, day) {
   on('board-draft', 'click', () => draft('usual'))
   on('board-draft-opt', 'click', () => draft('optimized'))
   on('undo-declines', 'click', () => { delete trip.declined; commit() })
-  on('add-snack', 'click', () => { day.meals.snacks.push({ items: [] }); commit() })
 
   document.querySelectorAll('#board [data-qty]').forEach(btn => btn.addEventListener('click', () => {
     const [key, j, delta] = btn.dataset.qty.split(':')
@@ -450,36 +420,21 @@ function wireBoard(trip, i, day) {
     commit()
     // The button that was focused no longer exists, and its id now belongs to
     // a different food. Land on the neighbour, or on the Add control of the
-    // very list that was emptied — for a snack that is its own bundle's Add,
-    // not the first bundle's (Codex, 2026-07-27).
+    // very list that was emptied.
     const idx = Math.min(Number(j), entries.length - 1)
     const next = idx >= 0 ? document.getElementById(`rm-${key}-${idx}`) : null
     ;(next ?? slotAddControl(key))?.focus()
-  }))
-  document.querySelectorAll('#board [data-rm-snack]').forEach(btn => btn.addEventListener('click', () => {
-    const at = Number(btn.dataset.rmSnack)
-    const [bundle] = day.meals.snacks.splice(at, 1)
-    for (const e of bundle?.items ?? []) decline(trip, e.foodId)
-    commit()
-    // Removing the last bundle leaves no neighbour to land on — fall through
-    // to the control that would make another one.
-    const neighbour = Math.min(at, day.meals.snacks.length - 1)
-    const next = neighbour >= 0 ? document.getElementById(`rm-snack-${neighbour}`) : null
-    ;(next ?? document.getElementById('add-snack'))?.focus()
   }))
   document.querySelectorAll('#board [data-sugg]').forEach(btn => btn.addEventListener('click', () => {
     const food = state.library.find(f => f.id === btn.dataset.sugg)
     if (!food) return
     // Accepting a suggestion un-declines it: the user just asked for it back.
     if (trip.declined?.includes(food.id)) trip.declined = trip.declined.filter(id => id !== food.id)
-    if (food.slotHint === 'snack') {
-      day.meals.snacks.push({ items: [{ foodId: food.id, qty: 1 }] })
-    } else {
-      const entries = day.meals[food.slotHint] ?? day.meals.lunch
-      const existing = entries.find(e => e.foodId === food.id)
-      if (existing) existing.qty += 1
-      else entries.push({ foodId: food.id, qty: 1 })
-    }
+    const slot = food.slotHint === 'snack' ? 'snacks' : food.slotHint
+    const entries = day.meals[slot] ?? day.meals.lunch
+    const existing = entries.find(e => e.foodId === food.id)
+    if (existing) existing.qty += 1
+    else entries.push({ foodId: food.id, qty: 1 })
     commit()
   }))
 
@@ -509,12 +464,12 @@ let pickerSearch = ''
 export function renderPicker(trip, i, slotKey) {
   const day = trip.days[i]
   day.meals ??= emptyMeals()
-  const slotBase = slotKey.startsWith('snack-') ? 'snack' : slotKey
+  const slotBase = slotKey === 'snacks' ? 'snack' : slotKey
   const q = pickerSearch.trim().toLowerCase()
   const staples = stapleIds(state.trips)
   const foods = pickerRank(state.library, staples, slotBase)
     .filter(f => !q || f.name.toLowerCase().includes(q))
-  const slotLabel = slotKey.startsWith('snack-') ? `Snack ${Number(slotKey.slice(6)) + 1}` : SLOT_LABELS[slotKey]
+  const slotLabel = SLOT_LABELS[slotKey]
   app.replaceChildren(el(`
     <section class="picker">
       <a href="#/trip/${trip.id}/day/${i}" class="back">&larr; Day ${i + 1}</a>
