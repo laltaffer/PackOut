@@ -50,6 +50,18 @@ finding; the incumbent's signature defect).
   Mono (small data labels).
 - Tabular numerals everywhere data columns exist. Body line-height ≥1.45.
   `text-wrap: balance` on h1–h3. Mono microlabels obey `--text-min`.
+- **Text side by side shares a baseline, never a box centre** (2026-07-27).
+  Runs at different sizes have different line-heights, so centring their boxes
+  leaves their baselines apart — the masthead tagline rode 4.8px above the
+  wordmark that way, and it is the only rule that survives a brand swap, since
+  `flag` and `command` set the wordmark in different faces. Apply it *within* a
+  group: a 44px touch target hangs far below the shared baseline, and letting
+  it into a bar-wide calculation inflates the flex line and pushes every glyph
+  to the top.
+- **A label sits directly above the value it names.** Stacked label/value cells
+  are start-aligned, never `space-between`: grid stretches a cell to the
+  tallest in its row, so a two-line neighbour would otherwise tear a label away
+  from its own number.
 
 ## Motion grammar
 

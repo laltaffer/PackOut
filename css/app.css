@@ -144,11 +144,28 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 .masthead {
   position: relative;
+  /* Text that sits side by side shares a BASELINE, never a box centre: the
+     bar mixes a 22.4px wordmark with 12px mono labels, and centring their
+     boxes left the tagline riding 4.8px high (Lawrence, 2026-07-27).
+     Baseline is also the only rule that survives a brand swap, since flag and
+     command set the wordmark in different faces at different metrics.
+     The alignment is applied INSIDE each group rather than across the whole
+     bar: a 44px touch target hangs far below the shared baseline, and letting
+     it into the calculation inflated the flex line and pushed every glyph to
+     the top of the bar. Groups stay centred; runs within a group share a
+     baseline. */
   display: flex; align-items: center; gap: 1.2rem;
   padding: 0.8rem clamp(1rem, 3vw, 2.2rem);
   background: var(--mast); color: var(--mast-ink);
   border-bottom: var(--mast-rule);
 }
+
+/* The wordmark and its service line are one lockup, so they sit on ONE
+   baseline. Centring their boxes instead left the tagline riding 4.8px high:
+   two runs at different sizes and line-heights (22.4/22.4 against 12/18) have
+   no reason to share an optical centre. Baseline is the only alignment that
+   survives a font or size change. */
+.brandmark { display: flex; align-items: baseline; gap: 1.2rem; min-width: 0; }
 
 .wordmark {
   font-weight: 800; font-size: 1.4rem; letter-spacing: var(--wm-track);
@@ -158,7 +175,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 .svc { font-size: var(--text-min); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; }
 
-.masthead-nav { display: flex; gap: 1.3rem; margin-left: auto; align-items: center; }
+.masthead-nav { display: flex; gap: 1.3rem; margin-left: auto; align-items: baseline; }
 
 .masthead-nav a {
   font-weight: 600; font-size: 0.95rem;
@@ -446,7 +463,15 @@ main:has(.trip-surface) { max-width: none; }
   margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: 0.8rem;
   grid-template-columns: repeat(2, 1fr);
 }
-.targets.day-macros div { flex-direction: column; align-items: start; }
+/* Stacked label-over-value cells must hug the top of their row. `.targets div`
+   sets justify-content: space-between for the side-by-side case; once the
+   direction turns to column that same rule pushes the label to the top of the
+   cell and the value to the bottom — and grid stretches every cell to the
+   tallest in its row. So a two-line WEIGHT cell next door tore FAT away from
+   its own number (Lawrence, 2026-07-27). Start-aligned, a label always sits
+   directly above the thing it names. */
+.targets.day-macros { align-items: start; }
+.targets.day-macros div { flex-direction: column; align-items: start; justify-content: start; gap: 0.1rem; }
 .targets.day-macros dd { text-align: left; }
 .day-transfer { margin-top: 1.2rem; }
 .day-transfer summary {
@@ -574,12 +599,12 @@ main:has(.trip-surface) { max-width: none; }
 
 /* Rides in the masthead nav so sign-out is one tap from any screen. */
 .account-chip {
-  display: flex; align-items: center; gap: 0.6rem;
+  display: flex; align-items: baseline; gap: 0.6rem;
   min-height: 44px;
   font-size: 0.9rem;
 }
 .account-chip:not(:empty) { padding-left: 0.4rem; border-left: 1px solid color-mix(in oklch, var(--mast-ink) 25%, transparent); }
-.account-chip .btn-quiet { color: var(--mast-ink); }
+.account-chip .btn-quiet { color: var(--mast-ink); white-space: nowrap; }
 .account-name { font-weight: 700; color: var(--mast-ink); }
 .sync-note { font-size: var(--text-min); color: var(--soft); }
 .sync-error { color: var(--v-short); }
