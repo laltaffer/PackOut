@@ -181,11 +181,13 @@ worse than a stale cache.
 
 ## Status
 
-### Where things stand (end of 2026-07-27)
-LIVE at packout.pages.dev, build **a27b074**. Repo HEAD is now AHEAD of
-production by the module refactor (below, 1df5057..9a521d6) — behavior-
-identical by construction and QA, but deploying it is Lawrence's call.
-268 tests green.
+### Where things stand (2026-07-28)
+LIVE at packout.pages.dev, build **66cf535** — the module refactor shipped
+via /ship-it (tests → security quick-gate → deploy → verified live: all 18
+stamped modules load once, gate + GIS + /api/me answer at 390px, console
+clean). Repo clean and pushed; production carries every line of code.
+268 tests green. `## Deploy Config` now exists (above) — ship-it's hard
+requirement, filled from the facts this file already carried.
 
 **Needs Lawrence, in rough priority order:**
 1. **Reload PackOut before editing anything.** His KV blob was edited directly
