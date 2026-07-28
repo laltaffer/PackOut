@@ -161,10 +161,13 @@ function fmtOz(oz) {
 
 // What the destination lookup found, as one line. `last-year` is labelled as
 // history so nothing here reads as a promise about the week ahead.
-function conditionsLine(trip) {
+function conditionsLine(trip, { withLabel = true } = {}) {
   const p = trip.place
   if (!p) return ''
-  const bits = [p.label]
+  // On a screen that already names the destination, repeating the matched
+  // label is a second identical run of text under the first — the facts are
+  // what the line is for.
+  const bits = withLabel ? [p.label] : []
   if (p.elevationFt !== null) bits.push(`${p.elevationFt.toLocaleString()} ft`)
   const c = p.climate
   if (c) {
@@ -367,7 +370,7 @@ function tripTypeFields(selected) {
 // The destination resolves while the form is still open (Lawrence 2026-07-27:
 // "on-the-fly lookup"). Advisory throughout — the trip saves with or without
 // it, and a stale in-flight answer never overwrites a newer one.
-function wireDestination(form, onPlace) {
+function wireDestination(form, onPlace, hasPlace = false) {
   const line = form.querySelector('#place-line')
   const dest = form.elements['destination']
   if (!line || !dest) return
@@ -385,6 +388,8 @@ function wireDestination(form, onPlace) {
     when: `${form.elements['startDate']?.value ?? ''}|${form.elements['days']?.value ?? ''}`,
   })
   let seq = 0
+  // The in-flight lookup, so a submit can wait for it instead of racing it.
+  let pending = null
   const say = (msg, isError) => {
     line.textContent = msg
     line.classList.toggle('field-error', !!isError)
@@ -403,13 +408,33 @@ function wireDestination(form, onPlace) {
     onPlace(res.place, asked)
     say(conditionsLine({ place: res.place }))
   }
-  dest.addEventListener('change', run)
+  const start = () => { pending = run(); return pending }
+  dest.addEventListener('change', start)
+  // Typing resolves it while the form is still being filled, so saving rarely
+  // has anything to wait for. `change` alone fires on blur — which for someone
+  // who edits a field and goes straight for Save is the same instant as the
+  // submit (Lawrence 2026-07-27: "it's not registering or trying to look up").
+  let typing
+  dest.addEventListener('input', () => {
+    clearTimeout(typing)
+    typing = setTimeout(start, 600)
+  })
   for (const name of ['startDate', 'days']) {
     // Dates and length change the conditions, not the place — re-ask only
     // once a destination is actually on the form.
-    form.elements[name]?.addEventListener('change', () => { if (dest.value.trim()) run() })
+    form.elements[name]?.addEventListener('change', () => { if (dest.value.trim()) start() })
   }
-  return snapshot
+  // A trip that predates the lookup has a destination and no place data, and
+  // nothing would ever ask: `change` only fires on an edit. Ask on open.
+  if (dest.value.trim() && !hasPlace) start()
+
+  // Saving waits for an answer already on its way, but never hangs on one:
+  // the lookup is advisory, and a trip must always be saveable.
+  const settle = async () => {
+    if (!pending) return
+    await Promise.race([pending, new Promise(r => setTimeout(r, 2500))])
+  }
+  return { snapshot, settle }
 }
 
 function mealStyleFromForm(f) {
@@ -452,11 +477,13 @@ function renderNewTrip() {
     </section>
   `))
   let found = null
-  const snapshot = wireDestination(document.getElementById('new-trip'), (place, asked) => { found = place && { place, asked } })
+  const { snapshot, settle } = wireDestination(
+    document.getElementById('new-trip'), (place, asked) => { found = place && { place, asked } })
   // A new trip has nothing to preserve: it takes the lookup that answered
   // exactly this form, or nothing at all.
-  document.getElementById('new-trip').addEventListener('submit', e => {
+  document.getElementById('new-trip').addEventListener('submit', async e => {
     e.preventDefault()
+    await settle()
     const f = new FormData(e.target)
     const trip = {
       id: newId(),
@@ -519,10 +546,15 @@ function renderEditTrip(trip) {
     </section>
   `))
   let found = null
-  const snapshot = wireDestination(document.getElementById('edit-trip'), (place, asked) => { found = place && { place, asked } })
+  // `hasPlace` is false for any trip made before the lookup existed, so opening
+  // Edit finally asks for it instead of waiting for a destination edit that
+  // never comes.
+  const { snapshot, settle } = wireDestination(
+    document.getElementById('edit-trip'), (place, asked) => { found = place && { place, asked } }, !!trip.place)
   const wasAsked = snapshot()
-  document.getElementById('edit-trip').addEventListener('submit', e => {
+  document.getElementById('edit-trip').addEventListener('submit', async e => {
     e.preventDefault()
+    await settle()
     const f = new FormData(e.target)
     const newCount = Number(f.get('days'))
     if (newCount < trip.days.length) {
@@ -575,8 +607,13 @@ function renderTrip(trip, openDay = null) {
       <a href="${openDay !== null ? `#/trip/${trip.id}` : '#/'}" class="back" id="surface-back">${openDay !== null ? `&larr; ${esc(trip.name)}` : '&larr; Trips'}</a>
       <div class="trip-head">
         <h1>${esc(trip.name)}</h1>
-        <p class="trip-sub">${esc(trip.destination)} · <span class="mono">${tripDateRange(trip)}</span> · ${trip.weightLbs} lbs · <a class="trip-edit-link" href="#/trip/${trip.id}/edit">Edit trip</a></p>
-        ${trip.place ? `<p class="trip-conditions mono">${esc(conditionsLine(trip))}</p>` : ''}
+        <p class="trip-sub">
+          <span>${esc(trip.destination)}</span>
+          <span>${tripDateRange(trip)}</span>
+          <span>${trip.weightLbs} lbs</span>
+          <a class="trip-edit-link" href="#/trip/${trip.id}/edit">Edit trip</a>
+        </p>
+        ${trip.place ? `<p class="trip-conditions mono">${esc(conditionsLine(trip, { withLabel: false }))}</p>` : ''}
         <div id="rollup-slot">${tripRollupHTML(trip)}</div>
       </div>
       <nav class="trip-outputs">

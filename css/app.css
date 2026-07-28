@@ -315,7 +315,20 @@ input, select {
 main:has(.trip-surface) { max-width: none; }
 
 .trip-head { margin-bottom: 1.4rem; display: grid; gap: 0.4rem; }
-.trip-sub { color: var(--soft); }
+
+/* One voice for the subtitle. Mono is the DATA voice — a column of numbers, a
+   microlabel — not a run of prose, and setting the dates in it mid-sentence
+   made them read larger and wider than the words either side (Chivo Mono's
+   x-height is enormous). Tabular numerals keep the figures even without
+   changing face. Separators come from CSS so every gap is identical instead
+   of depending on where a literal "·" landed in the template. */
+.trip-sub {
+  display: flex; align-items: baseline; flex-wrap: wrap; row-gap: 0.15rem;
+  color: var(--soft); font-variant-numeric: tabular-nums;
+}
+.trip-sub > * + *::before {
+  content: '·'; padding: 0 0.55rem; color: var(--line);
+}
 .trip-rollup { font-weight: 700; }
 .rollup-fueled { color: var(--v-ok); }
 .rollup-short { color: var(--v-short); }
@@ -809,6 +822,9 @@ main:has(.kit-ask) { max-width: none; }
 .fly-carryon h3::before { content: "↑ "; color: var(--v-ok); }
 
 .trip-conditions, .place-line, .kit-conditions { color: var(--soft); }
+/* The conditions line IS data, so it keeps the mono voice — quietly, one step
+   down from the subtitle it sits under. */
+.trip-conditions { font-size: var(--text-min); letter-spacing: 0.02em; }
 .place-line { display: block; font-family: "Chivo Mono", monospace; font-size: var(--text-min); }
 .gear-actions { margin-bottom: 1rem; align-items: end; }
 .gear-import-label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 0.85rem; color: var(--head); }
