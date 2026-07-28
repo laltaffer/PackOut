@@ -87,6 +87,13 @@ same face in both brands.
 | `.back` | Going back, one per screen | Anything but back |
 | `a` in prose | Cross-references inside a sentence | Navigation chrome |
 
+**A control centres its own label.** `.btn` and `.btn-quiet` dress both `<a>`
+and `<button>`, and a browser vertically centres a button's content for you
+while an anchor's it does not — so `min-height: 44px` stretched the links
+downward and left their labels riding high (found in Field Command, where a
+fill and a radius make it obvious). Every control that carries a touch-target
+minimum centres explicitly, so the two elements render identically.
+
 **Back is a control, not a whisper.** `.back` is a bordered 44px control, top-
 left, above the H1, on every screen, and it always names where it lands
 ("← Alaska Caribou 2026"). It replaced `.crumb`, which was a faint grey text

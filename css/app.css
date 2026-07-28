@@ -198,8 +198,13 @@ h1 {
 
 /* ---------- buttons & links ---------- */
 
+/* .btn dresses both <a> and <button>. A browser centres a button's content
+   vertically for you and an anchor's it does not, so min-height stretched the
+   links downward and left their labels riding high — visible the moment a
+   brand gives buttons a fill and a radius (Lawrence, 2026-07-27, Field
+   Command). Centring explicitly makes the two elements render identically. */
 .btn {
-  display: inline-block;
+  display: inline-flex; align-items: center; justify-content: center;
   font-family: var(--ui);
   font-weight: 700;
   font-size: 0.95rem;
@@ -219,6 +224,7 @@ h1 {
 .btn-primary:active { translate: 0 1px; }
 
 .btn-quiet {
+  display: inline-flex; align-items: center; justify-content: center;
   font-family: "Chivo Mono", monospace; font-size: var(--text-min); text-transform: uppercase;
   letter-spacing: 0.08em; background: none; border: none;
   color: var(--soft); text-decoration: underline; cursor: pointer;
