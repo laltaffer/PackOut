@@ -211,10 +211,10 @@ POSTed to a static host answering 405 with an empty body. Fixed and
 sign-in path no desktop dev browser ever takes.
 
 **Unverified / deferred, stated plainly:**
-- **Google consent-screen publishing status** could not be confirmed from here
-  (needs the Console or a gcloud alpha component). Recorded as published
-  2026-07-25 with basic scopes; a slip back to Testing would block friends with
-  an "unverified app" screen rather than a blank page.
+- **Google consent screen: CONFIRMED In production** (Lawrence read it off the
+  Console Audience page, 2026-07-28: project packout-503121, User type
+  External, 0/100 user cap — cap irrelevant since only basic scopes are
+  requested). Any Google account can sign in; this item is closed.
 - **No rate limiting anywhere in `functions/`** — deferred on a "closed user
   base" premise that sharing the root URL retires. Any signed-in stranger can
   spend the Open-Meteo quota and the scrape proxy. Fine for a few buddies;
