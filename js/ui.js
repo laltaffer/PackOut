@@ -145,6 +145,20 @@ function fmt(n) {
   return Math.round(n).toLocaleString()
 }
 
+// Ounces stop meaning anything you can feel somewhere past a pound: 463.35 oz
+// is a number, 28 lb 15.4 oz is a load (Lawrence, 2026-07-27). Below a pound
+// stays in ounces, where the tenths are the whole point.
+function fmtOz(oz) {
+  if (typeof oz !== 'number' || !Number.isFinite(oz)) return '—'
+  const round1 = n => Math.round(n * 10) / 10
+  if (oz < 16) return `${round1(oz)} oz`
+  let lb = Math.floor(oz / 16)
+  let rem = round1(oz - lb * 16)
+  // Rounding the remainder can reach a whole pound — carry it.
+  if (rem >= 16) { lb += 1; rem = 0 }
+  return rem ? `${lb} lb ${rem} oz` : `${lb} lb`
+}
+
 // What the destination lookup found, as one line. `last-year` is labelled as
 // history so nothing here reads as a promise about the week ahead.
 function conditionsLine(trip) {
@@ -694,7 +708,7 @@ function fillBoard(trip, i, { focus = true } = {}) {
         <div><dt>Carbs</dt><dd>${planned.carbsG} / ${t.carbsG.min}–${t.carbsG.max} g</dd></div>
         <div><dt>Protein</dt><dd>${planned.proteinG} g</dd></div>
         <div><dt>Fat</dt><dd>${planned.fatG} / ${t.fatG.min}–${t.fatG.max} g</dd></div>
-        <div><dt>Weight</dt><dd>${planned.weightOz} oz${planned.missingWeightCount ? ` <span class="floor">+${planned.missingWeightCount} unweighed</span>` : ''}</dd></div>
+        <div><dt>Weight</dt><dd>${fmtOz(planned.weightOz)}${planned.missingWeightCount ? ` <span class="floor">+${planned.missingWeightCount} unweighed</span>` : ''}</dd></div>
         ${planned.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${planned.calsPerOz}</dd></div>` : ''}
       </dl>
       <div class="editrow">
@@ -818,7 +832,7 @@ function forecastDiscussion(day, st, planned, v, b, din, snackSub) {
     parts.push(`dinner runs ${Math.abs(gap).toLocaleString()} ${gap < 0 ? 'under' : 'over'} its share${snackSub.kcal ? ` and snacks carry ${snackSub.kcal.toLocaleString()} kcal` : ''}.`)
   }
   parts.push(`Protein comes to ${planned.proteinG} g.`)
-  parts.push(`Pack weight: ${planned.weightOz} oz logged${planned.missingWeightCount ? `, ${planned.missingWeightCount} item${planned.missingWeightCount > 1 ? 's' : ''} unweighed` : ''}.`)
+  parts.push(`Pack weight: ${fmtOz(planned.weightOz)} logged${planned.missingWeightCount ? `, ${planned.missingWeightCount} item${planned.missingWeightCount > 1 ? 's' : ''} unweighed` : ''}.`)
   return parts.join(' ')
 }
 
@@ -1225,10 +1239,10 @@ function renderGear(trip) {
       <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>
       ${stats.carriedOz ? `
       <dl class="carry-split">
-        <div><dt>On your back</dt><dd>${stats.weightOz} oz</dd></div>
-        ${stats.harnessOz ? `<div><dt>On your harness</dt><dd>${stats.harnessOz} oz</dd></div>` : ''}
-        ${stats.wornOz ? `<div><dt>Worn</dt><dd>${stats.wornOz} oz</dd></div>` : ''}
-        <div class="carry-total"><dt>Total carried</dt><dd>${stats.carriedOz} oz</dd></div>
+        <div><dt>On your back</dt><dd>${fmtOz(stats.weightOz)}</dd></div>
+        ${stats.harnessOz ? `<div><dt>On your harness</dt><dd>${fmtOz(stats.harnessOz)}</dd></div>` : ''}
+        ${stats.wornOz ? `<div><dt>Worn</dt><dd>${fmtOz(stats.wornOz)}</dd></div>` : ''}
+        <div class="carry-total"><dt>Total carried</dt><dd>${fmtOz(stats.carriedOz)}</dd></div>
       </dl>` : ''}` : `
       <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
       <label class="fly-toggle">
@@ -1307,15 +1321,22 @@ function gearRow(item, entry) {
   return `
     <li class="gear-item">
       <div class="check-row gear-row${blank ? ' is-blank' : ''}">
-        <label class="check-name ${entry.packed ? 'is-done' : ''}" for="${cb}">${esc(item.name)}</label>
-        <span class="check-meta mono">${item.weightOz !== null ? `${esc(item.weightOz)} oz` : 'no weight'}${carryModeOf(item) !== 'pack' ? ` · ${carryModeOf(item)}` : ''}</span>
-        <button class="btn-quiet" data-gear-edit-row="${esc(item.id)}" aria-expanded="${open}">${blank ? 'Specify' : 'Edit'}</button>
+        ${blank
+          // A slot still wearing its catalog name is a question, not an item.
+          // Ticking "packed" on a tent you have not chosen means nothing, so
+          // the name itself is the invitation to say which one is yours
+          // (Lawrence 2026-07-27: "I've been removing the generic and adding
+          // my specific" — the edit was there, it just did not read as one).
+          ? `<button class="check-name blank-cta" data-gear-edit-row="${esc(item.id)}" aria-expanded="${open}">${esc(item.name)}<span class="blank-hint">name yours</span></button>`
+          : `<label class="check-name ${entry.packed ? 'is-done' : ''}" for="${cb}">${esc(item.name)}</label>`}
+        <span class="check-meta mono">${item.weightOz !== null ? fmtOz(item.weightOz) : 'no weight'}${carryModeOf(item) !== 'pack' ? ` · ${carryModeOf(item)}` : ''}</span>
+        ${blank ? '' : `<button class="btn-quiet" data-gear-edit-row="${esc(item.id)}" aria-expanded="${open}">Edit</button>`}
         <button class="btn-quiet gear-rm" data-gear-rm="${esc(item.id)}" aria-label="Remove ${esc(item.name)} from this trip">&times;</button>
         <input id="${cb}" type="checkbox" data-gear-pack="${esc(item.id)}" ${entry.packed ? 'checked' : ''}>
       </div>
       ${open ? `
       <form class="gear-inline" id="gear-inline">
-        ${gearEditorFields(blank ? { ...item, name: '' } : item)}
+        ${gearEditorFields(item, blank)}
         <div class="onboard-actions">
           <button class="btn btn-primary" type="submit">Save</button>
           <button class="btn-quiet" type="button" id="gear-inline-cancel">Cancel</button>
@@ -1363,9 +1384,12 @@ function wireGearRows(trip) {
 // here reaches the trip's gear screen and the Library's gear shelf at once.
 const CARRY_LABELS = { pack: 'In the pack', harness: 'On my harness', worn: 'Worn' }
 
-function gearEditorFields(item) {
+// `blank` = the row still wears its catalog name, so the box starts empty
+// (Fetch only fills blanks) while the placeholder keeps saying what the slot
+// is for.
+function gearEditorFields(item, blank = false) {
   return `
-    <label>Name<input name="name" value="${esc(item.name)}" placeholder="${esc(item.name)}"></label>
+    <label>Name<input name="name" value="${blank ? '' : esc(item.name)}" placeholder="${esc(item.name)}"></label>
     <label>Product page URL<input name="url" type="url" value="${esc(item.url ?? '')}" placeholder="https://…"></label>
     <div class="fetch-row">
       <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
@@ -1565,7 +1589,7 @@ function renderKitQuestions(trip) {
               <div class="chips">
                 ${q.items.map(g => chip(q.id, g.id, g.name, {
                   checked: picked(q).includes(g.id),
-                  meta: g.weightOz !== null ? `${g.weightOz} oz` : 'no weight yet',
+                  meta: g.weightOz !== null ? fmtOz(g.weightOz) : 'no weight yet',
                 })).join('')}
                 ${q.options.map(o => chip(q.id, o.value, q.items.length ? `+ ${o.label}` : o.label, {
                   note: o.note, suggested: o.suggested, checked: picked(q).includes(o.value),
@@ -1575,7 +1599,7 @@ function renderKitQuestions(trip) {
             </fieldset>`).join('')}
         </div>
         <div class="kit-foot">
-          <span class="kit-tally mono">${tally.count} item${tally.count === 1 ? '' : 's'}${tally.oz ? ` · ${tally.oz} oz known` : ''}${tally.unweighed ? ` · ${tally.unweighed} unweighed` : ''}</span>
+          <span class="kit-tally mono">${tally.count} item${tally.count === 1 ? '' : 's'}${tally.oz ? ` · ${fmtOz(tally.oz)} known` : ''}${tally.unweighed ? ` · ${tally.unweighed} unweighed` : ''}</span>
           <button class="btn btn-primary" type="submit">Build my kit</button>
           <button class="btn-quiet" type="button" id="kit-skip">Add items myself</button>
         </div>
@@ -1697,9 +1721,9 @@ function renderGearPicker(trip) {
           <li class="food-row">
             <button class="food-pick" data-gear-pick="${g.id}">
               <span class="food-name">${esc(g.name)}</span>
-              <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${esc(g.weightOz)} oz` : ''}</span>
+              <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${fmtOz(g.weightOz)}` : ''}</span>
             </button>
-            <button class="btn-quiet" data-gear-edit="${g.id}" aria-label="Edit ${esc(g.name)}">&#9998;</button>
+            <button class="btn-quiet" data-gear-edit="${g.id}">Edit</button>
           </li>`).join('')}
       </ul>
       ${catalog.length ? `
@@ -1711,7 +1735,7 @@ function renderGearPicker(trip) {
             <li class="food-row">
               <button class="food-pick" data-catalog="${esc(c.id)}">
                 <span class="food-name">${esc(c.name)} <span class="staple-tag">catalog</span></span>
-                <span class="food-macros mono">${esc(c.category)}${c.weightOz !== null ? ` · ${esc(c.weightOz)} oz` : ' · no weight yet'}</span>
+                <span class="food-macros mono">${esc(c.category)}${c.weightOz !== null ? ` · ${fmtOz(c.weightOz)}` : ' · no weight yet'}</span>
               </button>
             </li>`).join('')}
         </ul>
@@ -1892,7 +1916,7 @@ let libraryGearEditId = null
 
 function macroLine(f) {
   const g = v => v === null ? '—' : `${v}g`
-  const oz = f.weightOz === null ? '— oz' : `${f.weightOz} oz`
+  const oz = f.weightOz === null ? '— oz' : fmtOz(f.weightOz)
   return `${f.kcal} kcal · C ${g(f.carbsG)} · F ${g(f.fatG)} · P ${g(f.proteinG)} · ${oz}`
 }
 
@@ -1958,7 +1982,7 @@ function renderGearLibrary(q, shelves) {
       </div>
       ${shelves}
       ${state.gearLibrary.length ? `
-      <p class="gear-stats mono">${weighed.length} of ${state.gearLibrary.length} weighed · ${totalOz} oz logged</p>` : ''}
+      <p class="gear-stats mono">${weighed.length} of ${state.gearLibrary.length} weighed · ${fmtOz(totalOz)} logged</p>` : ''}
       <input id="lib-search" type="search" placeholder="Search ${state.gearLibrary.length} gear items…" value="${esc(librarySearch)}" aria-label="Search gear">
       ${state.gearLibrary.length === 0 ? `
       <p class="empty">No gear yet. Gear joins your library when you answer a trip's
@@ -1968,13 +1992,13 @@ function renderGearLibrary(q, shelves) {
           <li class="gear-item">
             <div class="food-row">
               <button class="food-pick" data-lib-gear="${esc(g.id)}" aria-expanded="${libraryGearEditId === g.id}">
-                <span class="food-name">${esc(g.name)}</span>
-                <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${esc(g.weightOz)} oz` : ' · no weight'}${carryModeOf(g) !== 'pack' ? ` · ${carryModeOf(g)}` : ''}${g.url ? ' · linked' : ''}</span>
+                <span class="food-name">${esc(g.name)}${isBlankSlot(g) ? '<span class="blank-hint">name yours</span>' : ''}</span>
+                <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${fmtOz(g.weightOz)}` : ' · no weight'}${carryModeOf(g) !== 'pack' ? ` · ${carryModeOf(g)}` : ''}${g.url ? ' · linked' : ''}</span>
               </button>
             </div>
             ${libraryGearEditId === g.id ? `
             <form class="gear-inline" id="gear-inline">
-              ${gearEditorFields(g)}
+              ${gearEditorFields(g, isBlankSlot(g))}
               <div class="onboard-actions">
                 <button class="btn btn-primary" type="submit">Save</button>
                 <button class="btn-quiet" type="button" id="gear-lib-cancel">Cancel</button>
