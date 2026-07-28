@@ -507,6 +507,18 @@ Alaska gear adjustments are his content edits in-app.
     Field Command version with people at onX — so that skin is portfolio-grade
     and must read as a companion to onX Hunt, never a clone (no onX marks or
     naming in UI). Brand commitment recorded in PRODUCT.md.
+- **Redirect-mode sign-in (2026-07-27):** GIS runs a popup and calls our JS
+  callback — until it can't. In an in-app browser (a link opened from Messages)
+  or where third-party storage is restricted it falls back to REDIRECT mode and
+  POSTs the credential to the PAGE URL. Nothing was listening, so Pages
+  answered 405 with a zero-byte body: a blank page after signing in, and
+  "confirm form resubmission" on refresh (Lawrence's first shared user).
+  `functions/index.js` claims only `onRequestPost` on `/`, verifies Google's
+  double-submit `g_csrf_token` (cookie must equal body), reuses the same token
+  verification as the JS path, and answers 303 so the browser reissues a GET.
+  Failures land on `/?signin=failed`, where the gate explains and points at
+  opening the link in a real browser. **Lesson: the popup path was the only one
+  ever tested, because it is the only one a desktop dev browser takes.**
 - Google sign-on: shipped (spec #19) + account-required flip; awaiting Lawrence's
   two-device sign-in smoke. Consent screen PUBLISHED to Production 2026-07-25
   (project packout-503121, basic scopes only — no verification needed): any

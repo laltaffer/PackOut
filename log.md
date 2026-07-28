@@ -9,3 +9,4 @@
 ## [2026-07-27] shipped | PackOut: pre-lookup trips resolve their destination on open, submit waits for it; trip subtitle unified (7f5ab77). 264 tests green
 ## [2026-07-27] shipped | PackOut: .btn/.btn-quiet centre their labels so anchors match buttons (3f89bab). 264 tests green
 ## [2026-07-27] shipped | PackOut: button labels centre for anchors as well as buttons; deploy.sh waits for production to serve the new stamp (ca6d40e). 264 tests green
+## [2026-07-27] shipped | PackOut: redirect-mode Google sign-in handled at the site root — fixes blank page after sign-in in in-app browsers (2051bcb). 268 tests green
