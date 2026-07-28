@@ -21,12 +21,10 @@ sed -i '' \
   -e "s|src=\"js/ui.js\"|src=\"js/ui.js?v=$V\"|" \
   -e "s|href=\"css/app.css\"|href=\"css/app.css?v=$V\"|" \
   "$DEPLOY_DIR/index.html"
-sed -i '' \
-  -e "s|from './engine.js'|from './engine.js?v=$V'|g" \
-  -e "s|from './store.js'|from './store.js?v=$V'|g" \
-  -e "s|from './seed.js'|from './seed.js?v=$V'|g" \
-  -e "s|from './sync.js'|from './sync.js?v=$V'|g" \
-  "$DEPLOY_DIR"/js/*.js
+# Every relative import, whatever the module is called — a new file must not
+# need a new sed line here to get cache-busted.
+find "$DEPLOY_DIR/js" -name '*.js' -exec sed -i '' -E \
+  "s|from '(\.\.?/[^']+\.js)'|from '\1?v=$V'|g" {} +
 
 # Say which branch out loud rather than letting wrangler infer it: Pages
 # promotes to production only for the project's production branch, and an

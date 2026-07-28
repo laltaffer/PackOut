@@ -4,18 +4,13 @@ import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdic
 import { load, save, newId, corruptInfo, cacheOwner, setCacheOwner, clearCache } from './store.js'
 import { applySeedMigrations, needsProfile, emptyProfile, applyProfile, skipProfile, tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, genericGearName, gearCatalogMatches, BRANDS, TRIP_TYPES, GEAR_CATEGORIES } from './seed.js'
 import { configureSync, initAccount, account, syncStatus, syncNow, signOut, flushPush, mountSignInButton, schedulePush } from './sync.js'
-
-const app = document.getElementById('app')
-
-// null until a profile (or field mode) materializes it — route() gates on it,
-// so no trip data ever renders signed out.
-let state = null
-
-// Deploys stamp ?v=<commit> on this module's URL; surfacing it answers
-// "which version is this browser actually running?" at a glance.
-const BUILD = new URL(import.meta.url).searchParams.get('v') ?? 'dev'
-
-const INTENSITIES = ['easy', 'medium', 'hard']
+// `state` is null until a profile (or field mode) materializes it — route()
+// gates on it, so no trip data ever renders signed out.
+import { state, setState, onRerender, persist, commit } from './state.js'
+import { app, el, esc, wirePrint, BUILD } from './dom.js'
+import { INTENSITIES, VERDICT_LABELS, SLOT_LABELS, STYLE_LABELS, TRIP_TYPE_LABELS, fmt, fmtOz, macroLine, dayDate, tripDateRange, conditionsLine, gapSentence } from './format.js'
+import { fetchProduct, lookupDestination, wireScrape } from './api.js'
+import { setBrand } from './brand.js'
 
 // ---------- routing (hash-based so the phone back button works) ----------
 
@@ -88,6 +83,8 @@ function route() {
 }
 
 window.addEventListener('hashchange', route)
+// commit() re-renders through this seam — screens never import the router.
+onRerender(route)
 
 // Masthead nav is navigation, not tabs/filters — mark the active section.
 function updateNav() {
@@ -98,124 +95,6 @@ function updateNav() {
     const isLibrary = a.getAttribute('href') === '#/library'
     a.classList.toggle('is-active', isLibrary === inLibrary)
   })
-}
-
-// ---------- helpers ----------
-
-let warnedSaveFailure = false
-
-function persist() {
-  if (save(state)) {
-    schedulePush()
-    return true
-  }
-  if (!warnedSaveFailure) {
-    warnedSaveFailure = true
-    alert('Saving failed — browser storage is full or blocked. Your latest change may not survive a reload. Export a backup from the Trips screen now.')
-  }
-  return false
-}
-
-function commit() {
-  persist()
-  route()
-}
-
-function el(html) {
-  const t = document.createElement('template')
-  t.innerHTML = html.trim()
-  return t.content
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-}
-
-function dayDate(trip, i) {
-  const [y, m, d] = trip.startDate.split('-').map(Number)
-  const date = new Date(y, m - 1, d + i)
-  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-function tripDateRange(trip) {
-  return `${dayDate(trip, 0)} → ${dayDate(trip, trip.days.length - 1)}`
-}
-
-function fmt(n) {
-  return Math.round(n).toLocaleString()
-}
-
-// Ounces stop meaning anything you can feel somewhere past a pound: 463.35 oz
-// is a number, 28 lb 15.4 oz is a load (Lawrence, 2026-07-27). Below a pound
-// stays in ounces, where the tenths are the whole point.
-function fmtOz(oz) {
-  if (typeof oz !== 'number' || !Number.isFinite(oz)) return '—'
-  const round1 = n => Math.round(n * 10) / 10
-  if (oz < 16) return `${round1(oz)} oz`
-  let lb = Math.floor(oz / 16)
-  let rem = round1(oz - lb * 16)
-  // Rounding the remainder can reach a whole pound — carry it.
-  if (rem >= 16) { lb += 1; rem = 0 }
-  return rem ? `${lb} lb ${rem} oz` : `${lb} lb`
-}
-
-// What the destination lookup found, as one line. `last-year` is labelled as
-// history so nothing here reads as a promise about the week ahead.
-function conditionsLine(trip, { withLabel = true } = {}) {
-  const p = trip.place
-  if (!p) return ''
-  // On a screen that already names the destination, repeating the matched
-  // label is a second identical run of text under the first — the facts are
-  // what the line is for.
-  const bits = withLabel ? [p.label] : []
-  if (p.elevationFt !== null) bits.push(`${p.elevationFt.toLocaleString()} ft`)
-  const c = p.climate
-  if (c) {
-    if (c.tempLoF !== null && c.tempHiF !== null) bits.push(`${c.tempLoF}–${c.tempHiF}°F`)
-    if (c.precipDays !== null) bits.push(`rain ${c.precipDays} of ${c.days} days`)
-    bits.push(c.source === 'forecast' ? 'forecast' : 'last year, same week')
-  }
-  return bits.join(' · ')
-}
-
-// One caller for the product-page endpoint, shared by the food form, the gear
-// picker and the kit questions. Never throws — a dead fetch service is a
-// message, not a broken screen.
-async function fetchProduct(url) {
-  try {
-    const res = await fetch('/api/scrape', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url }),
-    })
-    if (res.status === 401) return { ok: false, error: 'Sign in to fetch product pages.' }
-    const data = await res.json().catch(() => null)
-    if (!res.ok || !data) {
-      return { ok: false, error: `${data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`} Enter it by hand.` }
-    }
-    return { ok: true, ...data }
-  } catch {
-    return { ok: false, error: 'Couldn’t reach the fetch service — enter it by hand.' }
-  }
-}
-
-// Destination lookup (Lawrence 2026-07-27). Advisory: a miss leaves the typed
-// destination exactly as typed and the trip saves anyway.
-async function lookupDestination(query, startDate, days) {
-  try {
-    const res = await fetch('/api/place', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query, startDate, days }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok || !data) return { ok: false, error: data?.error ?? 'Lookup unavailable.' }
-    return { ok: true, place: data }
-  } catch {
-    return { ok: false, error: 'Lookup unavailable — the trip keeps what you typed.' }
-  }
 }
 
 // ---------- dashboard ----------
@@ -324,15 +203,13 @@ function renderDashboard() {
       alert('Import failed to save — browser storage is full or blocked. Nothing was changed.')
       return
     }
-    state = data
+    setState(data)
     schedulePush()
     route()
   })
 }
 
 // ---------- new trip ----------
-
-const STYLE_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
 
 function mealStyleFields(style) {
   const options = v => `
@@ -945,26 +822,6 @@ function wireTripSurface(trip) {
   }
 }
 
-// The design switcher (static DOM, lives outside route renders): two skins,
-// one app — switching is a token swap, never a re-render of state.
-function syncBrandDock() {
-  const current = document.documentElement.dataset.brand
-  document.querySelectorAll('.brand-dock [data-set-brand]').forEach(b => {
-    b.setAttribute('aria-pressed', String(b.dataset.setBrand === current))
-  })
-}
-// One place changes the skin, whether the ask came from the desktop dock or
-// the profile — the phone has no dock to reach.
-function setBrand(brand) {
-  document.documentElement.dataset.brand = brand
-  try { localStorage.setItem('packout/brand', brand) } catch { /* preference just won't stick */ }
-  syncBrandDock()
-}
-document.querySelectorAll('.brand-dock [data-set-brand]').forEach(b => {
-  b.addEventListener('click', () => setBrand(b.dataset.setBrand))
-})
-syncBrandDock()
-
 // Escape backs out of an open day anywhere on the unified surface.
 window.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return
@@ -972,21 +829,7 @@ window.addEventListener('keydown', e => {
   if (m) location.hash = `#/trip/${m[1]}`
 })
 
-// ---------- verdicts ----------
-
-const VERDICT_LABELS = { fueled: 'Fueled', short: 'Short', heavy: 'Heavy' }
-
-function gapSentence(v) {
-  if (v.status === 'heavy') return `${v.kcalOver.toLocaleString()} kcal over the 115% line — extra weight, your call.`
-  const parts = []
-  parts.push(v.kcalShort > 0 ? `${v.kcalShort.toLocaleString()} kcal short` : 'calories fine')
-  parts.push(v.proteinShortG > 0 ? `${v.proteinShortG} g protein short` : 'protein fine')
-  return parts.join(' · ')
-}
-
 // ---------- day meal builder ----------
-
-const SLOT_LABELS = { electrolytes: 'Electrolytes / Fluid', breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' }
 
 function foodName(id) {
   const f = state.library.find(x => x.id === id)
@@ -1942,23 +1785,12 @@ function renderReady(trip) {
   })
 }
 
-function wirePrint() {
-  const b = document.getElementById('print')
-  if (b) b.addEventListener('click', () => window.print())
-}
-
 // ---------- food library ----------
 
 const SLOT_HINTS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snack']
 let librarySearch = ''
 // Which gear row in the Library has its editor open.
 let libraryGearEditId = null
-
-function macroLine(f) {
-  const g = v => v === null ? '—' : `${v}g`
-  const oz = f.weightOz === null ? '— oz' : fmtOz(f.weightOz)
-  return `${f.kcal} kcal · C ${g(f.carbsG)} · F ${g(f.fatG)} · P ${g(f.proteinG)} · ${oz}`
-}
 
 // The Library is everything you own, independent of any trip — and that has
 // always been two things, food and gear. Only food had a screen, so adding a
@@ -2093,64 +1925,6 @@ function wireLibrarySearch(rerender) {
       s.setSelectionRange(s.value.length, s.value.length)
     }
   })
-}
-
-// Scrape-to-prefill (issue #23): fetch product data for the pasted URL and
-// fill only the still-blank fields — never clobber typed values, never save.
-// JSON-LD nutrition is per serving; PackOut kcal is whole-item-as-packed, so
-// any filled nutrition number carries an explicit scale-it-yourself caution.
-const SCRAPE_LABELS = { name: 'name', kcal: 'calories', carbsG: 'carbs', fatG: 'fat', proteinG: 'protein', weightOz: 'weight' }
-
-function wireScrape(form, fields) {
-  const btn = form.querySelector('#scrape-btn')
-  const status = form.querySelector('#scrape-status')
-  const say = (msg, isError) => {
-    status.textContent = msg
-    status.classList.toggle('field-error', !!isError)
-  }
-  btn.addEventListener('click', async () => {
-    const url = form.elements['url'].value.trim()
-    if (!url) { say('Paste a product URL first.'); return }
-    btn.disabled = true
-    say('Fetching…')
-    const data = await fetchProduct(url)
-    btn.disabled = false
-    if (!data.ok) { say(data.error); return }
-    const filled = fields.filter(name => {
-      const input = form.elements[name]
-      if (!input || input.value !== '' || data[name] == null) return false
-      input.value = data[name]
-      return true
-    })
-    if (!filled.length) {
-      if (weightsAmbiguous(form, data, say)) return
-      say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
-      return
-    }
-    const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))
-    const filledMsg = `Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
-      (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : '')
-    const options = data.weightOptions ?? []
-    if (options.length > 1 && form.elements['weightOz']?.value === '') {
-      say(`${filledMsg} Page lists multiple weights (${options.join(' / ')} oz) — enter the one for your setup.`, true)
-    } else {
-      say(filledMsg)
-    }
-  })
-}
-
-// A page that states several weights has narrowed the answer without giving
-// it — a tripod lists its long and short columns, a pack tables four models.
-// Say so and stop: nothing in the markup says which one is on your back, and
-// guessing would put a wrong number in a pack total. Lawrence 2026-07-27:
-// "this is pretty common for these types of products so the user will
-// understand" — so it is a sentence, not a picker.
-function weightsAmbiguous(form, data, say) {
-  const options = data.weightOptions ?? []
-  const input = form.elements['weightOz']
-  if (options.length < 2 || !input || input.value !== '') return false
-  say(`Page lists multiple weights (${options.join(' / ')} oz) — enter the one for your setup.`, true)
-  return true
 }
 
 function renderFoodForm(food) {
@@ -2298,7 +2072,7 @@ async function afterSignIn() {
   const p = account()
   if (resolveSignIn(cacheOwner(), p.sub) === 'discard') clearCache()
   setCacheOwner(p.sub)
-  state = load()
+  setState(load())
   const sync = await syncNow()
   // Only a server that explicitly answered "no stored state" marks a
   // brand-new account. A sync ERROR must never look like one: stamping a
@@ -2319,8 +2093,6 @@ async function afterSignIn() {
 }
 
 // ---------- profile (spec #24, reworked: preferences live in one place) ----------
-
-const TRIP_TYPE_LABELS = { backpacking: 'Backpacking', rifle: 'Rifle hunt', bow: 'Bow hunt', fishing: 'Fishing' }
 
 // First sign-in lands on the profile with a welcome line; every visit after
 // that is a plain edit screen. One implementation, one home for preferences.
@@ -2464,7 +2236,7 @@ function renderAccountChip() {
     await signOut()
     // The device is a cache of a profile, not a home: signing out clears it.
     clearCache()
-    state = null
+    setState(null)
     route()
   })
 }
@@ -2475,7 +2247,7 @@ configureSync({
     // Server blobs were validated on write, but never trust storage more
     // than an import: same gate, then local migrations catch old seeds.
     if (!validateImport(remote).ok) return
-    state = applySeedMigrations(remote)
+    setState(applySeedMigrations(remote))
     save(state)
     route()
   },
@@ -2487,7 +2259,7 @@ initAccount().then(({ profile, offline }) => {
   if (offline && cacheOwner()) {
     // No network to verify the session, but the cache belongs to a profile —
     // field mode beats a gate nobody can pass without signal.
-    state = load()
+    setState(load())
   }
   route()
 })
