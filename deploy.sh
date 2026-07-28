@@ -28,23 +28,23 @@ sed -i '' \
   -e "s|from './sync.js'|from './sync.js?v=$V'|g" \
   "$DEPLOY_DIR"/js/*.js
 
-# Name the branch explicitly. Left to infer it, wrangler has silently produced
-# a PREVIEW deployment while reporting success — the alias carried the new
-# build and packout.pages.dev kept serving the old one (2026-07-27). Cloudflare
-# Pages promotes to production only for the project's production branch, so
-# saying "main" out loud is the difference between shipped and not.
+# Say which branch out loud rather than letting wrangler infer it: Pages
+# promotes to production only for the project's production branch, and an
+# inferred answer is one more thing that can be wrong without saying so.
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 npx --yes wrangler@4.112.0 pages deploy "$DEPLOY_DIR" \
   --project-name=packout --branch="$BRANCH" --commit-dirty=true
 
-# Verify what production actually serves, so a preview can never again be
-# mistaken for a ship.
-echo "--- verifying production serves $V"
-for attempt in 1 2 3 4 5; do
+# "Deployment complete" describes the upload, not the site. The preview alias
+# answers immediately; packout.pages.dev trails it by roughly half a minute
+# (measured 2026-07-27), which is long enough to check too early, read the old
+# build stamp and conclude the deploy failed. So wait for production to say the
+# new hash itself — up to two minutes — and fail loudly if it never does.
+echo "--- waiting for production to serve $V"
+for attempt in $(seq 1 24); do
   SERVED=$(curl -s "https://packout.pages.dev/?cb=$RANDOM" | grep -oE 'js/ui\.js\?v=[a-f0-9]+' | head -1 | sed 's/.*v=//')
-  [ "$SERVED" = "$V" ] && { echo "production serves $SERVED"; exit 0; }
-  echo "attempt $attempt: production serves ${SERVED:-nothing}, waiting…"
+  [ "$SERVED" = "$V" ] && { echo "production serves $V after ~$((attempt * 5))s"; exit 0; }
   sleep 5
 done
-echo "DEPLOY DID NOT REACH PRODUCTION (still ${SERVED:-unknown}, wanted $V)" >&2
+echo "DEPLOY DID NOT REACH PRODUCTION IN 2 MINUTES (serving ${SERVED:-unknown}, wanted $V)" >&2
 exit 1

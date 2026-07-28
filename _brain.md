@@ -89,7 +89,11 @@ worse than a stale cache.
 - Agent shells must wrap in a pty: `script -q /dev/null ./deploy.sh` (wrangler OAuth refuses non-TTY)
 - Auto-deploy: manual per slice for now; GitHub Action (DesignLeaderJobs pattern) deferred
   until a CLOUDFLARE_API_TOKEN repo secret exists — see issue #3
-- Verify: `curl` 200 + `<title>` on production URL, then phone smoke at 390px
+- Verify: deploy.sh now waits for packout.pages.dev to serve the new commit
+  stamp itself (up to 2 min) and exits non-zero if it never does. Production
+  trails the preview alias by ~30s — checking sooner reads the OLD stamp and
+  looks like a failed deploy (misdiagnosed as a preview-vs-production problem
+  2026-07-27; it was only lag). Then phone smoke at 390px.
 - Accounts API (spec #19): `functions/` deploys as the Pages Functions bundle via the
   same deploy.sh; bindings live in wrangler.toml (KV PACKOUT_KV id 87c61ede…, var
   GOOGLE_CLIENT_ID). SESSION_SECRET is a Pages secret (`wrangler pages secret put`,
