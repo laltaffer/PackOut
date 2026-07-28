@@ -169,6 +169,17 @@ entry survives the import gate, since adoption feeds the synced library.
     top products most everyone is using." So the catalog stays a hand-picked
     list in `seed.js` — no KV growth, no other users' gear ever joining it.
     Growing it is a content job (add entries to `GEAR_CATALOG`), not a feature.
+2026-07-27 (shipped): **The Library holds gear, not just food.** Lawrence:
+"it's odd that when I add a new piece of gear it says it's in the library but
+when I look at the library tab it just lists food." Two libraries have always
+existed in state (`library` = food, `gearLibrary` = gear) but only food had a
+screen, so the copy ("Add to library + trip", "Delete from your gear library")
+promised something the tab did not show. `#/library` now has two shelves —
+Food and Gear, each with its count — and the Gear shelf lists everything you
+own with its category, weight and whether it is linked, editable in place
+(name, product URL + Fetch, weight, category) and deletable. Deleting names
+the trips it will come off first: `deleteGearFromLibrary` is now one shared
+act, used by both the Library and the trip picker.
 2026-07-27 (shipped): **Fetch pulls weights now — and refuses to guess.**
 Lawrence: "when I was doing fetch with URLs it wasn't pulling the weight on
 any of the items." Diagnosed against his own saved pages, all Shopify:

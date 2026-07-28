@@ -80,7 +80,8 @@ function route() {
     if (food) return renderFoodForm(food)
   }
   if (hash === '#/library/new') return renderFoodForm(null)
-  if (hash === '#/library') return renderLibrary()
+  if (hash === '#/library/gear') return renderLibrary('gear')
+  if (hash === '#/library') { libraryGearEditId = null; return renderLibrary('food') }
   if (hash === '#/new') return renderNewTrip()
   if (hash === '#/profile') return renderProfile()
   renderDashboard()
@@ -90,7 +91,7 @@ window.addEventListener('hashchange', route)
 
 // Masthead nav is navigation, not tabs/filters — mark the active section.
 function updateNav() {
-  const inLibrary = (location.hash || '#/').startsWith('#/library')
+  const inLibrary = (location.hash || '#/').startsWith('#/library')  // both shelves
   // Direct children only — the account chip's profile link is navigation for
   // the person, not a section, and must never wear the active underline.
   document.querySelectorAll('.masthead-nav > a').forEach(a => {
@@ -1373,6 +1374,23 @@ function wireGearRows(trip) {
   wireScrape(form, ['name', 'weightOz'])
 }
 
+// Deleting gear is one act wherever it is done: it leaves the library and
+// every trip that carried it. Names the trips first — a kit quietly losing an
+// item is how you find out at the trailhead.
+function deleteGearFromLibrary(item) {
+  const onTrips = state.trips.filter(t => (t.gear ?? []).some(e => e.gearId === item.id))
+  const warning = onTrips.length
+    ? `Delete "${item.name}" from your gear library? It comes off ${onTrips.length} trip${onTrips.length > 1 ? 's' : ''} too (${onTrips.map(t => t.name).join(', ')}).`
+    : `Delete "${item.name}" from your gear library?`
+  if (!confirm(warning)) return false
+  state.gearLibrary = state.gearLibrary.filter(g => g.id !== item.id)
+  for (const t of state.trips) {
+    if (t.gear) t.gear = t.gear.filter(e => e.gearId !== item.id)
+  }
+  persist()
+  return true
+}
+
 // What this kit can't do at an airport. Advisory by construction — it names
 // items and the rule, and never blocks a checklist.
 const FLY_BLOCKS = [
@@ -1732,13 +1750,8 @@ function renderGearPicker(trip) {
       renderGearPicker(trip)
     })
     document.getElementById('gear-edit-delete').addEventListener('click', () => {
-      if (!confirm(`Delete "${editing.name}" from your gear library? It comes off every trip's kit too.`)) return
-      state.gearLibrary = state.gearLibrary.filter(g => g.id !== editing.id)
-      for (const t of state.trips) {
-        if (t.gear) t.gear = t.gear.filter(e => e.gearId !== editing.id)
-      }
+      if (!deleteGearFromLibrary(editing)) return
       gearEditId = null
-      persist()
       renderGearPicker(trip)
     })
   }
@@ -1851,6 +1864,8 @@ function wirePrint() {
 
 const SLOT_HINTS = ['electrolytes', 'breakfast', 'lunch', 'dinner', 'snack']
 let librarySearch = ''
+// Which gear row in the Library has its editor open.
+let libraryGearEditId = null
 
 function macroLine(f) {
   const g = v => v === null ? '—' : `${v}g`
@@ -1858,8 +1873,19 @@ function macroLine(f) {
   return `${f.kcal} kcal · C ${g(f.carbsG)} · F ${g(f.fatG)} · P ${g(f.proteinG)} · ${oz}`
 }
 
-function renderLibrary() {
+// The Library is everything you own, independent of any trip — and that has
+// always been two things, food and gear. Only food had a screen, so adding a
+// piece of gear said "added to your library" and the Library tab showed food
+// (Lawrence, 2026-07-27). One roof, two shelves.
+function renderLibrary(tab = 'food') {
   const q = librarySearch.trim().toLowerCase()
+  const shelves = `
+    <nav class="shelves" role="tablist" aria-label="Library">
+      <a role="tab" href="#/library" aria-selected="${tab === 'food'}">Food <span class="mono">${state.library.length}</span></a>
+      <a role="tab" href="#/library/gear" aria-selected="${tab === 'gear'}">Gear <span class="mono">${state.gearLibrary.length}</span></a>
+    </nav>`
+  if (tab === 'gear') return renderGearLibrary(q, shelves)
+
   const foods = state.library
     .filter(f => !q || f.name.toLowerCase().includes(q))
     .sort((a, b) => (b.favorite - a.favorite) || a.name.localeCompare(b.name))
@@ -1869,6 +1895,7 @@ function renderLibrary() {
         <h1>Library</h1>
         <a class="btn btn-primary" href="#/library/new">Add Food</a>
       </div>
+      ${shelves}
       <input id="lib-search" type="search" placeholder="Search ${state.library.length} foods…" value="${esc(librarySearch)}" aria-label="Search foods">
       <ul class="food-list">
         ${foods.map(f => `
@@ -1883,24 +1910,119 @@ function renderLibrary() {
       ${foods.length === 0 ? '<p class="empty">No foods match.</p>' : ''}
     </section>
   `))
+  wireLibrarySearch(() => renderLibrary('food'))
+  app.querySelectorAll('[data-fav]').forEach(btn => btn.addEventListener('click', () => {
+    const food = state.library.find(f => f.id === btn.dataset.fav)
+    food.favorite = !food.favorite
+    persist()
+    renderLibrary('food')
+  }))
+}
+
+// Everything you own, weighed or not — editable here without going through a
+// trip, because a typo or a weight you finally put on a scale is not a
+// trip-shaped thought.
+function renderGearLibrary(q, shelves) {
+  const items = state.gearLibrary
+    .filter(g => !q || g.name.toLowerCase().includes(q) || g.category.toLowerCase().includes(q))
+    .sort((a, b) => GEAR_CATEGORIES.indexOf(a.category) - GEAR_CATEGORIES.indexOf(b.category) || a.name.localeCompare(b.name))
+  const weighed = state.gearLibrary.filter(g => g.weightOz !== null)
+  const totalOz = Math.round(weighed.reduce((a, g) => a + g.weightOz, 0) * 10) / 10
+  app.replaceChildren(el(`
+    <section class="library">
+      <div class="dashboard-head">
+        <h1>Library</h1>
+      </div>
+      ${shelves}
+      ${state.gearLibrary.length ? `
+      <p class="gear-stats mono">${weighed.length} of ${state.gearLibrary.length} weighed · ${totalOz} oz logged</p>` : ''}
+      <input id="lib-search" type="search" placeholder="Search ${state.gearLibrary.length} gear items…" value="${esc(librarySearch)}" aria-label="Search gear">
+      ${state.gearLibrary.length === 0 ? `
+      <p class="empty">No gear yet. Gear joins your library when you answer a trip's
+      kit questions, pick it from Known gear, or add it by hand on a trip.</p>` : ''}
+      <ul class="food-list">
+        ${items.map(g => `
+          <li class="gear-item">
+            <div class="food-row">
+              <button class="food-pick" data-lib-gear="${esc(g.id)}" aria-expanded="${libraryGearEditId === g.id}">
+                <span class="food-name">${esc(g.name)}</span>
+                <span class="food-macros mono">${esc(g.category)}${g.weightOz !== null ? ` · ${esc(g.weightOz)} oz` : ' · no weight'}${g.url ? ' · linked' : ''}</span>
+              </button>
+            </div>
+            ${libraryGearEditId === g.id ? `
+            <form class="gear-inline" id="gear-inline">
+              <label>Name<input name="name" value="${esc(g.name)}" placeholder="${esc(g.name)}"></label>
+              <label>Product page URL<input name="url" type="url" value="${esc(g.url ?? '')}" placeholder="https://…"></label>
+              <div class="fetch-row">
+                <button class="btn" type="button" id="scrape-btn">Fetch name + weight</button>
+                <span class="fetch-status mono" role="status" id="scrape-status"></span>
+              </div>
+              <div class="macro-grid">
+                <label>Weight oz<input name="weightOz" type="number" min="0.05" step="any" value="${esc(g.weightOz ?? '')}"></label>
+                <label>Category
+                  <select name="category">${GEAR_CATEGORIES.map(c => `<option${c === g.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
+                </label>
+              </div>
+              <div class="onboard-actions">
+                <button class="btn btn-primary" type="submit">Save</button>
+                <button class="btn-quiet" type="button" id="gear-lib-cancel">Cancel</button>
+                <button class="btn-quiet" type="button" id="gear-lib-delete">Delete from library</button>
+              </div>
+            </form>` : ''}
+          </li>`).join('')}
+      </ul>
+      ${state.gearLibrary.length && items.length === 0 ? '<p class="empty">No gear matches.</p>' : ''}
+    </section>
+  `))
+  wireLibrarySearch(() => renderLibrary('gear'))
+  app.querySelectorAll('[data-lib-gear]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.libGear
+    libraryGearEditId = libraryGearEditId === id ? null : id
+    renderLibrary('gear')
+    document.querySelector(`[data-lib-gear="${CSS.escape(id)}"]`)?.focus()
+  }))
+  const form = document.getElementById('gear-inline')
+  if (!form) return
+  const item = state.gearLibrary.find(g => g.id === libraryGearEditId)
+  document.getElementById('gear-lib-cancel').addEventListener('click', () => {
+    libraryGearEditId = null
+    renderLibrary('gear')
+  })
+  document.getElementById('gear-lib-delete').addEventListener('click', () => {
+    if (!deleteGearFromLibrary(item)) return
+    libraryGearEditId = null
+    renderLibrary('gear')
+  })
+  form.addEventListener('submit', e => {
+    e.preventDefault()
+    const f = new FormData(e.target)
+    Object.assign(item, {
+      name: f.get('name').trim() || item.name,
+      category: f.get('category'),
+      weightOz: f.get('weightOz') === '' ? null : Number(f.get('weightOz')),
+      url: f.get('url').trim() || null,
+    })
+    libraryGearEditId = null
+    persist()
+    renderLibrary('gear')
+  })
+  wireScrape(form, ['name', 'weightOz'])
+}
+
+// One search box, two shelves — the query survives the tab it was typed on.
+function wireLibrarySearch(rerender) {
   const search = document.getElementById('lib-search')
+  if (!search) return
   search.addEventListener('input', () => {
     librarySearch = search.value
-    // Re-render the list only, preserving input focus.
     const keep = document.activeElement === search
-    renderLibrary()
+    rerender()
     if (keep) {
       const s = document.getElementById('lib-search')
       s.focus()
       s.setSelectionRange(s.value.length, s.value.length)
     }
   })
-  app.querySelectorAll('[data-fav]').forEach(btn => btn.addEventListener('click', () => {
-    const food = state.library.find(f => f.id === btn.dataset.fav)
-    food.favorite = !food.favorite
-    persist()
-    renderLibrary()
-  }))
 }
 
 // Scrape-to-prefill (issue #23): fetch product data for the pasted URL and

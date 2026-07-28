@@ -892,3 +892,18 @@ main:has(.kit-ask) { max-width: none; }
 .catalog { border-top: 3px solid var(--head); margin-top: 1.4rem; padding-top: 0.8rem; }
 .catalog h2 { font-weight: 800; text-transform: var(--h-case); font-size: 1.1rem; }
 .catalog .draft-note { margin-bottom: 0.4rem; }
+
+/* Two shelves under one roof: the Library holds food and gear, and the tab
+   says how much of each you own. */
+.shelves { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.shelves a {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-family: var(--ui); font-weight: 700; font-size: 0.95rem;
+  color: var(--head); text-decoration: none;
+  border: var(--panel-b); border-radius: var(--r-btn);
+  background: var(--panel); padding: 0.45rem 0.95rem; min-height: 44px;
+}
+.shelves a .mono { color: var(--soft); font-weight: 400; }
+.shelves a:hover { border-color: var(--act); color: var(--act); }
+.shelves a[aria-selected="true"] { background: var(--act); border-color: var(--act); color: var(--act-ink); }
+.shelves a[aria-selected="true"] .mono { color: var(--act-ink); opacity: 0.85; }
