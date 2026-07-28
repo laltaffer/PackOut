@@ -1,3 +1,4 @@
 ## [2026-07-27] shipped | PackOut 17-note feedback round (a8d3e16..e545f28) — live at packout.pages.dev, build e545f28; 243 tests green, 4 Codex review rounds clean; production verified (200, API auth-walled, gate renders both brands at 390px, console clean)
 ## [2026-07-27] shipped | PackOut shared gear catalog (ed6d58a) — 24 weighed products offered in the gear picker to every user; adoption copies, never pre-fills. Live, build ed6d58a; 248 tests green
 ## [2026-07-27] shipped | PackOut fetch-weight fix (0728078) — reads spec text, ignores Shopify shipping weight, offers a choice when a page lists several; Pack bag/frame removed from live state; 256 tests green
+## [2026-07-27] shipped | PackOut: multiple-weight pages report a message instead of a chip picker (10bf387); 256 tests green
