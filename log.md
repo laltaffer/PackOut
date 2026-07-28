@@ -6,3 +6,4 @@
 ## [2026-07-27] shipped | PackOut carry modes (22a7635) — gear rides in the pack, on the harness or worn; pack weight excludes harness, total carried includes it. 261 tests green
 ## [2026-07-27] shipped | PackOut: pounds over 16 oz, generic slots ask to be named, seed v13 adds Chomps (99712f2..ecf0b5b). 264 tests green
 ## [2026-07-27] shipped | PackOut alignment: masthead lockup on one baseline, macro labels sit on their values (92bffa4). 264 tests green
+## [2026-07-27] shipped | PackOut: pre-lookup trips resolve their destination on open, submit waits for it; trip subtitle unified (7f5ab77). 264 tests green
