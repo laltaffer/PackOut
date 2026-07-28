@@ -19,23 +19,55 @@ async function session(request, env, now) {
   return verifySession(token, env.SESSION_SECRET, now)
 }
 
+// Google validates the token's signature; we enforce what it was FOR: minted
+// for this app (aud), for a verified address, and still fresh. Null means no.
+async function verifyGoogleCredential(credential, env, fetcher, now) {
+  if (typeof credential !== 'string' || !credential) return null
+  const res = await fetcher(TOKENINFO + encodeURIComponent(credential))
+  if (!res.ok) return null
+  const info = await res.json()
+  if (info.aud !== env.GOOGLE_CLIENT_ID) return null
+  if (info.email_verified !== 'true') return null
+  if (!info.sub || Number(info.exp) * 1000 <= now) return null
+  return { sub: info.sub, name: info.name ?? info.email ?? '' }
+}
+
 export async function handleAuth({ request, env, fetcher = fetch, now = Date.now() }) {
   let credential
   try { ({ credential } = await request.json()) } catch { return json({ error: 'Bad request.' }, 400) }
   if (typeof credential !== 'string' || !credential) return json({ error: 'Bad request.' }, 400)
-
-  // Google validates the token's signature; we enforce what it was FOR:
-  // minted for this app (aud), for a verified address, and still fresh.
-  const res = await fetcher(TOKENINFO + encodeURIComponent(credential))
-  if (!res.ok) return json({ error: 'Sign-in rejected.' }, 401)
-  const info = await res.json()
-  if (info.aud !== env.GOOGLE_CLIENT_ID) return json({ error: 'Sign-in rejected.' }, 401)
-  if (info.email_verified !== 'true') return json({ error: 'Sign-in rejected.' }, 401)
-  if (!info.sub || Number(info.exp) * 1000 <= now) return json({ error: 'Sign-in rejected.' }, 401)
-
-  const profile = { sub: info.sub, name: info.name ?? info.email ?? '' }
+  const profile = await verifyGoogleCredential(credential, env, fetcher, now)
+  if (!profile) return json({ error: 'Sign-in rejected.' }, 401)
   const token = await createSession(profile, env.SESSION_SECRET, now)
   return json({ sub: profile.sub, name: profile.name }, 200, { 'set-cookie': sessionCookie(token) })
+}
+
+// Google Identity Services runs a popup and calls our JS callback — until it
+// can't. In an in-app browser (a link opened from Messages) or where
+// third-party storage is restricted it falls back to REDIRECT mode, and POSTs
+// the credential to the page URL instead. A static host answers that POST with
+// 405 and an empty body: a blank page, and "confirm form resubmission" on
+// refresh — which is exactly what Lawrence's friend hit (2026-07-27).
+//
+// So the site root accepts that POST and finishes the job. The reply is a 303
+// so the browser turns it back into a GET: no resubmit prompt, ever.
+const seeOther = (location, cookie) =>
+  new Response(null, { status: 303, headers: { location, ...(cookie ? { 'set-cookie': cookie } : {}) } })
+
+export async function handleAuthRedirect({ request, env, fetcher = fetch, now = Date.now() }) {
+  let form
+  try { form = await request.formData() } catch { return seeOther('/?signin=failed') }
+  // Redirect mode has no same-origin JS to defend it, so Google uses a
+  // double-submit cookie: the same token arrives as a cookie AND in the body,
+  // and only a real Google post can have set both.
+  const bodyToken = form.get('g_csrf_token')
+  const cookieToken = readCookie(request.headers.get('cookie'), 'g_csrf_token')
+  if (!bodyToken || !cookieToken || bodyToken !== cookieToken) return seeOther('/?signin=failed')
+
+  const profile = await verifyGoogleCredential(form.get('credential'), env, fetcher, now)
+  if (!profile) return seeOther('/?signin=failed')
+  const token = await createSession(profile, env.SESSION_SECRET, now)
+  return seeOther('/', sessionCookie(token))
 }
 
 export async function handleMe({ request, env, now = Date.now() }) {

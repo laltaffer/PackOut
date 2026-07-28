@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { handleAuth, handleMe, handleLogout, handleStateGet, handleStatePut } from '../functions/lib/handlers.js'
+import { handleAuth, handleAuthRedirect, handleMe, handleLogout, handleStateGet, handleStatePut } from '../functions/lib/handlers.js'
 import { createSession, COOKIE_NAME } from '../functions/lib/session.js'
 
 const CLIENT_ID = 'test-client-id.apps.googleusercontent.com'
@@ -146,4 +146,71 @@ test('state put: profiles are isolated by sub', async () => {
   })
   assert.ok(kv.store.has('state:g-buddy'))
   assert.ok(!kv.store.has('state:g-123'))
+})
+
+// ---------- redirect-mode sign-in (2026-07-27) ----------
+// GIS falls back to redirect mode in in-app browsers and where third-party
+// storage is restricted: it POSTs the credential to the page URL instead of
+// calling our JS callback. A static host answers that with 405 and no body —
+// a blank page, and a resubmit prompt on refresh.
+
+const gisPost = (body, cookie) => new Request('https://packout.pages.dev/', {
+  method: 'POST',
+  headers: { 'content-type': 'application/x-www-form-urlencoded', ...(cookie ? { cookie } : {}) },
+  body: new URLSearchParams(body).toString(),
+})
+
+const googleSays = info => async () => ({ ok: true, json: async () => info })
+const GOOD = { aud: 'client-id', email_verified: 'true', sub: '42', name: 'Friend', exp: 2_000_000 }
+const REDIRECT_ENV = { GOOGLE_CLIENT_ID: 'client-id', SESSION_SECRET: 'shh' }
+
+test('redirect sign-in completes and hands back a session', async () => {
+  const res = await handleAuthRedirect({
+    request: gisPost({ credential: 'tok', g_csrf_token: 'abc' }, 'g_csrf_token=abc'),
+    env: REDIRECT_ENV, fetcher: googleSays(GOOD), now: 1_000_000,
+  })
+  // 303 so the browser reissues a GET — that is what kills the resubmit prompt.
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  assert.match(res.headers.get('set-cookie'), /HttpOnly/i)
+})
+
+test('redirect sign-in refuses a mismatched or missing CSRF token', async () => {
+  const cases = [
+    [{ credential: 'tok', g_csrf_token: 'abc' }, 'g_csrf_token=different'],
+    [{ credential: 'tok', g_csrf_token: 'abc' }, null],
+    [{ credential: 'tok' }, 'g_csrf_token=abc'],
+  ]
+  for (const [body, cookie] of cases) {
+    const res = await handleAuthRedirect({
+      request: gisPost(body, cookie), env: REDIRECT_ENV, fetcher: googleSays(GOOD), now: 1_000_000,
+    })
+    assert.equal(res.status, 303)
+    assert.equal(res.headers.get('location'), '/?signin=failed')
+    assert.equal(res.headers.get('set-cookie'), null, 'a refused sign-in never sets a session')
+  }
+})
+
+test('redirect sign-in applies the same token rules as the JS path', async () => {
+  const bad = [
+    { ...GOOD, aud: 'someone-elses-app' },
+    { ...GOOD, email_verified: 'false' },
+    { ...GOOD, exp: 1 },
+    { ...GOOD, sub: undefined },
+  ]
+  for (const info of bad) {
+    const res = await handleAuthRedirect({
+      request: gisPost({ credential: 'tok', g_csrf_token: 'abc' }, 'g_csrf_token=abc'),
+      env: REDIRECT_ENV, fetcher: googleSays(info), now: 1_000_000,
+    })
+    assert.equal(res.headers.get('location'), '/?signin=failed', JSON.stringify(info))
+  }
+})
+
+test('a failed redirect sign-in never lands on a blank page', async () => {
+  const res = await handleAuthRedirect({
+    request: new Request('https://packout.pages.dev/', { method: 'POST', body: 'not-a-form' }),
+    env: REDIRECT_ENV, fetcher: googleSays(GOOD), now: 1_000_000,
+  })
+  assert.equal(res.status, 303, 'always a redirect, never a bare error body')
 })

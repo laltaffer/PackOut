@@ -2271,9 +2271,13 @@ function renderFoodForm(food) {
 // ---------- account gate + chip (spec #19, account-required) ----------
 
 function renderGate() {
+  // Redirect-mode sign-in bounces back here with ?signin=failed rather than
+  // dying on a blank page, so the gate has to say what happened.
+  const failed = new URLSearchParams(location.search).get('signin') === 'failed'
   app.replaceChildren(el(`
     <section class="gate">
       <h1>Sign in</h1>
+      ${failed ? '<p class="field-error">That sign-in didn\'t complete. Try again — and if you opened this from a link inside another app, opening it in Safari or Chrome is more reliable.</p>' : ''}
       <p>Your trips live in your Google profile — sign in on any device and they follow.</p>
       <div class="gsi-holder"></div>
       <p class="build-stamp mono">build ${esc(BUILD)}</p>
