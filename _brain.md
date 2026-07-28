@@ -147,6 +147,38 @@ worse than a stale cache.
 - Meals are ≥300 kcal (breakfast 200 per V2P), single item or stacked — drafting
   composes from slot + snack pools ("ProBar plus gummy bears" is a lunch).
 
+## Deploy Config
+
+- Platform: static-host (Cloudflare Pages, project `packout`, account laltaffer@gmail.com)
+- LOCAL-ONLY: no
+- Base branch: main
+- Test command: `node --test test/*.test.mjs`
+- Typecheck/lint: none — vanilla JS, no toolchain by design
+- Build command: none — no build step; deploy.sh assembles `.scratch/deploy` (copies app
+  files, stamps every relative import + the entry with `?v=<sha>`)
+- Deploy method: `script -q /dev/null ./deploy.sh` (pty wrapper — wrangler OAuth refuses
+  non-TTY). deploy.sh gates on tests, uploads via wrangler with `--branch=$(current)`
+  (production only from main), then waits up to 2 min for packout.pages.dev to serve the
+  new stamp and fails loudly if it never does
+- Production URL: https://packout.pages.dev
+- Health check: built into deploy.sh (production must serve the new `?v=` stamp);
+  manual: `curl -s https://packout.pages.dev | grep -o 'ui.js?v=[a-f0-9]*'`
+- Smoke flows (390px first): signed-out gate renders with GIS button in both brands;
+  `/api/me` answers; console clean. Signed-in flows can't be automated (Google) — the
+  stub-session QA (.scratch/qa-server.mjs) covers them pre-deploy
+
+## Production Readiness
+
+- CI: none — decided; manual deploy per slice until a CLOUDFLARE_API_TOKEN repo secret
+  exists (issue #3)
+- Env/secrets: wrangler.toml bindings (KV PACKOUT_KV, var GOOGLE_CLIENT_ID);
+  SESSION_SECRET is a Pages secret (`wrangler pages secret put`; rotation signs everyone out)
+- Database: Cloudflare KV, one whole-state blob per Google sub, last-write-wins;
+  no migrations — `validateImport` gates every write, `applySeedMigrations` runs client-side
+- Backups: user-facing Export JSON; pre-edit copies of Lawrence's live blob in `.scratch/`
+- Monitoring: none — decided (closed user base); a deploy never writes KV
+- Dependency updates: on-audit-finding only — zero runtime dependencies
+
 ## Status
 
 ### Where things stand (end of 2026-07-27)
