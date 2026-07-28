@@ -183,6 +183,29 @@ worse than a stale cache.
 ## Status
 
 ### Where things stand (2026-07-28)
+2026-07-28 (shipped): **Google Sheet import (issue #26)** — LIVE at build 95bd7df.
+Paste a link-shared Google Sheet on the dashboard ("Bring your own list" → `#/import`):
+`/api/sheet` (session-gated, fixed docs.google.com export host — no SSRF surface,
+oversize CSVs refused at the 1.5M cap) fetches the CSV; the pure interpreter
+(`js/sheet-import.js`, tested against Lawrence's real Montana packing sheet as a
+fixture) reads three shapes — packing-list header groups (ALL-CAPS/colon cells;
+category defaults from a header→category vocabulary, then item keywords), tabular
+nutrition tables (word-bounded column match — "Caliber" is not calories), and day
+plans **only** from an unmistakable Day 1…N + meal-label structure (gaps, missing
+labels, >31 days, or zero foods refuse the plan with the reason; never guess).
+Preview before commit: editable names, per-group category dropdown, inline kcal
+(a food only imports with kcal > 0; unfilled rows reported, never dropped
+silently), duplicates disabled ("already in your library"). Commit dedupes on the
+EDITED names against the live library, caps at 500 items, and a resolvable plan
+becomes a trip (qty-aggregated meals; body-weight fallback 180 with a set-it nudge).
+Excel/OneDrive links out of scope (upload to Google Sheets or use Import JSON).
+Review: eng-review two-axis + Codex cross-model (1 High — unbounded-import sync
+lockout, 6 Medium: all fixed or already-fixed; deferred: /api/sheet rate limiting
+per the standing closed-user-base decision, and all-caps acronym items (GPS)
+reading as group headers — visible in preview, recoverable by hand). 306 tests
+green; QA'd both brands at 390px/1400px against the stub session with the REAL
+Google fetch of the real sheet; production verified (gate + GIS at 390, /api/me
+200, /api/sheet 401 signed out, console clean).
 LIVE at packout.pages.dev, build **66cf535** — the module refactor shipped
 via /ship-it (tests → security quick-gate → deploy → verified live: all 18
 stamped modules load once, gate + GIS + /api/me answer at 390px, console

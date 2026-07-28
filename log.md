@@ -16,3 +16,4 @@
 
 ## [2026-07-28] ship | Snacks flattened to one bucket per day
 Bundle structure removed; legacy data merges on load; 270 tests green; deployed 323800f, production verified at 390px (both brands, /api/me, console clean).
+## [2026-07-28] ship | Google Sheet import (issue #26) — link → libraries + strict day plans, LIVE at build 95bd7df; 306 tests, eng-review + Codex rounds folded in, verified at 390px
