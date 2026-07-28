@@ -712,12 +712,23 @@ main:has(.kit-ask) { max-width: none; }
 .q-field { margin-top: 0.7rem; font-size: 0.9rem; }
 .q-field input { width: 100%; max-width: none; }
 
+/* Docked to the bottom edge, not floating above it. The bar previously carried
+   bottom padding to clear the brand dock, which pushed its visible edge up the
+   screen and let the page scroll through the gap underneath — it read as a slab
+   dropped on the content (Lawrence's screen recording, 2026-07-27). The dock is
+   gone from small screens now, so the bar can simply sit where it belongs. */
 .kit-foot {
   position: sticky; bottom: 0; z-index: 4;
-  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 0.6rem 1rem; flex-wrap: wrap;
   margin-top: 1.8rem; padding: 0.9rem 0;
   background: var(--bg); border-top: 3px solid var(--head);
 }
+/* The last card must clear the bar that covers it while scrolling — but the
+   page's usual 4rem tail would strand the bar that far above the bottom edge
+   once you reach the end, which is the floating-slab look. The form carries
+   the clearance instead, and the page gives it back. */
+.kit-ask > form { padding-bottom: 1.2rem; }
+main:has(.kit-foot) { padding-bottom: 0.75rem; }
 .kit-tally { color: var(--soft); margin-right: auto; }
 .onboard form { display: grid; gap: 0.35rem; justify-items: start; width: 100%; }
 .onboard-option { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; min-height: 32px; }
@@ -849,6 +860,10 @@ main:has(.kit-ask) { max-width: none; }
 .build-stamp { color: var(--soft); font-size: var(--text-min); margin-top: 1.2rem; }
 
 /* The design switcher: two skins, one app — pinned lower-left on every screen. */
+/* A design-review affordance, not something a phone screen should give up
+   space to — and on a phone it sat on top of the content and collided with the
+   sticky foot. Hidden below 700px; the same choice lives in the profile, where
+   a preference belongs, and `?brand=` still works for share links. */
 .brand-dock {
   position: fixed; bottom: 14px; left: 14px; z-index: 20;
   display: flex; gap: 2px; padding: 3px;
@@ -899,6 +914,7 @@ main:has(.kit-ask) { max-width: none; }
   /* The masthead keeps navigation and sign-out; the tagline and the account
      name are the first things to go when the row gets tight. */
   .svc, .account-name { display: none; }
+  .brand-dock { display: none; }
   .masthead { gap: 0.8rem; }
   .masthead-nav { gap: 0.9rem; }
   .strip { grid-template-columns: repeat(7, minmax(86px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
@@ -914,8 +930,11 @@ main:has(.kit-ask) { max-width: none; }
   .gear-row .check-meta { margin-right: auto; }
   /* The brand dock is pinned bottom-left; the sticky foot lifts clear of it
      so "Add items myself" is never parked underneath. */
-  .kit-foot { padding-bottom: 3.8rem; }
-  .kit-tally { flex-basis: 100%; margin-right: 0; }
+  /* One row of controls, the tally on its own line above them, and the primary
+     action wide enough to hit without aiming. */
+  .kit-foot { padding: 0.7rem 0 calc(0.7rem + env(safe-area-inset-bottom)); }
+  .kit-tally { flex-basis: 100%; margin-right: 0; order: -1; }
+  .kit-foot .btn-primary { flex: 1; }
   .big .n { font-size: 2.8rem; }
   h1 { font-size: 1.7rem; }
   .targets { grid-template-columns: repeat(2, 1fr); }
@@ -987,3 +1006,6 @@ main:has(.kit-ask) { max-width: none; }
   letter-spacing: 0.08em; text-transform: uppercase; font-style: normal;
   color: var(--act); border-bottom: 1px solid currentColor;
 }
+
+/* Radio chips behave exactly like the checkbox ones. */
+.chip input[type="radio"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; margin: 0; }

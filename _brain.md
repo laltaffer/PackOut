@@ -507,6 +507,18 @@ Alaska gear adjustments are his content edits in-app.
     Field Command version with people at onX — so that skin is portfolio-grade
     and must read as a companion to onX Hunt, never a clone (no onX marks or
     naming in UI). Brand commitment recorded in PRODUCT.md.
+- **Mobile bottom-of-screen rework (2026-07-27, from Lawrence's screen
+  recording):** three fixed layers stacked at the bottom of a phone — the
+  sticky question foot, the brand dock, and the browser chrome. The foot
+  carried `padding-bottom: 3.8rem` purely to clear the dock, which lifted its
+  visible edge up the screen and let the page scroll through the gap beneath
+  it: it read as a slab dropped on the content. **The dock was the root cause
+  of the hack**, so it is hidden below 700px and the brand choice moved to the
+  profile, where a preference belongs (`?brand=` still works for share links,
+  and the desktop dock stays for design review). With the dock gone the foot
+  docks flush — measured 0px from the viewport edge while scrolling — and the
+  page's 4rem tail moved into the form so the bar lands at the bottom instead
+  of floating 80px above it.
 - **Redirect-mode sign-in (2026-07-27):** GIS runs a popup and calls our JS
   callback — until it can't. In an in-app browser (a link opened from Messages)
   or where third-party storage is restricted it falls back to REDIRECT mode and

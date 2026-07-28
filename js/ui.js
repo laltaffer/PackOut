@@ -953,12 +953,15 @@ function syncBrandDock() {
     b.setAttribute('aria-pressed', String(b.dataset.setBrand === current))
   })
 }
+// One place changes the skin, whether the ask came from the desktop dock or
+// the profile — the phone has no dock to reach.
+function setBrand(brand) {
+  document.documentElement.dataset.brand = brand
+  try { localStorage.setItem('packout/brand', brand) } catch { /* preference just won't stick */ }
+  syncBrandDock()
+}
 document.querySelectorAll('.brand-dock [data-set-brand]').forEach(b => {
-  b.addEventListener('click', () => {
-    document.documentElement.dataset.brand = b.dataset.setBrand
-    try { localStorage.setItem('packout/brand', b.dataset.setBrand) } catch { /* preference just won't stick */ }
-    syncBrandDock()
-  })
+  b.addEventListener('click', () => setBrand(b.dataset.setBrand))
 })
 syncBrandDock()
 
@@ -2372,6 +2375,17 @@ function renderProfile() {
                 </label>`).join('')}
             </div>
           </fieldset>
+          <fieldset class="q-card">
+            <legend>Which look do you want?</legend>
+            <p class="onboard-q-hint">Two designs over one app. Switch whenever you like.</p>
+            <div class="chips" id="brand-chips">
+              ${[['flag', 'One Flag on Snow'], ['command', 'Field Command']].map(([id, label]) => `
+                <label class="chip" for="brand-look-${id}">
+                  <input type="radio" name="brandLook" id="brand-look-${id}" value="${id}"${document.documentElement.dataset.brand === id ? ' checked' : ''}>
+                  <span class="chip-face"><span class="chip-label">${label}</span></span>
+                </label>`).join('')}
+            </div>
+          </fieldset>
           <fieldset class="q-card q-card-wide">
             <legend>How do you eat out there?</legend>
             <p class="onboard-q-hint">Mobile meals never draft cook foods; sit-down meals welcome dehydrated
@@ -2394,6 +2408,11 @@ function renderProfile() {
       </form>
     </section>
   `))
+  // The look is a preference, not part of the saved profile — it belongs to
+  // this device, the way the dock always set it. Applies on tap, no save.
+  app.querySelectorAll('[name="brandLook"]').forEach(r => r.addEventListener('change', () => {
+    setBrand(r.value)
+  }))
   const leave = () => {
     welcomeProfile = false
     location.hash = '#/'
