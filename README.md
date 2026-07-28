@@ -12,3 +12,6 @@ grocery list, per-day pack plan, gear kits, and a readiness checklist.
 - Sign in with Google — trips live in your profile and follow you across devices;
   localStorage is the per-device cache. Export/Import JSON from the Trips screen
   for file backups.
+- Bring your own list: paste a link-shared Google Sheet on the Trips screen —
+  packing lists and food tables import into your libraries, and a clear
+  Day 1…N meal plan imports as a trip.
