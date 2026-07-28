@@ -150,9 +150,10 @@ worse than a stale cache.
 ## Status
 
 ### Where things stand (end of 2026-07-27)
-LIVE at packout.pages.dev, build **a27b074**; repo HEAD differs only by log
-lines, so production carries every line of code. 268 tests green, both repos
-clean and pushed. 37 commits across ~12 deploys in one session.
+LIVE at packout.pages.dev, build **a27b074**. Repo HEAD is now AHEAD of
+production by the module refactor (below, 1df5057..9a521d6) — behavior-
+identical by construction and QA, but deploying it is Lawrence's call.
+268 tests green.
 
 **Needs Lawrence, in rough priority order:**
 1. **Reload PackOut before editing anything.** His KV blob was edited directly
@@ -188,6 +189,23 @@ sign-in path no desktop dev browser ever takes.
   whole blob on every change. A handful of active planners could approach it;
   the failure mode is sync errors mid-planning.
 
+2026-07-27 (late, NOT deployed): **The ui.js monolith is gone** (1df5057..
+9a521d6, four commits). 2,493 lines decomposed into foundation modules —
+`state.js` (live-binding app state + persist/commit + a rerender hook, so
+screens never import the router), `dom.js`, `format.js`, `api.js`, `brand.js` —
+and eight `js/screens/*` modules (dashboard, trip-form, trip, gear,
+gear-editor, outputs, library, profile), each owning its screen-local state.
+ui.js is a 200-line entry: imports, hash router, gate, account chip, sync
+wiring. `gear-editor.js` is the shared editor seam both the trip gear screen
+and the Library shelf render. Discipline: every moved function mechanically
+body-diffed against HEAD (only intended edits), tests + live browser pass +
+code-review agent per step, Codex over the whole range at the end. Codex's one
+finding was real: deploy.sh's generic import stamp missed bare side-effect
+imports (`import './brand.js'`), which would have loaded brand.js under two
+URLs — fixed, both forms stamp now. seed.js split was evaluated and DECLINED:
+its kit/profile functions are thin projections over the tables they sit beside,
+and the split renames the tested seam across 13 import sites while shrinking no
+interface. QA: both brands, 390px + 1400px, console clean; engine untouched.
 2026-07-27 (shipped): **The round is LIVE** at packout.pages.dev (build e545f28,
 a8d3e16→f17c8f7). Pre-flight read Lawrence's live KV blob and ran it through the
 new import gate before deploying — the round added gear validation and
