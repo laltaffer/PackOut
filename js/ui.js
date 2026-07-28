@@ -1589,23 +1589,9 @@ function renderKitQuestions(trip) {
       kitDetails[rowId] = { ...kitDetails[rowId], name: data.name }
     }
     if (Array.isArray(data.weightOptions) && data.weightOptions.length > 1) {
-      // Same rule as the gear form: offer, never guess.
-      status.textContent = `Lists ${data.weightOptions.join(' / ')} oz — tap yours:`
-      const holder = document.createElement('span')
-      holder.className = 'weight-options'
-      for (const oz of data.weightOptions) {
-        const b = document.createElement('button')
-        b.type = 'button'; b.className = 'btn'; b.textContent = `${oz} oz`
-        b.addEventListener('click', () => {
-          kitDetails[rowId] = { ...kitDetails[rowId], weightOz: oz }
-          renderKitQuestions(trip)
-          app.querySelector(`[data-fetch="${CSS.escape(rowId)}"]`)?.focus()
-          const said = document.getElementById(`fetch-${rowId}`)
-          if (said) said.textContent = `${oz} oz`
-        })
-        holder.appendChild(b)
-      }
-      status.insertAdjacentElement('afterend', holder)
+      // Same rule as the gear form: say so, never guess.
+      status.textContent = `Page lists multiple weights (${data.weightOptions.join(' / ')} oz) — enter yours.`
+      status.classList.add('field-error')
       return
     }
     if (typeof data.weightOz === 'number') {
@@ -1926,7 +1912,10 @@ const SCRAPE_LABELS = { name: 'name', kcal: 'calories', carbsG: 'carbs', fatG: '
 function wireScrape(form, fields) {
   const btn = form.querySelector('#scrape-btn')
   const status = form.querySelector('#scrape-status')
-  const say = msg => { status.textContent = msg }
+  const say = (msg, isError) => {
+    status.textContent = msg
+    status.classList.toggle('field-error', !!isError)
+  }
   btn.addEventListener('click', async () => {
     const url = form.elements['url'].value.trim()
     if (!url) { say('Paste a product URL first.'); return }
@@ -1942,44 +1931,34 @@ function wireScrape(form, fields) {
       return true
     })
     if (!filled.length) {
+      if (weightsAmbiguous(form, data, say)) return
       say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
-      offerWeights(form, data, say)
       return
     }
     const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))
-    say(`Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
-      (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : ''))
-    offerWeights(form, data, say)
+    const filledMsg = `Filled ${filled.map(k => SCRAPE_LABELS[k]).join(', ')}.` +
+      (nutrition && data.perServing ? ' Nutrition is per serving — scale to the whole item as you pack it.' : '')
+    const options = data.weightOptions ?? []
+    if (options.length > 1 && form.elements['weightOz']?.value === '') {
+      say(`${filledMsg} Page lists multiple weights (${options.join(' / ')} oz) — enter the one for your setup.`, true)
+    } else {
+      say(filledMsg)
+    }
   })
 }
 
-// A page that states several weights (a tripod's two columns, a pack's model
-// table) has narrowed the answer without giving it. Offer what it said and let
-// the owner of the gear pick — guessing would put a wrong number in a pack
-// total, which is the one thing this app must not do (Lawrence 2026-07-27).
-function offerWeights(form, data, say) {
-  const row = form.querySelector('.fetch-row')
-  const input = form.elements['weightOz']
-  form.querySelector('.weight-options')?.remove()
+// A page that states several weights has narrowed the answer without giving
+// it — a tripod lists its long and short columns, a pack tables four models.
+// Say so and stop: nothing in the markup says which one is on your back, and
+// guessing would put a wrong number in a pack total. Lawrence 2026-07-27:
+// "this is pretty common for these types of products so the user will
+// understand" — so it is a sentence, not a picker.
+function weightsAmbiguous(form, data, say) {
   const options = data.weightOptions ?? []
-  if (!row || !input || options.length < 2 || input.value !== '') return
-  say(`That page lists ${options.length} weights — pick the one that matches your setup.`)
-  const holder = document.createElement('div')
-  holder.className = 'weight-options'
-  for (const oz of options) {
-    const b = document.createElement('button')
-    b.type = 'button'
-    b.className = 'btn'
-    b.textContent = `${oz} oz`
-    b.addEventListener('click', () => {
-      input.value = oz
-      holder.remove()
-      say(`Weight set to ${oz} oz.`)
-      input.focus()
-    })
-    holder.appendChild(b)
-  }
-  row.insertAdjacentElement('afterend', holder)
+  const input = form.elements['weightOz']
+  if (options.length < 2 || !input || input.value !== '') return false
+  say(`Page lists multiple weights (${options.join(' / ')} oz) — enter the one for your setup.`, true)
+  return true
 }
 
 function renderFoodForm(food) {

@@ -180,12 +180,16 @@ any of the items." Diagnosed against his own saved pages, all Shopify:
     ignored.** The Exo K4 5000 reads 6804 g there against an 85 oz item —
     trusting it would have quietly added ten pounds to a pack. Aziak: 709 g
     (25 oz) vs a real 18.9 oz. Only Helinox happened to match.
-  - **A page stating several weights offers them instead of picking one.** The
-    Aziak tripod lists long (20.4) and short (18.9) center columns; the Exo
-    page tables four models against three configurations. Nothing in the markup
-    says which is on your back, so `weightOptions` comes back and the UI shows
-    tappable chips. Filling one silently is the same class of error as the
-    shipping weight, and this app exists to prevent exactly that.
+  - **A page stating several weights says so and stops.** The Aziak tripod
+    lists long (20.4) and short (18.9) center columns; the Exo page tables four
+    models against three configurations. Nothing in the markup says which is on
+    your back, so filling one silently would be the same class of error as the
+    shipping weight. `weightOptions` comes back and the status line reads "Page
+    lists multiple weights (20.4 / 18.9 oz) — enter the one for your setup" in
+    the error treatment. **Built as a chip picker first, cut to a sentence at
+    Lawrence's word (2026-07-27): "this is pretty common for these types of
+    products so I think the user will understand."** The values stay in the
+    message so nobody has to reopen the page to read them.
   - Rejected by rule: "Weight Limit: 265 lbs" (capacity), "Weight: Under
     1.5 lbs" (a bound, not a measurement), shipping/carton weight, and anything
     outside 0.05–2000 oz. Compound weights parse including the comma form
