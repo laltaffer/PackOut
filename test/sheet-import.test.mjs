@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseCsv, interpretSheet } from '../js/sheet-import.js'
+import { parseCsv, interpretSheet, markDuplicates } from '../js/sheet-import.js'
 
 const montana = readFileSync(new URL('./fixtures/montana-packing.csv', import.meta.url), 'utf8')
 
@@ -154,4 +154,36 @@ test('gapped day numbering is ambiguous: no plan, and the import says why', () =
   const { plan, warnings } = interpretSheet(parseCsv(csv))
   assert.equal(plan, null)
   assert.ok(warnings.some(w => /day/i.test(w)))
+})
+
+// --- markDuplicates: what's already yours stays yours ---
+
+test('an item matching the existing library (case-insensitive) is flagged, not re-imported', () => {
+  const result = interpretSheet(parseCsv(montana))
+  markDuplicates(result, {
+    library: [{ id: 'x', name: 'GRANOLA' }],
+    gearLibrary: [{ id: 'y', name: 'bear spray' }],
+  })
+  const food = result.groups.find(g => g.header === 'FOOD')
+  assert.equal(food.items.find(i => i.name === 'Granola').dup, true)
+  const mt = result.groups.find(g => g.header === 'TO GET IN MT')
+  assert.equal(mt.items.find(i => i.name === 'Bear Spray').dup, true)
+  assert.equal(mt.items.find(i => i.name === 'Onion/garlic').dup, undefined)
+})
+
+test('the second occurrence inside the sheet itself is a duplicate too', () => {
+  const result = interpretSheet(parseCsv(montana))
+  markDuplicates(result, { library: [], gearLibrary: [] })
+  // "Wipes" appears under PERSONAL ITEMS and again under TO GET IN MT.
+  const first = result.groups.find(g => g.header === 'PERSONAL ITEMS').items.find(i => i.name === 'Wipes')
+  const second = result.groups.find(g => g.header === 'TO GET IN MT').items.find(i => i.name === 'Wipes')
+  assert.equal(first.dup, undefined)
+  assert.equal(second.dup, true)
+})
+
+test('a food and a gear item may share a name without colliding', () => {
+  const result = interpretSheet(parseCsv(montana))
+  markDuplicates(result, { library: [{ id: 'x', name: 'Bear Spray' }], gearLibrary: [] })
+  const mt = result.groups.find(g => g.header === 'TO GET IN MT')
+  assert.equal(mt.items.find(i => i.name === 'Bear Spray').dup, undefined) // gear item; only the FOOD library has that name
 })

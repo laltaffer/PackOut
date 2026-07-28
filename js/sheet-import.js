@@ -213,3 +213,21 @@ export function interpretSheet(grid) {
   }
   return { groups, plan, warnings }
 }
+
+// Skip-duplicates is the import's contract: seed data and user edits are
+// never clobbered. Food and gear namespaces are separate — "Bear Spray" in
+// the food library says nothing about the gear item.
+export function markDuplicates(result, { library, gearLibrary }) {
+  const seen = {
+    food: new Set(library.map(f => f.name.trim().toLowerCase())),
+    gear: new Set(gearLibrary.map(g => g.name.trim().toLowerCase())),
+  }
+  for (const group of result.groups) {
+    for (const item of group.items) {
+      const key = item.name.toLowerCase()
+      if (seen[group.kind].has(key)) item.dup = true
+      else seen[group.kind].add(key)
+    }
+  }
+  return result
+}
