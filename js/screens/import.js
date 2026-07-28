@@ -13,10 +13,11 @@ import { fetchSheet } from '../api.js'
 
 let sheetUrl = ''
 let result = null   // interpretSheet output, dup-annotated — the preview
-let summary = null  // what the last commit did
 
+// The summary is shown once, straight from commit — it is not module state,
+// so coming back to #/import later starts fresh instead of resurrecting an
+// old "Imported" report (found in QA 2026-07-28).
 export function renderImport() {
-  if (summary) return renderSummary()
   if (result) return renderPreview()
   renderLinkForm()
 }
@@ -36,7 +37,7 @@ function renderLinkForm(error = '') {
         </label>
         <small>The sheet must be shared: in Google Sheets, Share → General
         access → “Anyone with the link”.</small>
-        ${error ? `<p class="field-error">⚠ ${esc(error)}</p>` : ''}
+        ${error ? `<p class="field-error">${esc(error)}</p>` : ''}
         <button class="btn btn-primary" type="submit" id="sheet-fetch">Fetch sheet</button>
       </form>
     </section>
@@ -66,7 +67,7 @@ function renderPreview() {
       <h1>Choose what to import</h1>
       <p>From your sheet: uncheck anything that shouldn't join your library.
       Items already in your library are skipped automatically.</p>
-      ${warnings.map(w => `<p class="field-error">⚠ ${esc(w)}</p>`).join('')}
+      ${warnings.map(w => `<p class="field-error">${esc(w)}</p>`).join('')}
       ${plan ? `
       <section class="pack-day">
         <h2>Day plan <span class="check-meta">${plan.days.length} days</span></h2>
@@ -169,13 +170,11 @@ function commit() {
     }
   }
   persist()
-  summary = { ...counts, plan: planOutcome }
   result = null
-  renderImport()
+  renderSummary({ ...counts, plan: planOutcome })
 }
 
-function renderSummary() {
-  const s = summary
+function renderSummary(s) {
   app.replaceChildren(el(`
     <section class="form-screen">
       <a href="#/" class="back">&larr; Dashboard</a>
@@ -195,7 +194,6 @@ function renderSummary() {
     </section>
   `))
   document.getElementById('import-again').addEventListener('click', () => {
-    summary = null
     sheetUrl = ''
     renderImport()
   })
