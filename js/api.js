@@ -21,6 +21,26 @@ export async function fetchProduct(url) {
   }
 }
 
+// Sheet import (issue #26): a pasted Google Sheets link comes back as CSV.
+export async function fetchSheet(url) {
+  try {
+    const res = await fetch('/api/sheet', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    if (res.status === 401) return { ok: false, error: 'Sign in to import a sheet.' }
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data) {
+      return { ok: false, error: data?.error ?? `Couldn’t fetch that sheet (HTTP ${res.status}).` }
+    }
+    return { ok: true, csv: data.csv }
+  } catch {
+    return { ok: false, error: 'Couldn’t reach the import service — check your connection.' }
+  }
+}
+
 // Destination lookup (Lawrence 2026-07-27). Advisory: a miss leaves the typed
 // destination exactly as typed and the trip saves anyway.
 export async function lookupDestination(query, startDate, days) {

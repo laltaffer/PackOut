@@ -839,6 +839,18 @@ main:has(.kit-foot) { padding-bottom: 0.75rem; }
 .action-add { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 .action-add input { flex: 1; max-width: none; }
 
+/* ---------- sheet import preview ---------- */
+
+/* Rows follow the check-row grammar (name first, box last); the name is an
+   input so junk cells from a messy sheet can be trimmed before they commit. */
+.check-row .import-name {
+  flex: 1; min-width: 8rem; border: 1px solid var(--line);
+  padding: 0.3rem 0.4rem; font: inherit; background: transparent; color: inherit;
+}
+.check-row .import-kcal { width: 5.5rem; border: 1px solid var(--line); padding: 0.3rem 0.4rem; font: inherit; background: transparent; color: inherit; }
+.import-cat select { max-width: 100%; }
+.import-summary { padding-left: 1.2rem; display: grid; gap: 0.5rem; }
+
 /* ---------- backup / misc ---------- */
 
 .backup { border-top: 3px solid var(--head); margin-top: 1.5rem; padding-top: 0.8rem; }

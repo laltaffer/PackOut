@@ -16,6 +16,7 @@ import { openGear, renderGearPicker, renderKitQuestions } from './screens/gear.j
 import { renderGrocery, renderPack, renderReady } from './screens/outputs.js'
 import { renderLibrary, renderFoodForm } from './screens/library.js'
 import { renderProfile, openWelcomeProfile } from './screens/profile.js'
+import { renderImport } from './screens/import.js'
 
 // ---------- routing (hash-based so the phone back button works) ----------
 
@@ -83,6 +84,7 @@ function route() {
   if (hash === '#/library/gear') return renderLibrary('gear')
   if (hash === '#/library') return renderLibrary('food')
   if (hash === '#/new') return renderNewTrip()
+  if (hash === '#/import') return renderImport()
   if (hash === '#/profile') return renderProfile()
   renderDashboard()
 }

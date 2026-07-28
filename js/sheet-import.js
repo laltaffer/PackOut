@@ -214,6 +214,28 @@ export function interpretSheet(grid) {
   return { groups, plan, warnings }
 }
 
+// A plan's food names must all resolve against the library (imported foods
+// included) or the plan does not import — half a plan would read as a
+// planned day that quietly under-fuels. The libraries still import either way.
+export function planToDays(plan, foods) {
+  const byName = new Map(foods.map(f => [f.name.trim().toLowerCase(), f.id]))
+  const missing = []
+  const days = plan.days.map(({ meals }) => {
+    const out = { intensity: 'medium', meals: {} }
+    for (const [slot, names] of Object.entries(meals)) {
+      const counts = new Map()
+      for (const name of names) {
+        const id = byName.get(name.trim().toLowerCase())
+        if (!id) { if (!missing.includes(name)) missing.push(name); continue }
+        counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
+      out.meals[slot] = [...counts].map(([foodId, qty]) => ({ foodId, qty }))
+    }
+    return out
+  })
+  return missing.length ? { days: null, missing } : { days, missing }
+}
+
 // Skip-duplicates is the import's contract: seed data and user edits are
 // never clobbered. Food and gear namespaces are separate — "Bear Spray" in
 // the food library says nothing about the gear item.

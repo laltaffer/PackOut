@@ -60,6 +60,13 @@ export function renderDashboard() {
           <label class="btn btn-file">Import JSON<input type="file" id="import" accept="application/json,.json"></label>
         </div>
       </section>
+      <section class="backup">
+        <h2>Bring your own list</h2>
+        <p>Already keep a packing list or food plan in Google Sheets? Import it instead of retyping.</p>
+        <div class="backup-actions">
+          <a class="btn" href="#/import">Import from Google Sheets</a>
+        </div>
+      </section>
       <p class="build-stamp mono">build ${esc(BUILD)}</p>
     </section>
   `))

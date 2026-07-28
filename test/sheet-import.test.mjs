@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseCsv, interpretSheet, markDuplicates } from '../js/sheet-import.js'
+import { parseCsv, interpretSheet, markDuplicates, planToDays } from '../js/sheet-import.js'
 
 const montana = readFileSync(new URL('./fixtures/montana-packing.csv', import.meta.url), 'utf8')
 
@@ -186,4 +186,34 @@ test('a food and a gear item may share a name without colliding', () => {
   markDuplicates(result, { library: [{ id: 'x', name: 'Bear Spray' }], gearLibrary: [] })
   const mt = result.groups.find(g => g.header === 'TO GET IN MT')
   assert.equal(mt.items.find(i => i.name === 'Bear Spray').dup, undefined) // gear item; only the FOOD library has that name
+})
+
+// --- planToDays: names become meal entries, or the plan says why not ---
+
+const PLAN_FOODS = [
+  { id: 'f-oat', name: 'Oatmeal' },
+  { id: 'f-alf', name: 'chicken alfredo' },
+  { id: 'f-gold', name: 'Goldbears' },
+  { id: 'f-str', name: 'Beef Stroganoff' },
+  { id: 'f-gran', name: 'Granola' },
+  { id: 'f-mix', name: 'Trail mix' },
+]
+
+test('a resolvable plan becomes days with qty-aggregated entries', () => {
+  const { plan } = interpretSheet(parseCsv(PLAN))
+  const { days, missing } = planToDays(plan, PLAN_FOODS)
+  assert.deepEqual(missing, [])
+  assert.equal(days.length, 2)
+  assert.equal(days[0].intensity, 'medium')
+  assert.deepEqual(days[0].meals.breakfast, [{ foodId: 'f-oat', qty: 1 }])
+  assert.deepEqual(days[0].meals.dinner, [{ foodId: 'f-alf', qty: 1 }]) // name match is case-insensitive
+  assert.deepEqual(days[0].meals.snacks, [{ foodId: 'f-gold', qty: 2 }]) // listed twice = qty 2
+  assert.deepEqual(days[0].meals.lunch, [])
+})
+
+test('one unresolvable name fails the whole plan and names the food', () => {
+  const { plan } = interpretSheet(parseCsv(PLAN))
+  const { days, missing } = planToDays(plan, PLAN_FOODS.filter(f => f.id !== 'f-mix'))
+  assert.equal(days, null)
+  assert.deepEqual(missing, ['Trail mix'])
 })
