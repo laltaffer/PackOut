@@ -116,10 +116,11 @@ test('a header row with nutrition columns imports foods with macros', () => {
     [960, 53, 73, 49, 5.4])
 })
 
-test('a tabular row without a readable calorie number is reported, not guessed', () => {
-  const { groups, warnings } = interpretSheet(parseCsv(TABULAR))
-  assert.ok(!groups[0].items.some(i => i.name === 'Mystery bar'))
-  assert.ok(warnings.some(w => w.includes('Mystery bar')))
+test('a tabular row without a readable calorie number still reaches the preview, asking for kcal', () => {
+  const { groups } = interpretSheet(parseCsv(TABULAR))
+  const mystery = groups[0].items.find(i => i.name === 'Mystery bar')
+  assert.equal(mystery.kcal, null) // the preview's inline field asks; commit refuses without it
+  assert.equal(mystery.weightOz, 1.0)
 })
 
 // --- interpretSheet: day plans, only when unambiguous ---
@@ -216,4 +217,11 @@ test('one unresolvable name fails the whole plan and names the food', () => {
   const { days, missing } = planToDays(plan, PLAN_FOODS.filter(f => f.id !== 'f-mix'))
   assert.equal(days, null)
   assert.deepEqual(missing, ['Trail mix'])
+})
+
+test('day headers with no meal labels are a guess, not a plan', () => {
+  const csv = 'DAY 1,,DAY 2\nOatmeal,,Granola\nGoldbears,,Trail mix'
+  const { plan, warnings } = interpretSheet(parseCsv(csv))
+  assert.equal(plan, null)
+  assert.ok(warnings.some(w => /meal label/i.test(w)))
 })

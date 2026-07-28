@@ -75,7 +75,8 @@ function renderPreview() {
         <label>Trip name
           <input id="import-trip-name" value="Imported plan">
         </label>
-      </section>` : ''}
+      </section>` : `
+      <p class="check-meta">No day-by-day plan detected in this sheet — importing your lists only. Plans need Day 1…N headers with meal labels under them.</p>`}
       ${groups.map((g, gi) => `
       <section class="pack-day">
         <h2>${esc(g.header || 'Ungrouped')} <span class="check-meta">${g.kind === 'food' ? 'food' : 'gear'}</span></h2>
@@ -114,6 +115,10 @@ function renderPreview() {
 }
 
 function commit() {
+  // The preview may be minutes old and this module's state survives
+  // route-aways — re-check duplicates against the library as it is NOW, so
+  // a food added (or synced in) since the preview never imports twice.
+  markDuplicates(result, { library: state.library, gearLibrary: state.gearLibrary })
   const { groups, plan } = result
   const counts = { foods: 0, gear: 0, dups: 0, needKcal: [] }
   for (const [gi, g] of groups.entries()) {

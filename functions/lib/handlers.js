@@ -110,8 +110,9 @@ export async function handleStatePut({ request, env, now = Date.now() }) {
   return json({ ok: true, updatedAt })
 }
 
-// Product-page fetch cap: enough for any real product page's <head>.
-const MAX_SCRAPE_BYTES = 1_500_000
+// Outbound fetch cap (product pages and sheet CSVs alike): enough for any
+// real product page's <head> or a packing spreadsheet.
+const MAX_FETCH_BYTES = 1_500_000
 
 // Session-gated so the endpoint can't be used as an open fetch proxy, and
 // host-guarded so it can't reach anything private (SSRF). IP-literal hosts
@@ -207,7 +208,7 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   if (!(res.headers.get('content-type') ?? '').includes('html')) {
     return fallback(json({ error: 'Not an HTML page.' }, 422))
   }
-  const html = await readCapped(res, MAX_SCRAPE_BYTES)
+  const html = await readCapped(res, MAX_FETCH_BYTES)
 
   // Hostile markup must never escape as a Worker exception — an extraction
   // failure is just "nothing found".
@@ -269,7 +270,7 @@ export async function handleSheet({ request, env, fetcher = fetch, now = Date.no
     return json({ error: 'That sheet is not shared. In Google Sheets: Share → General access → "Anyone with the link", then try again.' }, 403)
   }
   if (!res.ok) return json({ error: `Google Sheets answered ${res.status}.` }, 502)
-  const csv = await readCapped(res, MAX_SCRAPE_BYTES)
+  const csv = await readCapped(res, MAX_FETCH_BYTES)
   return json({ csv })
 }
 

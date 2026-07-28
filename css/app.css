@@ -841,8 +841,9 @@ main:has(.kit-foot) { padding-bottom: 0.75rem; }
 
 /* ---------- sheet import preview ---------- */
 
-/* Rows follow the check-row grammar (name first, box last); the name is an
-   input so junk cells from a messy sheet can be trimmed before they commit. */
+/* Preview rows keep the check-row box-last rule (no count exists before
+   commit, so no .check-lead); the name is an input so junk cells from a
+   messy sheet can be trimmed before they commit. */
 .check-row .import-name {
   flex: 1; min-width: 8rem; border: 1px solid var(--line);
   padding: 0.3rem 0.4rem; font: inherit; background: transparent; color: inherit;

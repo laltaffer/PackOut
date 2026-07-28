@@ -107,7 +107,7 @@ function findTabularHeader(grid) {
   return null
 }
 
-function readTabular(grid, { row, map }, warnings) {
+function readTabular(grid, { row, map }) {
   const items = []
   for (const cells of grid.slice(row + 1)) {
     const name = cleanName(cells[map.name] ?? '')
@@ -115,15 +115,13 @@ function readTabular(grid, { row, map }, warnings) {
     const numAt = key => {
       if (!(key in map)) return null
       const v = parseFloat((cells[map[key]] ?? '').replace(/,/g, ''))
-      return Number.isFinite(v) ? v : null
+      return Number.isFinite(v) && v > 0 ? v : null
     }
-    const kcal = numAt('kcal')
-    if (!kcal || kcal <= 0) {
-      warnings.push(`"${name}" has no readable calorie number — add it by hand from the Library.`)
-      continue
-    }
+    // A row whose calorie cell doesn't read as a number still reaches the
+    // preview — with kcal null, so the inline field asks for the number
+    // instead of the row silently vanishing.
     items.push({
-      name, note: '', kcal,
+      name, note: '', kcal: numAt('kcal'),
       proteinG: numAt('proteinG'), carbsG: numAt('carbsG'),
       fatG: numAt('fatG'), weightOz: numAt('weightOz'),
     })
@@ -154,9 +152,10 @@ function readPlan(grid, warnings) {
     warnings.push(`Found day headers (${ns.map(n => `Day ${n}`).join(', ')}) but not a clear Day 1…N sequence — the day plan was not imported.`)
     return { plan: null, planCols }
   }
+  let unlabeled = false
   const days = dayCells.sort((a, b) => a.n - b.n).map(({ r, c, n }) => {
     const meals = { electrolytes: [], breakfast: [], lunch: [], dinner: [], snacks: [] }
-    let meal = 'snacks'
+    let meal = null // a food before any meal label makes the day a guess
     for (const row of grid.slice(r + 1)) {
       const cell = (row[c] ?? '').trim()
       if (!cell) continue
@@ -167,10 +166,15 @@ function readPlan(grid, warnings) {
         meal = MEAL_KEY[raw] ?? raw
         continue
       }
+      if (!meal) { unlabeled = true; break }
       meals[meal].push(cleanName(cell))
     }
     return { n, meals }
   })
+  if (unlabeled) {
+    warnings.push('Found day headers but no meal labels (Breakfast, Lunch, Dinner, Snacks) under them — the day plan was not imported.')
+    return { plan: null, planCols }
+  }
   return { plan: { days }, planCols }
 }
 
@@ -178,7 +182,7 @@ export function interpretSheet(grid) {
   const warnings = []
   const tabular = findTabularHeader(grid)
   if (tabular) {
-    return { groups: readTabular(grid, tabular, warnings), plan: null, warnings }
+    return { groups: readTabular(grid, tabular), plan: null, warnings }
   }
   const { plan, planCols } = readPlan(grid, warnings)
   const cols = Math.max(0, ...grid.map(r => r.length))
