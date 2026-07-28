@@ -22,9 +22,12 @@ sed -i '' \
   -e "s|href=\"css/app.css\"|href=\"css/app.css?v=$V\"|" \
   "$DEPLOY_DIR/index.html"
 # Every relative import, whatever the module is called — a new file must not
-# need a new sed line here to get cache-busted.
+# need a new sed line here to get cache-busted. Both forms: `from './x.js'`
+# and the bare side-effect `import './x.js'` (a module stamped in one place
+# and not another would load twice under two URLs).
 find "$DEPLOY_DIR/js" -name '*.js' -exec sed -i '' -E \
-  "s|from '(\.\.?/[^']+\.js)'|from '\1?v=$V'|g" {} +
+  -e "s|from '(\.\.?/[^']+\.js)'|from '\1?v=$V'|g" \
+  -e "s|^import '(\.\.?/[^']+\.js)'|import '\1?v=$V'|g" {} +
 
 # Say which branch out loud rather than letting wrangler infer it: Pages
 # promotes to production only for the project's production branch, and an
