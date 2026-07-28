@@ -231,6 +231,48 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   return json({ found, ...product })
 }
 
+// A pasted Google Sheets link names only an id and a tab — the fetch URL is
+// built here against the fixed docs.google.com export endpoint, so unlike
+// /api/scrape there is no user-controlled host and no SSRF surface.
+export function extractSheetRef(url) {
+  let u
+  try { u = new URL(String(url ?? '')) } catch { return null }
+  if (u.hostname !== 'docs.google.com') return null
+  const m = u.pathname.match(/^\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+  if (!m) return null
+  const gid = u.hash.match(/gid=(\d+)/)?.[1] ?? u.searchParams.get('gid') ?? null
+  return { id: m[1], gid }
+}
+
+export async function handleSheet({ request, env, fetcher = fetch, now = Date.now() }) {
+  const s = await session(request, env, now)
+  if (!s) return json({ error: 'Signed out.' }, 401)
+  let url
+  try { ({ url } = await request.json()) } catch { return json({ error: 'Bad request.' }, 400) }
+  const ref = extractSheetRef(url)
+  if (!ref) return json({ error: 'That is not a Google Sheets link.' }, 400)
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${ref.id}/export?format=csv` +
+    (ref.gid ? `&gid=${ref.gid}` : '')
+  let res
+  try {
+    res = await fetcher(exportUrl, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)' },
+    })
+  } catch {
+    return json({ error: 'Could not reach Google Sheets.' }, 502)
+  }
+  // A sheet that isn't link-shared redirects to the Google login page — an
+  // HTML answer where CSV belongs. That is a fixable user situation, not a
+  // failure, so the error says exactly what to click.
+  if ((res.headers.get('content-type') ?? '').includes('html')) {
+    return json({ error: 'That sheet is not shared. In Google Sheets: Share → General access → "Anyone with the link", then try again.' }, 403)
+  }
+  if (!res.ok) return json({ error: `Google Sheets answered ${res.status}.` }, 502)
+  const csv = await readCapped(res, MAX_SCRAPE_BYTES)
+  return json({ csv })
+}
+
 // Session-gated like every other outbound call: signed-out visitors don't get
 // to spend the app's upstream quota.
 export async function handlePlace({ request, env, fetcher = fetch, now = Date.now() }) {
