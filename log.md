@@ -13,3 +13,6 @@
 ## [2026-07-27] shipped | PackOut mobile: sticky foot docks flush, brand dock hidden below 700px with the choice moved into the profile (a27b074). 268 tests green
 ## [2026-07-27] refactored | ui.js monolith (2,493 lines) decomposed: foundation modules (state/dom/format/api/brand) + eight js/screens/* modules; ui.js is a 200-line entry (1df5057..9a521d6). deploy.sh stamps every relative import generically — Codex caught bare side-effect imports slipping through unstamped. 268 tests green; live-tested per step against the stub session, both brands, 390 + 1400. NOT deployed — production still a27b074
 ## [2026-07-28] shipped | Module refactor LIVE at packout.pages.dev (build 66cf535, via ship-it). All 18 modules load once, each stamped; gate + GIS + /api/me verified at 390px, console clean. Deploy Config added to _brain.md
+
+## [2026-07-28] ship | Snacks flattened to one bucket per day
+Bundle structure removed; legacy data merges on load; 270 tests green; deployed 323800f, production verified at 390px (both brands, /api/me, console clean).
