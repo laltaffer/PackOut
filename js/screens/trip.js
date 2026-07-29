@@ -6,7 +6,7 @@
 import { dailyTargets, slotTargets, sumEntries, dayTotals, emptyMeals, dayVerdict, tripVerdict, stapleIds, suggestions, pickerRank, dayPackList, plannedDayOptions, declinedIds, draftDay, draftEmptyDays } from '../engine.js'
 import { state, persist, commit } from '../state.js'
 import { app, el, esc } from '../dom.js'
-import { INTENSITIES, VERDICT_LABELS, SLOT_LABELS, fmt, fmtOz, macroLine, dayDate, tripDateRange, conditionsLine, gapSentence } from '../format.js'
+import { INTENSITIES, VERDICT_LABELS, SLOT_LABELS, fmt, fmtOz, macroLine, macroPct, dayDate, tripDateRange, conditionsLine, gapSentence } from '../format.js'
 
 // ---------- trip view ----------
 
@@ -261,13 +261,6 @@ function dayTransferHTML(trip, i) {
         <button class="btn" id="import-apply" type="button">Import</button>
       </div>` : ''}
     </details>`
-}
-
-// A macro's share of the day's planned calories (Lawrence, issue #28: "I want
-// my fat to be about 30% of my total calories"). Atwater factors over the
-// item-stated kcal sum, so the three shares may not total exactly 100.
-function macroPct(grams, kcalPerG, totalKcal) {
-  return Math.round((grams * kcalPerG / totalKcal) * 100)
 }
 
 function forecastDiscussion(day, st, planned, v, b, din, snackSub) {

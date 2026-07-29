@@ -24,6 +24,13 @@ export function fmtOz(oz) {
   return rem ? `${lb} lb ${rem} oz` : `${lb} lb`
 }
 
+// A macro's share of the day's planned calories (Lawrence, issue #28: "I want
+// my fat to be about 30% of my total calories"). Atwater factors over the
+// item-stated kcal sum, so the three shares may not total exactly 100.
+export function macroPct(grams, kcalPerG, totalKcal) {
+  return Math.round((grams * kcalPerG / totalKcal) * 100)
+}
+
 export function macroLine(f) {
   const g = v => v === null ? '—' : `${v}g`
   const oz = f.weightOz === null ? '— oz' : fmtOz(f.weightOz)
