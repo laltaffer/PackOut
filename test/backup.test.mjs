@@ -53,6 +53,14 @@ test('rejects malformed entries, quantities, intensities, and packed maps', () =
   assert.equal(validateImport(withDay({ intensity: 'easy', packed: { f1: 'yes' } })).ok, false)
 })
 
+test('customKcal imports as a positive number or not at all (issue #27)', () => {
+  assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: 3000 })).ok, true)
+  assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: null })).ok, true)
+  assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: '3000' })).ok, false)
+  assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: -100 })).ok, false)
+  assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: 0 })).ok, false)
+})
+
 test('rejects non-string food urls (objects would crash the edit form)', () => {
   const evil = { ...GOOD, library: [{ ...GOOD.library[0], url: { toString: null } }] }
   assert.equal(validateImport(evil).ok, false)

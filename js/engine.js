@@ -9,11 +9,15 @@ const KCAL_PER_LB = {
 
 const PROTEIN_FLOOR_G_PER_LB = 0.6
 
-export function dailyTargets(weightLbs, intensity) {
+// customKcal (issue #27): an explicit day target replaces the weight × effort
+// band — the band collapses to the number and the macro shares below apply to
+// it unchanged. The protein floor stays a property of the body, not the target.
+export function dailyTargets(weightLbs, intensity, customKcal = null) {
   const mult = KCAL_PER_LB[intensity]
   if (!mult) throw new Error(`Unknown intensity: ${intensity}`)
-  const lo = weightLbs * mult.lo
-  const hi = weightLbs * mult.hi
+  const custom = Number.isFinite(customKcal) && customKcal > 0
+  const lo = custom ? customKcal : weightLbs * mult.lo
+  const hi = custom ? customKcal : weightLbs * mult.hi
   return {
     kcal: { lo, hi, target: (lo + hi) / 2 },
     carbsG: { min: Math.round((lo * 0.40) / 4), max: Math.round((hi * 0.60) / 4) },
@@ -81,7 +85,7 @@ const HEAVY_KCAL_PCT = 1.15
 const PROTEIN_FLOOR_GRACE_G = 5
 
 export function dayVerdict(day, weightLbs, library) {
-  const targets = dailyTargets(weightLbs, day.intensity)
+  const targets = dailyTargets(weightLbs, day.intensity, day.customKcal ?? null)
   const totals = dayTotals(day, library)
   // Status compares RAW values (a 0.4 kcal deficit is still a deficit); only
   // the reported gap is rounded, and always up — a real shortfall never
@@ -414,7 +418,7 @@ function buildDraft(trip, dayIndex, fullLibrary, staples, strategy, avoidMains, 
   const declined = declinedIds(trip)
   const library = declined.size ? fullLibrary.filter(f => !declined.has(f.id)) : fullLibrary
   if (library.length === 0) return meals
-  const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium')
+  const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium', trip.days[dayIndex]?.customKcal ?? null)
   const target = targets.kcal.target
   const dayCeil = target + DAY_KCAL_TOL
   const st = slotTargets(targets)
@@ -648,6 +652,10 @@ function validEntries(entries) {
 
 function validDay(day) {
   if (!day || !INTENSITIES.includes(day.intensity)) return false
+  // customKcal reaches the DOM as a target number; anything but a positive
+  // finite number (or null/absent = no override) is refused.
+  if (day.customKcal !== undefined && day.customKcal !== null &&
+      !(num(day.customKcal) && day.customKcal > 0)) return false
   if (day.meals !== undefined) {
     const m = day.meals
     if (!m || typeof m !== 'object') return false

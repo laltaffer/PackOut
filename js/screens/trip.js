@@ -75,12 +75,17 @@ function draftAllHTML(trip) {
 }
 
 function dayColumn(trip, day, i, openDay) {
-  const t = dailyTargets(trip.weightLbs, day.intensity)
+  const t = dailyTargets(trip.weightLbs, day.intensity, day.customKcal ?? null)
   const planned = dayTotals(day, state.library)
   const hasPlan = planned.kcal > 0
   const v = hasPlan ? dayVerdict(day, trip.weightLbs, state.library) : null
   const status = v ? v.status : 'none'
-  const barbs = { easy: 1, medium: 2, hard: 3 }[day.intensity]
+  // A custom day shows where its target falls against the effort bands for
+  // this body — the barbs stay an honest signal, not a stale effort level.
+  const barbs = day.customKcal != null
+    ? (day.customKcal <= dailyTargets(trip.weightLbs, 'easy').kcal.target ? 1
+      : day.customKcal >= dailyTargets(trip.weightLbs, 'hard').kcal.target ? 3 : 2)
+    : { easy: 1, medium: 2, hard: 3 }[day.intensity]
   return `
     <a class="col" href="#/trip/${trip.id}/day/${i}" data-i="${i}"
        ${openDay === i ? 'aria-current="true"' : ''}
@@ -89,7 +94,7 @@ function dayColumn(trip, day, i, openDay) {
       <div class="collapsible"><div>
         <div class="effort-viz" aria-hidden="true">
           <div class="barbs">${[1, 2, 3].map(b => `<i class="${b <= barbs ? '' : 'off'}" style="height:${[18, 32, 46][b - 1]}px"></i>`).join('')}</div>
-          <span class="lab">${day.intensity}</span>
+          <span class="lab">${day.customKcal != null ? 'custom' : day.intensity}</span>
         </div>
       </div></div>
       <div class="hilo">
@@ -113,7 +118,7 @@ function fillBoard(trip, i, { focus = true } = {}) {
   // Every inline control carries a stable id so a qty tap keeps its button.
   const refocusId = !focus && board.contains(document.activeElement) ? document.activeElement.id : null
   day.meals ??= emptyMeals()
-  const t = dailyTargets(trip.weightLbs, day.intensity)
+  const t = dailyTargets(trip.weightLbs, day.intensity, day.customKcal ?? null)
   const st = slotTargets(t)
   const planned = dayTotals(day, state.library)
   const hasPlan = planned.kcal > 0
@@ -136,9 +141,15 @@ function fillBoard(trip, i, { focus = true } = {}) {
       <div class="fmeta">
         <label class="intensity"><span class="intensity-label">Effort</span>
           <select id="board-intensity" aria-label="Effort for day ${i + 1}">
-            ${INTENSITIES.map(x => `<option value="${x}" ${x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
+            ${INTENSITIES.map(x => `<option value="${x}" ${day.customKcal == null && x === day.intensity ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}
+            <option value="custom" ${day.customKcal != null ? 'selected' : ''}>Custom…</option>
           </select>
         </label>
+        ${day.customKcal != null ? `
+        <label class="intensity"><span class="intensity-label">Target</span>
+          <input id="board-custom-kcal" type="number" inputmode="numeric" min="1" step="50"
+                 value="${day.customKcal}" aria-label="Custom calorie target for day ${i + 1}"> kcal
+        </label>` : ''}
       </div>
       ${hasPlan ? `
       <div class="big"><span class="n">${planned.kcal.toLocaleString()}</span><span class="of">planned / ${fmt(t.kcal.target)} target · Δ ${delta >= 0 ? '+' : '−'}${Math.abs(delta).toLocaleString()}</span></div>
@@ -254,7 +265,10 @@ function dayTransferHTML(trip, i) {
 
 function forecastDiscussion(day, st, planned, v, b, din, snackSub) {
   const parts = []
-  parts.push(`${day.intensity === 'easy' ? 'An' : 'A'} ${day.intensity} day ${v.status === 'fueled' ? 'in the window' : v.status === 'short' ? 'running short' : 'running heavy'}.`)
+  const dayPhrase = day.customKcal != null
+    ? `A custom ${day.customKcal.toLocaleString()} kcal day`
+    : `${day.intensity === 'easy' ? 'An' : 'A'} ${day.intensity} day`
+  parts.push(`${dayPhrase} ${v.status === 'fueled' ? 'in the window' : v.status === 'short' ? 'running short' : 'running heavy'}.`)
   if (b.kcal) parts.push(`Breakfast holds ${b.kcal.toLocaleString()} kcal ${b.kcal >= st.breakfast.kcalMin && b.kcal <= st.breakfast.kcalMax ? 'inside' : 'outside'} its ${st.breakfast.kcalMin}–${st.breakfast.kcalMax} band;`)
   if (din.kcal) {
     const gap = din.kcal - st.dinner.kcal
@@ -390,7 +404,22 @@ function slotAddControl(key) {
 
 function wireBoard(trip, i, day) {
   const on = (id, ev, fn) => document.getElementById(id)?.addEventListener(ev, fn)
-  on('board-intensity', 'change', e => { day.intensity = e.target.value; commit() })
+  on('board-intensity', 'change', e => {
+    if (e.target.value === 'custom') {
+      // Seed the override with the target the day already had, so choosing
+      // Custom changes nothing until a number is typed.
+      day.customKcal = Math.round(dailyTargets(trip.weightLbs, day.intensity).kcal.target)
+    } else {
+      day.intensity = e.target.value
+      delete day.customKcal
+    }
+    commit()
+  })
+  on('board-custom-kcal', 'change', e => {
+    const v = Math.round(Number(e.target.value))
+    if (Number.isFinite(v) && v > 0) { day.customKcal = v; commit() }
+    else fillBoard(trip, i, { focus: false }) // restore the stored value
+  })
 
   const draft = strategy => {
     const current = dayTotals(day, state.library)

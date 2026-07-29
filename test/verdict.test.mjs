@@ -73,6 +73,17 @@ test('beyond the grace, the reported protein gap is the full distance to the flo
   assert.equal(v.proteinShortG, 7)
 })
 
+test('a custom day target re-bases the verdict (issue #27)', () => {
+  // 2,200 kcal reads Short against a medium day (3,700) but Fueled against a
+  // custom 2,400 target: 90% floor 2,160 ≤ 2,200, protein 140 ≥ 120.
+  const entries = [{ foodId: 'meal', qty: 2 }, { foodId: 'jerky', qty: 2 }]
+  assert.equal(dayVerdict(dayWith(entries), WEIGHT, LIB).status, 'short')
+  const day = { ...dayWith(entries), customKcal: 2400 }
+  const v = dayVerdict(day, WEIGHT, LIB)
+  assert.equal(v.status, 'fueled')
+  assert.equal(v.targets.kcal.target, 2400)
+})
+
 test('trip verdict counts short days; heavy is not short', () => {
   const trip = {
     weightLbs: WEIGHT,

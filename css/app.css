@@ -528,6 +528,7 @@ main:has(.trip-surface) { max-width: none; }
   letter-spacing: 0.1em; color: var(--soft);
 }
 .intensity select { min-height: 44px; padding: 0.35rem 0.5rem; }
+.intensity input[type="number"] { width: 6.5rem; min-height: 44px; padding: 0.35rem 0.5rem; }
 
 .targets {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem 1rem;

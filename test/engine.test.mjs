@@ -45,3 +45,25 @@ test('protein floor is 0.6 g per lb regardless of intensity', () => {
 test('unknown intensity throws', () => {
   assert.throws(() => dailyTargets(205, 'brutal'))
 })
+
+// Custom day target (issue #27): an arbitrary kcal number replaces the
+// weight × effort band, and every macro range derives from the same shares
+// (carbs 40–60%, protein 10–15%, fat 25–50%). Worked example: 3,000 kcal →
+// carbs 300–450 g, protein 75–113 g, fat 83–167 g. The protein floor stays
+// a property of the body (0.6 g/lb), not of the target.
+test('custom kcal collapses the band and scales macro ranges by the V2P shares', () => {
+  const t = dailyTargets(205, 'medium', 3000)
+  assert.deepEqual(t.kcal, { lo: 3000, hi: 3000, target: 3000 })
+  assert.deepEqual(t.carbsG, { min: 300, max: 450 })
+  assert.deepEqual(t.proteinG, { min: 75, max: 113, floor: 123 })
+  assert.deepEqual(t.fatG, { min: 83, max: 167 })
+})
+
+test('custom kcal overrides regardless of the effort level passed', () => {
+  assert.deepEqual(dailyTargets(205, 'easy', 3000), dailyTargets(205, 'hard', 3000))
+})
+
+test('a null or absent custom target leaves effort targets byte-identical', () => {
+  assert.deepEqual(dailyTargets(205, 'medium', null), dailyTargets(205, 'medium'))
+  assert.deepEqual(dailyTargets(205, 'easy', undefined), dailyTargets(205, 'easy'))
+})

@@ -64,6 +64,14 @@ test('meals carry the day: real lunch, windowed breakfast, one snack line per fo
   assert.equal(new Set(ids).size, ids.length, `repeats stack qty, never duplicate lines: ${ids}`)
 })
 
+test('a drafted day lands within ±50 kcal of a custom target (issue #27)', () => {
+  const trip = mkTrip()
+  trip.days[0].customKcal = 3000
+  const meals = draftDay(trip, 0, LIB, STAPLES, 'usual')
+  const t = dayTotals({ intensity: 'medium', meals }, LIB)
+  assert.ok(Math.abs(t.kcal - 3000) <= TOL, `|${t.kcal} - 3000| <= ${TOL}`)
+})
+
 test('drafting is deterministic: same inputs, identical output', () => {
   const a = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
   const b = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
