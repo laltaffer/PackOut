@@ -167,9 +167,9 @@ function fillBoard(trip, i, { focus = true } = {}) {
         <p>${forecastDiscussion(day, st, planned, v, b, din, snackSub)}</p>
       </div>
       <dl class="targets day-macros mono">
-        <div><dt>Carbs</dt><dd>${planned.carbsG} / ${t.carbsG.min}–${t.carbsG.max} g</dd></div>
-        <div><dt>Protein</dt><dd>${planned.proteinG} g</dd></div>
-        <div><dt>Fat</dt><dd>${planned.fatG} / ${t.fatG.min}–${t.fatG.max} g</dd></div>
+        <div><dt>Carbs</dt><dd>${planned.carbsG} g · ${macroPct(planned.carbsG, 4, planned.kcal)}%</dd></div>
+        <div><dt>Protein</dt><dd>${planned.proteinG} g · ${macroPct(planned.proteinG, 4, planned.kcal)}%</dd></div>
+        <div><dt>Fat</dt><dd>${planned.fatG} g · ${macroPct(planned.fatG, 9, planned.kcal)}%</dd></div>
         <div><dt>Weight</dt><dd>${fmtOz(planned.weightOz)}${planned.missingWeightCount ? ` <span class="floor">+${planned.missingWeightCount} unweighed</span>` : ''}</dd></div>
         ${planned.calsPerOz ? `<div><dt>Cals/oz</dt><dd>${planned.calsPerOz}</dd></div>` : ''}
       </dl>
@@ -261,6 +261,13 @@ function dayTransferHTML(trip, i) {
         <button class="btn" id="import-apply" type="button">Import</button>
       </div>` : ''}
     </details>`
+}
+
+// A macro's share of the day's planned calories (Lawrence, issue #28: "I want
+// my fat to be about 30% of my total calories"). Atwater factors over the
+// item-stated kcal sum, so the three shares may not total exactly 100.
+function macroPct(grams, kcalPerG, totalKcal) {
+  return Math.round((grams * kcalPerG / totalKcal) * 100)
 }
 
 function forecastDiscussion(day, st, planned, v, b, din, snackSub) {
