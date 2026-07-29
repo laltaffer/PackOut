@@ -213,9 +213,28 @@ and Spot Hogg (BigCommerce) got through. This is pre-existing — the shipping c
 changed no fetch header, UA, or redirect behaviour — and it was invisible until the
 first signed-in production test. The catalog softens it (captured facts still answer,
 and a blocked re-scrape falls back to the stored copy), but new lookups mostly fail.
-**Open decision:** the outbound UA is `PackOutBot/1.0`, an explicit robot declaration —
-a browser UA got 200 from Garage Grown Gear where PackOutBot got 403. Changing it is an
-identity call, Lawrence's to make, not a silent fix.
+**Decided and measured (build 547cebf): the UA was not the cause.** The outbound UA is
+now `Mozilla/5.0 (compatible; PackOutBot/1.0; +https://packout.pages.dev)` — the
+Googlebot/bingbot shape, browser-prefixed so naive filters pass, still naming who calls
+and where to complain; a full Chrome impersonation tested identically (both 200 on
+Garage Grown Gear), so nothing is bought by lying and we don't. Both outbound fetches
+share one constant, and the request now sends accept-language.
+
+It changed nothing in production. The control settles it: Stone Glacier answers the OLD
+bare `PackOutBot/1.0` with 200 from Lawrence's Mac, and blocks the NEW browser-shaped UA
+from Workers egress. **The block is the network, not the string** — Shopify's protection
+is refusing Cloudflare Workers egress IPs. Keep the new UA (honest, standard, and it
+does clear UA-only filters like Garage Grown Gear's off a non-blocked network), but it
+is not the fix.
+
+**The honest fix, unbuilt:** `extractProduct` is pure and takes a string, so it can run
+CLIENT-SIDE on HTML the user's own browser already loaded — a bookmarklet or a
+paste-the-page affordance would sidestep bot walls entirely, because the person really
+is a person on a residential connection looking at the page. No evasion, no proxy fees,
+no egress problem. The alternative — a residential-proxy scraping service — costs money
+and IS the evade-detection business, a heavier footprint than anything here. Doing
+nothing is also viable: the catalog answers for known gear and manual entry covers
+the rest.
 
 2026-07-28 (shipped): **Google Sheet import (issue #26)** — LIVE at build 95bd7df.
 Paste a link-shared Google Sheet on the dashboard ("Bring your own list" → `#/import`):
