@@ -55,15 +55,72 @@ const decode = s => s
   .replace(/&#x([0-9a-f]+);/gi, (_, n) => scalar(parseInt(n, 16)))
   .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m)
 
-// <meta property="og:title" content="..."> in either attribute order. The
-// value runs to its own opening delimiter, so apostrophes inside
-// double-quoted content survive.
+// Tag names end where a name character stops. Shared by every scanner here.
+const NAME_CHAR = /[a-z0-9-]/
+
+// Every `<name …>` tag's attribute text, in document order, found by walking
+// the string. Nothing here may put `[^>]*` in front of an attribute: on a page
+// that opens tags and never closes them, that backtracks across the whole
+// document once per tag. Measured 2026-07-29 (Codex flagged the shape in the
+// markup stripper; the same bug was in three more places): 600 KB of "<meta "
+// took 60 SECONDS, and extraction runs on the browser's main thread now.
+function* tagsNamed(html, name, lower = html.toLowerCase()) {
+  const needle = `<${name}`
+  let i = 0
+  for (;;) {
+    const open = lower.indexOf(needle, i)
+    if (open === -1) return
+    const nameEnd = open + needle.length
+    if (NAME_CHAR.test(lower[nameEnd] ?? '')) { i = nameEnd; continue }  // <metadata>
+    const gt = tagEnd(html, nameEnd)
+    if (gt === -1) return
+    yield { attrs: html.slice(nameEnd, gt), end: gt }
+    i = gt + 1
+  }
+}
+
+// Where a tag closes — skipping any `>` inside a quoted value, which is legal
+// and which the regex this replaced handled by scanning past the tag entirely.
+// A product titled `Fits 65L > packs` would otherwise lose its og:title.
+function tagEnd(html, from) {
+  let quote = ''
+  for (let j = from; j < html.length; j++) {
+    const c = html[j]
+    if (quote) { if (c === quote) quote = '' } else if (c === '"' || c === "'") quote = c
+    else if (c === '>') return j
+  }
+  return -1
+}
+
+// One attribute out of a single tag's text. Safe to do with a regex: the input
+// is one tag, not a document.
+function attr(attrs, key) {
+  const m = attrs.match(new RegExp(`\\b${key}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i'))
+  return m ? m[2] ?? m[3] ?? m[4] ?? null : null
+}
+
+// <meta property="og:title" content="..."> in either attribute order. Reading
+// the attributes out of the tag makes order a non-question, and apostrophes
+// inside double-quoted content survive because each value runs to its own
+// opening delimiter.
 function metaContent(html, property) {
-  const p = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const m =
-    html.match(new RegExp(`<meta[^>]*\\bproperty\\s*=\\s*["']${p}["'][^>]*\\bcontent\\s*=\\s*(["'])((?:(?!\\1).)*)\\1`, 'i')) ??
-    html.match(new RegExp(`<meta[^>]*\\bcontent\\s*=\\s*(["'])((?:(?!\\1).)*)\\1[^>]*\\bproperty\\s*=\\s*["']${p}["']`, 'i'))
-  return m ? decode(m[2]).trim() || null : null
+  const wanted = property.toLowerCase()
+  for (const { attrs } of tagsNamed(html, 'meta')) {
+    if (attr(attrs, 'property')?.toLowerCase() !== wanted) continue
+    const content = attr(attrs, 'content')
+    if (content !== null) return decode(content).trim() || null
+  }
+  return null
+}
+
+// The <title> element's text, same scan, same reason.
+function titleText(html) {
+  const lower = html.toLowerCase()
+  for (const { end } of tagsNamed(html, 'title', lower)) {
+    const close = lower.indexOf('</title', end + 1)
+    return decode(html.slice(end + 1, close === -1 ? html.length : close)).trim() || null
+  }
+  return null
 }
 
 // ---------- brand ----------
@@ -207,13 +264,41 @@ function fieldsOf(product) {
 // pounds to a pack, which is worse than returning nothing.
 
 // Strip markup so a label and its value read as one string even when they sit
-// in <dt>/<dd> or separate spans. Script and style bodies go first: their
-// contents are code, not copy.
+// in <dt>/<dd> or separate spans. Script and style bodies are skipped whole:
+// their contents are code, not copy.
+//
+// Scanned by hand, because the two regexes this replaced were both quadratic
+// on markup that never closes a tag. Measured 2026-07-29 after Codex flagged
+// the shape: 600 KB of "<script<script…" took 70 SECONDS, and 200 KB of bare
+// "<" took 20. Extraction runs on the main thread in the browser leg, so that
+// is a frozen tab with the Fetch button stuck — reachable from any page a user
+// pastes. This scan only ever moves forward.
+const CODE_TAGS = ['script', 'style']
+
 function textOf(html) {
-  return decode(html
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]+>/g, ' '))
-    .replace(/\s+/g, ' ')
+  const lower = html.toLowerCase()
+  const parts = []
+  let i = 0
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) { parts.push(html.slice(i)); break }
+    parts.push(html.slice(i, lt), ' ')
+    const gt = html.indexOf('>', lt + 1)
+    // A tag that never closes: whatever follows is not copy either way.
+    if (gt === -1) break
+    const code = CODE_TAGS.find(t =>
+      lower.startsWith(t, lt + 1) && !NAME_CHAR.test(lower[lt + 1 + t.length] ?? ''))
+    if (!code) { i = gt + 1; continue }
+    // Everything up to the matching close tag is code. An unclosed one takes
+    // the rest of the document with it — losing text beats reading a script's
+    // own "weight" as the item's.
+    const close = lower.indexOf(`</${code}`, gt + 1)
+    if (close === -1) break
+    const closeEnd = html.indexOf('>', close + 2 + code.length)
+    if (closeEnd === -1) break
+    i = closeEnd + 1
+  }
+  return decode(parts.join('')).replace(/\s+/g, ' ')
 }
 
 // Words that turn "weight" into something that is not this item's weight.
@@ -275,6 +360,33 @@ const problemOf = (html, name) =>
 
 const richness = f => ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].filter(k => f[k] !== null).length
 
+// Every <script> element as its attribute text and its body, found by scanning
+// for the same reason textOf scans: the regex this replaced put `[^>]*` in
+// front of the type attribute, so a page that never closes a tag made it
+// backtrack across the whole document once per script — 31 seconds on 560 KB
+// of "<script<script…" even after the markup stripper was fixed. Bodies end at
+// the first `</script`, which is where a browser ends them too.
+function* scriptElements(html) {
+  const lower = html.toLowerCase()
+  let i = 0
+  for (;;) {
+    const open = lower.indexOf('<script', i)
+    if (open === -1) return
+    const nameEnd = open + 7
+    if (NAME_CHAR.test(lower[nameEnd] ?? '')) { i = nameEnd; continue }  // <scripted>
+    const gt = html.indexOf('>', nameEnd)
+    if (gt === -1) return
+    const close = lower.indexOf('</script', gt + 1)
+    if (close === -1) return
+    yield { attrs: html.slice(nameEnd, gt), body: html.slice(gt + 1, close) }
+    const closeEnd = html.indexOf('>', close + 8)
+    if (closeEnd === -1) return
+    i = closeEnd + 1
+  }
+}
+
+const LD_TYPE = /\btype\s*=\s*["']?application\/ld\+json/i
+
 export function extractProduct(html) {
   const src = String(html ?? '')
 
@@ -283,9 +395,10 @@ export function extractProduct(html) {
   // wins, first one breaking ties.
   const candidates = []
   const brands = []
-  for (const m of src.matchAll(/<script[^>]*\btype\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
+  for (const { attrs, body } of scriptElements(src)) {
+    if (!LD_TYPE.test(attrs)) continue
     let doc
-    try { doc = JSON.parse(m[1]) } catch { continue }
+    try { doc = JSON.parse(body) } catch { continue }
     collectProducts(doc, candidates)
     collectBrands(doc, brands)
   }
@@ -296,10 +409,7 @@ export function extractProduct(html) {
   const out = best ?? { name: null, brand: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
 
   if (!out.name) out.name = metaContent(src, 'og:title')
-  if (!out.name) {
-    const t = src.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
-    out.name = t ? decode(t[1]).trim() || null : null
-  }
+  if (!out.name) out.name = titleText(src)
   // A bot wall or a dead link keeps its verdict and loses its name, so no
   // caller can file the interstitial as an item. Only a page that published
   // no product data at all is judged this way: a real listing for a "Security

@@ -3,7 +3,7 @@
 // verifier. The thin files under functions/api/ wire these to Pages routes.
 
 import { createSession, verifySession, sessionCookie, clearedCookie, readCookie, COOKIE_NAME } from './session.js'
-import { extractProduct } from './extract.js'
+import { extractProduct } from '../../js/extract.js'
 import { lookupPlace } from './place.js'
 import { validateImport } from '../../js/engine.js'
 

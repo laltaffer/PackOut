@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { extractProduct } from '../functions/lib/extract.js'
+import { extractProduct } from '../js/extract.js'
 
 const ldPage = obj => `<!doctype html><html><head>
   <title>Some Retailer</title>
@@ -423,4 +423,50 @@ test('a real product is never mistaken for a wall', () => {
   }))
   assert.equal(p.problem, null)
   assert.equal(p.name, 'Abus Security Check Padlock')
+})
+
+// ---------- the scanners that replaced the regexes (2026-07-29) ----------
+// Codex flagged the markup stripper as quadratic on malformed markup; the same
+// shape turned out to be in the JSON-LD block matcher, metaContent and the
+// <title> fallback. All four scan now. Extraction runs on the browser's main
+// thread in the client-side leg, so a page that never closes a tag used to be
+// a frozen tab with the Fetch button stuck.
+
+test('malformed markup cannot freeze the extractor', () => {
+  const shapes = {
+    'unclosed script tags': '<script>'.repeat(75_000),
+    'tags that never close': '<script<script'.repeat(40_000),
+    'a page of bare <': '<'.repeat(300_000),
+    'unclosed meta tags': '<meta '.repeat(100_000),
+    'unclosed title tags': '<title'.repeat(60_000),
+    'everything at once': '<script<meta<title<a"vendor":"'.repeat(20_000),
+  }
+  for (const [what, html] of Object.entries(shapes)) {
+    const started = process.hrtime.bigint()
+    extractProduct(html)
+    const ms = Number(process.hrtime.bigint() - started) / 1e6
+    // Each of these took 7–70 SECONDS before. The bound is loose on purpose —
+    // it is catching a return to quadratic, not measuring a machine.
+    assert.ok(ms < 2000, `${what} took ${ms.toFixed(0)}ms`)
+  }
+})
+
+test('a > inside a quoted attribute does not truncate the tag', () => {
+  // Legal markup, and the regex this replaced handled it by scanning past the
+  // tag. A naive indexOf('>') would cut the value in half and lose the name.
+  const p = extractProduct('<head><meta property="og:title" content="Fits 65L > packs"></head>')
+  assert.equal(p.name, 'Fits 65L > packs')
+})
+
+test('a tag whose name only starts with the one we want is skipped', () => {
+  const p = extractProduct(`<head>
+    <metadata property="og:title" content="Not A Meta Tag">
+    <meta property="og:title" content="The Real One">
+  </head>`)
+  assert.equal(p.name, 'The Real One')
+})
+
+test('an unquoted attribute value still reads', () => {
+  const p = extractProduct('<head><meta property=og:title content=Unquoted></head>')
+  assert.equal(p.name, 'Unquoted')
 })

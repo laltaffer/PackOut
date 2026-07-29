@@ -7,7 +7,7 @@ import { newId } from '../store.js'
 import { state, persist, commit, rerender } from '../state.js'
 import { app, el, esc, wirePrint } from '../dom.js'
 import { TRIP_TYPE_LABELS, fmtOz, conditionsLine } from '../format.js'
-import { fetchProduct, wireScrape } from '../api.js'
+import { lookupProduct, wireScrape } from '../api.js'
 import { isBlankSlot, gearEditorFields, gearEditorValues, deleteGearFromLibrary } from './gear-editor.js'
 
 // ---------- gear ----------
@@ -388,7 +388,7 @@ export function renderKitQuestions(trip) {
     if (!url) { status.textContent = 'Paste a product URL first.'; return }
     btn.disabled = true
     status.textContent = 'Fetching…'
-    const data = await fetchProduct(url)
+    const data = await lookupProduct(url, { onRetry: () => { status.textContent = 'Reading it from your browser…' } })
     btn.disabled = false
     if (!data.ok) {
       status.textContent = data.error

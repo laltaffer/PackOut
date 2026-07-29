@@ -2,6 +2,8 @@
 // shared form wiring built on them (Fetch-from-product-page). Never throws —
 // a dead service is a message, not a broken screen.
 
+import { extractProduct } from './extract.js'
+
 export async function fetchProduct(url) {
   try {
     const res = await fetch('/api/scrape', {
@@ -22,6 +24,133 @@ export async function fetchProduct(url) {
   } catch {
     return { ok: false, error: 'Couldn’t reach the fetch service — enter it by hand.' }
   }
+}
+
+// ---------- the second way to read a product page ----------
+// Cloudflare's egress is refused by most Shopify storefronts — Stone Glacier
+// answers a bare bot user-agent from a laptop and blocks a polite one from a
+// Worker, so the block is the network, not what we call ourselves (measured
+// 2026-07-29). The person pasting the link is not blocked: their browser, on
+// their own connection, is just a browser. Shopify serves storefront pages
+// with permissive CORS, so the page they pasted can be read here and handed to
+// the SAME extractor the Worker uses.
+//
+// This is not a way around a wall. It is a normal cross-origin read the site
+// explicitly allows, of a page the person is looking at, one at a time. Their
+// cookies are never sent (credentials: 'omit'), so nothing is fetched as them,
+// and the HTML is only ever string-matched — never parsed into the document.
+
+// A product page's facts live in its <head>; a megabyte of body markup is
+// someone's phone data. The read stops at the cap instead of paying for the
+// rest (HMG's page is 1.2 MB).
+const MAX_BROWSER_BYTES = 600_000
+
+async function readCapped(res, max) {
+  const reader = res.body?.getReader()
+  // No stream to meter (a mocked or already-buffered response): the bytes are
+  // paid for either way, so this only bounds what the extractor has to chew.
+  if (!reader) return (await res.text()).slice(0, max)
+  const decoder = new TextDecoder()
+  let out = ''
+  let bytes = 0
+  try {
+    while (bytes < max) {
+      const { done, value } = await reader.read()
+      if (done) {
+        out += decoder.decode()   // flush any character the last chunk began
+        break
+      }
+      // The cap has to hold against ONE chunk too: a server is free to hand
+      // over the whole megabyte at once, and counting after the fact would
+      // have already paid for it (Codex, 2026-07-29 — measured 1.86 MB read
+      // against a 600 KB cap on a stream of three-byte characters).
+      const room = max - bytes
+      const slice = value.byteLength > room ? value.subarray(0, room) : value
+      bytes += slice.byteLength
+      // stream: true so a character split across two chunks is held back and
+      // finished by the next one, instead of landing as a replacement char.
+      out += decoder.decode(slice, { stream: true })
+    }
+  } finally {
+    await reader.cancel().catch(() => {})
+  }
+  return out
+}
+
+export async function fetchProductInBrowser(url) {
+  try {
+    // Only what a product page can be. A javascript:/data: URL here would be
+    // the user's own paste, but there is no reason to hand one to fetch.
+    const target = new URL(url)
+    if (target.protocol !== 'https:' && target.protocol !== 'http:') return null
+    const res = await fetch(target.href, {
+      credentials: 'omit',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!res.ok) return null
+    if (!(res.headers.get('content-type') ?? '').includes('html')) return null
+    const product = extractProduct(await readCapped(res, MAX_BROWSER_BYTES))
+    // A page the extractor called a bot wall or a dead link is not a product,
+    // even when something on it parses. A Cloudflare interstitial carrying
+    // "Weight: 18.9 oz" in its body would otherwise hand that number to a pack
+    // total — the Worker already refuses this, and so must this leg (Codex,
+    // 2026-07-29).
+    if (product.problem) return null
+    const found = ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].some(k => product[k] !== null)
+    return found ? { ok: true, found: true, ...product, viaBrowser: true } : null
+  } catch {
+    // CORS refusal, offline, timeout — all just "this way didn't work".
+    return null
+  }
+}
+
+const PRODUCT_FIELDS = ['name', 'brand', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz']
+
+// Everything the server found, plus what it left blank and the browser could
+// see. The server's own values win: it may be answering from the shared
+// catalog, and a captured weight outranks a fresh guess at the same page.
+function fillBlanks(server, browser) {
+  const out = { ...server }
+  const tookNutrition = []
+  for (const k of PRODUCT_FIELDS) {
+    if (out[k] == null && browser[k] != null) {
+      out[k] = browser[k]
+      if (k !== 'name' && k !== 'brand' && k !== 'weightOz') tookNutrition.push(k)
+    }
+  }
+  if (!out.weightOptions?.length && browser.weightOptions?.length) out.weightOptions = browser.weightOptions
+  // Numbers borrowed from the browser carry the browser's per-serving caution,
+  // or the UI would state them as whole-item without saying so.
+  if (tookNutrition.length && browser.perServing) out.perServing = true
+  return out
+}
+
+// Did this answer the question a packer actually asked? A name alone does not:
+// a soft wall can answer 200 with nothing but a <title>, which reads as
+// "found" while telling us nothing (Codex, 2026-07-29). A page that states
+// SEVERAL weights has answered — it narrowed them honestly, and re-reading the
+// same page in the browser would only narrow them the same way, which for
+// packs and quilts is the common case.
+const answered = r => r.weightOz !== null || r.weightOptions?.length > 0
+
+// The server first: it holds the shared catalog, so a product someone has
+// already looked up answers instantly and costs no one a fetch. The browser is
+// the rescue, and it runs whenever the server came back short — which, since
+// the egress blocks, is most storefronts. When both fail the server's message
+// is what the user sees, because it is the one that knows whether the page was
+// blocked, gone, or simply not a product page.
+export async function lookupProduct(url, { server = fetchProduct, browser = fetchProductInBrowser, onRetry } = {}) {
+  const first = await server(url)
+  // A catalog hit only exists because a real weight was captured once, so it
+  // is already the best answer available, and free.
+  if (first.ok && first.catalog) return first
+  if (first.ok && first.found && answered(first)) return first
+  onRetry?.()
+  const second = await browser(url)
+  if (!second) return first
+  if (!first.ok || !first.found) return second
+  return fillBlanks(first, second)
 }
 
 // Sheet import (issue #26): a pasted Google Sheets link comes back as CSV.
@@ -80,7 +209,9 @@ export function wireScrape(form, fields) {
     if (!url) { say('Paste a product URL first.'); return }
     btn.disabled = true
     say('Fetching…')
-    const data = await fetchProduct(url)
+    // The browser leg can take a few seconds on a big storefront page, so it
+    // says so rather than looking hung.
+    const data = await lookupProduct(url, { onRetry: () => say('Reading it from your browser…') })
     btn.disabled = false
     // A fetch that failed reads as a failure — it used to sit in the same grey
     // as "Filled name, weight.", which is how a bot wall passed for a result.

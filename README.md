@@ -6,8 +6,11 @@ grocery list, per-day pack plan, gear kits, and a readiness checklist.
 **Live:** https://packout.pages.dev
 
 - No build step. Run locally: `python3 -m http.server 8321` → http://localhost:8321/
-  (anything that talks to the server — sign-in, state sync, destination lookup,
-  product-page fetch — needs `npx wrangler pages dev .` instead)
+  (anything that talks to the server — sign-in, state sync, destination lookup —
+  needs `npx wrangler pages dev .` instead). Product-page fetch has two legs:
+  the `/api/scrape` endpoint, which needs wrangler, and a browser-side read that
+  works from any static server — most storefronts refuse Cloudflare's egress and
+  answer the browser instead, so the second leg is the one that usually lands.
 - Tests: `npm test` (engine seam only, `node --test`)
 - Sign in with Google — trips live in your profile and follow you across devices;
   localStorage is the per-device cache. Export/Import JSON from the Trips screen
