@@ -12,8 +12,11 @@ export async function fetchProduct(url) {
     })
     if (res.status === 401) return { ok: false, error: 'Sign in to fetch product pages.' }
     const data = await res.json().catch(() => null)
+    // The server's message already names the problem AND the next step —
+    // appending a blanket "Enter it by hand" to it produced advice that
+    // contradicted itself on the ones worth retrying.
     if (!res.ok || !data) {
-      return { ok: false, error: `${data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}).`} Enter it by hand.` }
+      return { ok: false, error: data?.error ?? `Couldn’t fetch that page (HTTP ${res.status}) — enter it by hand.` }
     }
     return { ok: true, ...data }
   } catch {
@@ -79,7 +82,9 @@ export function wireScrape(form, fields) {
     say('Fetching…')
     const data = await fetchProduct(url)
     btn.disabled = false
-    if (!data.ok) { say(data.error); return }
+    // A fetch that failed reads as a failure — it used to sit in the same grey
+    // as "Filled name, weight.", which is how a bot wall passed for a result.
+    if (!data.ok) { say(data.error, true); return }
     const filled = fields.filter(name => {
       const input = form.elements[name]
       if (!input || input.value !== '' || data[name] == null) return false
@@ -88,7 +93,8 @@ export function wireScrape(form, fields) {
     })
     if (!filled.length) {
       if (weightsAmbiguous(form, data, say)) return
-      say(data.found ? 'Nothing new to fill — the blank fields weren’t on that page.' : 'No product data on that page — enter it by hand.')
+      if (data.found) say('Nothing new to fill — the blank fields weren’t on that page.')
+      else say('That page publishes no product data — enter it by hand.', true)
       return
     }
     const nutrition = filled.some(k => ['kcal', 'carbsG', 'fatG', 'proteinG'].includes(k))

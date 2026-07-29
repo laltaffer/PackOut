@@ -66,8 +66,121 @@ function metaContent(html, property) {
   return m ? decode(m[2]).trim() || null : null
 }
 
+// ---------- brand ----------
+// The maker, never the storefront. A product name without its brand is the
+// wrong name for a pack list — "WOOBIE" and "R3 7000" mean nothing on a shelf
+// next to "20-Degree Quilt" (Lawrence 2026-07-29: the brand is dropped most of
+// the time). The brand must come from the ITEM, because the site is not it:
+// REI sells Osprey packs and its own REI Co-op packs from identical URLs, and
+// Garage Grown Gear sells forty makers' gear. So og:site_name is deliberately
+// never consulted — on a multi-brand retailer it names the store, and stamping
+// the store on someone else's gear is a fact this app would be inventing.
+
+// A brand is a name, not a sentence. Storefronts fill the field with their
+// own signage — Hoyt's says "Hoyt- Online Clothing and Gear Store", which
+// would ride into the library on every item they sell. The maker is the part
+// before the punctuation, so the tail is cut at a dash, pipe or comma that has
+// whitespace on one side. Hyphens inside a word are untouched, which is what
+// keeps Therm-a-Rest whole.
+const BRAND_TAIL = /\s*[-–—|]\s+|,\s+/
+
+// schema.org brand: { "@type": "Brand", name } — but Stone Glacier ships
+// "@type": "Thing" and others a bare string, so the type is ignored and only
+// the name is read. An array takes its first entry.
+function brandName(b) {
+  if (Array.isArray(b)) return brandName(b[0])
+  const raw = b && typeof b === 'object' ? b.name : b
+  const s = String(raw ?? '').trim().split(BRAND_TAIL)[0].trim()
+  return s && s.length <= 60 ? s : null
+}
+
+// Brand-bearing JSON-LD nodes. Wider than collectProducts on purpose:
+// ProductGroup is where a variant-heavy page states its brand (Kifaru's
+// WOOBIE, REI's Osprey packs) and it is read HERE ONLY, for the brand. Letting
+// groups into the fields pipeline would also hand over their weights, which
+// are per-variant and stated as such ("S/M: 4 lbs. 10 oz.") — a number that
+// belongs to one size masquerading as the item's.
+const BRANDISH = /^(Product|ProductGroup|ProductModel|IndividualProduct)$/i
+const isBrandish = t => Array.isArray(t) ? t.some(isBrandish) : BRANDISH.test(typeName(t))
+
+function collectBrands(node, out) {
+  if (Array.isArray(node)) { for (const n of node) collectBrands(n, out); return }
+  if (!node || typeof node !== 'object') return
+  if (isBrandish(node['@type'])) {
+    const b = brandName(node.brand ?? node.manufacturer)
+    if (b) out.push(b)
+    return
+  }
+  collectBrands(node['@graph'] ?? null, out)
+  collectBrands(node.mainEntity ?? null, out)
+}
+
+// Tokens for comparing a brand or a name against page text — case,
+// punctuation and spacing are noise ("20-Degree" vs "20 degree").
+const tokens = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean)
+
+// Shopify's own product JSON carries `vendor`, which IS the maker — Exo and
+// Peak Refuel publish no schema.org brand at all, and vendor is the only
+// place their name appears as data rather than décor. A page that names
+// several vendors is a page listing several makers' products (recommendation
+// rails on multi-brand stores), and nothing in the markup says which one is
+// the item — so that page gets no brand rather than a coin flip.
+const VENDOR = /"vendor"\s*:\s*("(?:[^"\\]|\\.)*")/g
+
+function shopifyVendor(html) {
+  let only = null
+  for (const m of html.matchAll(VENDOR)) {
+    let v
+    try { v = String(JSON.parse(m[1])).trim() } catch { continue }
+    if (!v || v.length > 60) continue
+    if (only === null) only = v
+    else if (only.toLowerCase() !== v.toLowerCase()) return null
+  }
+  return only
+}
+
+// …unless the page says which vendor is the item. Shopify writes the product
+// as {"title":"…","vendor":"…"}, so the vendor sitting right behind the name
+// we already have is the maker of the thing on screen. That is what rescues
+// the big multi-brand archery and outdoor retailers: Lancaster names STAN
+// Outdoors, Easton Archery and its own house label on one release's page, and
+// only the first of those is the release.
+const NEAR = 200
+const TITLE_KEY = /"(?:untranslatedTitle|title|name)"\s*:/
+
+function vendorForName(html, name) {
+  const wanted = tokens(name ?? '').join(' ')
+  if (!wanted) return null
+  for (const m of html.matchAll(VENDOR)) {
+    // Both must be in the run of text behind the vendor: a title field, and
+    // this page's name inside it. Nearness alone is not enough — a page's own
+    // <title> can sit a few hundred characters from an unrelated inline
+    // script, and that coincidence would name the wrong maker.
+    const before = html.slice(Math.max(0, m.index - NEAR), m.index)
+    if (!TITLE_KEY.test(before)) continue
+    if (!tokens(before).join(' ').includes(wanted)) continue
+    try { return String(JSON.parse(m[1])).trim() } catch { return null }
+  }
+  return null
+}
+
+// The name a packer wants leads with who made it. Prefix only when the name
+// does not already say so: pages spell the brand out mid-title ("… by
+// Alpenglow Gear"), tack the store on the end ("… | Peak Refuel"), or lead
+// with a shorter form of it ("Kifaru Woobie" against a "Kifaru Intl" brand) —
+// and "Kifaru Intl Kifaru Woobie" is worse than what we started with.
+function withBrand(name, brand) {
+  if (!name || !brand) return name
+  const n = tokens(name), b = tokens(brand)
+  if (!n.length || !b.length) return name
+  if (` ${n.join(' ')} `.includes(` ${b.join(' ')} `)) return name
+  if (n[0] === b[0]) return name
+  return `${brand} ${name}`
+}
+
 function fieldsOf(product) {
-  const out = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, weightOptions: [], perServing: false }
+  const out = { name: null, brand: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, weightOptions: [], perServing: false }
+  out.brand = brandName(product.brand ?? product.manufacturer)
   out.name = String(product.name ?? '').trim() || null
   out.weightOz = weightOz(product.weight)
   const n = product.nutrition
@@ -143,6 +256,23 @@ export function labelledWeights(text) {
   return found
 }
 
+// ---------- pages that are not a product ----------
+// A bot wall, a dead link and a parked domain all answer with a perfectly
+// valid page carrying a title and nothing else, so the title becomes the gear:
+// Lancaster's Cloudflare interstitial files as "Just a moment…", Mountain
+// House's dead link as "404 Not Found" (both seen 2026-07-29). A name we know
+// is not a product is worse than no name — and the two cases need different
+// advice, because one will never work and the other is the wrong link.
+const BLOCKED_MARKER = /challenges\.cloudflare\.com|_incapsula_|distil_r_captcha|perimeterx|px-captcha/i
+const BLOCKED_NAME = /^(?:just a moment|attention required|access denied|forbidden|robot check|are you a human|pardon our interruption|checking your browser|security check)\b/i
+const DEAD_MARKER = /domain (?:may be|is) for sale|buy this domain/i
+const DEAD_NAME = /^(?:404\b|error 404|page not found|not found|this page (?:isn.t|is not) available)/i
+
+const problemOf = (html, name) =>
+  BLOCKED_MARKER.test(html) || BLOCKED_NAME.test(name ?? '') ? 'blocked'
+    : DEAD_MARKER.test(html) || DEAD_NAME.test(name ?? '') ? 'dead'
+      : null
+
 const richness = f => ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].filter(k => f[k] !== null).length
 
 export function extractProduct(html) {
@@ -152,20 +282,34 @@ export function extractProduct(html) {
   // (related items, widgets) beside the real one — the richest candidate
   // wins, first one breaking ties.
   const candidates = []
+  const brands = []
   for (const m of src.matchAll(/<script[^>]*\btype\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
-    try { collectProducts(JSON.parse(m[1]), candidates) } catch { continue }
+    let doc
+    try { doc = JSON.parse(m[1]) } catch { continue }
+    collectProducts(doc, candidates)
+    collectBrands(doc, brands)
   }
   let best = null
   for (const c of candidates.map(fieldsOf)) {
     if (!best || richness(c) > richness(best)) best = c
   }
-  const out = best ?? { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
+  const out = best ?? { name: null, brand: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
 
   if (!out.name) out.name = metaContent(src, 'og:title')
   if (!out.name) {
     const t = src.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
     out.name = t ? decode(t[1]).trim() || null : null
   }
+  // A bot wall or a dead link keeps its verdict and loses its name, so no
+  // caller can file the interstitial as an item. Only a page that published
+  // no product data at all is judged this way: a real listing for a "Security
+  // Check Padlock", or a shop loading a Turnstile widget, says what it is in
+  // JSON-LD and is taken at its word.
+  out.problem = best === null ? problemOf(src, out.name) : null
+  if (out.problem) out.name = null
+  // The name is settled first because the vendor lookup is anchored to it.
+  out.brand ??= brands[0] ?? brandName(vendorForName(src, out.name) ?? shopifyVendor(src))
+  out.name = withBrand(out.name, out.brand)
   // Structured weight is authoritative when a site publishes it; the spec text
   // is the fallback, which in practice is the only place it ever appears.
   // A page that states exactly one weight answers the question; a page that

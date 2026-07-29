@@ -390,7 +390,12 @@ export function renderKitQuestions(trip) {
     status.textContent = 'Fetching…'
     const data = await fetchProduct(url)
     btn.disabled = false
-    if (!data.ok) { status.textContent = data.error; return }
+    if (!data.ok) {
+      status.textContent = data.error
+      status.classList.add('field-error')
+      return
+    }
+    status.classList.remove('field-error')
     const nameInput = app.querySelector(`[data-detail="${CSS.escape(rowId)}:name"]`)
     if (data.name && nameInput && !nameInput.value) {
       nameInput.value = data.name

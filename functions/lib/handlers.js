@@ -153,6 +153,21 @@ const catalogResponse = hit => {
 // (zero, negative) must not become a canonical fact that blocks re-scraping.
 const publishableWeight = w => typeof w === 'number' && Number.isFinite(w) && w > 0
 
+// What a failure means to the person who pasted the link, which is the only
+// thing worth saying. Three outcomes need three different sentences: this
+// store will never answer a robot (so stop retrying and type it), the link is
+// wrong (so look at it again), or the site is having a bad day (so come back).
+// "The page answered 403." told nobody which of those they were in.
+const BLOCKED_MSG = 'That store blocks automated lookups — enter the item by hand.'
+const DEAD_MSG = 'That page is gone — check the link.'
+
+function httpMessage(status) {
+  if (status === 401 || status === 403 || status === 429) return BLOCKED_MSG
+  if (status === 404 || status === 410) return DEAD_MSG
+  if (status >= 500) return `That store’s site is failing right now (${status}) — try again later.`
+  return `That page answered ${status} — enter the item by hand.`
+}
+
 export async function handleScrape({ request, env, fetcher = fetch, now = Date.now() }) {
   const s = await session(request, env, now)
   if (!s) return json({ error: 'Signed out.' }, 401)
@@ -173,7 +188,12 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
     let hit = null
     try { hit = await env.PACKOUT_KV.get(catalogKey, 'json') } catch { /* catalog down ≠ scrape down */ }
     if (hit) {
-      if (now - (hit.at ?? 0) < CATALOG_FRESH_MS) return catalogResponse(hit)
+      // Entries captured before brands were extracted hold a brandless name.
+      // Serving one would keep handing back the old answer for a week, so a
+      // record with no brand key is treated as stale — re-scraped now, still
+      // the fallback if the page has since died.
+      const branded = hit.brand !== undefined
+      if (branded && now - (hit.at ?? 0) < CATALOG_FRESH_MS) return catalogResponse(hit)
       stale = hit
     }
   }
@@ -192,21 +212,21 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
         headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)', accept: 'text/html' },
       })
     } catch {
-      return fallback(json({ error: 'Could not reach that page.' }, 502))
+      return fallback(json({ error: 'Couldn’t reach that site — check the link.' }, 502))
     }
     const location = res.headers.get('location')
     if (res.status < 300 || res.status >= 400 || !location) break
-    if (hop >= 3) return fallback(json({ error: 'Too many redirects.' }, 502))
+    if (hop >= 3) return fallback(json({ error: 'That link keeps redirecting — open it in a browser and paste where it lands.' }, 502))
     let next
-    try { next = new URL(location, href) } catch { return fallback(json({ error: 'Could not reach that page.' }, 502)) }
+    try { next = new URL(location, href) } catch { return fallback(json({ error: 'Couldn’t reach that site — check the link.' }, 502)) }
     if (next.protocol !== 'https:' && next.protocol !== 'http:') return fallback(json({ error: 'Only http(s) URLs.' }, 400))
     if (blockedHost(next.hostname)) return fallback(json({ error: 'That host is not allowed.' }, 400))
     if (blockedPort(next)) return fallback(json({ error: 'That port is not allowed.' }, 400))
     href = next.href
   }
-  if (!res.ok) return fallback(json({ error: `The page answered ${res.status}.` }, 502))
+  if (!res.ok) return fallback(json({ error: httpMessage(res.status) }, 502))
   if (!(res.headers.get('content-type') ?? '').includes('html')) {
-    return fallback(json({ error: 'Not an HTML page.' }, 422))
+    return fallback(json({ error: 'That link isn’t a web page — paste the product page’s URL.' }, 422))
   }
   const html = await readCapped(res, MAX_FETCH_BYTES)
 
@@ -214,12 +234,16 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
   // failure is just "nothing found".
   let product
   try { product = extractProduct(html) } catch {
-    product = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false }
+    product = { name: null, kcal: null, proteinG: null, carbsG: null, fatG: null, weightOz: null, perServing: false, problem: null }
   }
   const found = ['name', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz'].some(k => product[k] !== null)
   // A page that lost its structured data is a worse answer than the facts
   // we already captured from it.
   if (!found && stale) return catalogResponse(stale)
+  // A bot wall answers 200 with a challenge page, so the status code said
+  // nothing — the page itself is what names the problem.
+  if (product.problem === 'blocked') return json({ error: BLOCKED_MSG }, 422)
+  if (product.problem === 'dead') return json({ error: DEAD_MSG }, 422)
 
   // Publish to the shared catalog only when the scrape answered the question
   // the catalog exists for (a real weight). Failures never fail the scrape.
