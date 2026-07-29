@@ -182,7 +182,41 @@ worse than a stale cache.
 
 ## Status
 
-### Where things stand (2026-07-28)
+### Where things stand (2026-07-29)
+2026-07-29 (shipped): **URL import carries the brand, and a failed fetch names its
+failure** — LIVE at build c4a01e6. Lawrence: "we are dropping the brand name most of
+the time." The brand is read from the ITEM, never the site — REI sells Osprey packs and
+its own Co-op packs from identical URLs, so `og:site_name` is deliberately never
+consulted. Order: JSON-LD `brand`/`manufacturer` on any Product-ish node (ProductGroup
+included, and read there for the BRAND ONLY so per-variant weights like REI's "S/M: 4
+lbs. 10 oz." never pass as the item's), then Shopify `vendor` — anchored to the vendor
+sitting behind a title field matching the page's own name, which is what pulls STAN
+Outdoors off a Lancaster page that also names Easton and its house label. Several
+vendors with no such anchor → no brand, never a coin flip. Storefront signage is cut at
+a whitespace-adjacent dash/pipe/comma ("Hoyt- Online Clothing and Gear Store" → Hoyt;
+Therm-a-Rest survives). Prefix is skipped when the name already says the brand or leads
+with a shorter form. Catalog entries without a `brand` key re-scrape rather than serve a
+brandless name for a week. Second half: bot walls and dead links were *succeeding* —
+Lancaster's Cloudflare interstitial filed as "Just a moment…", Mountain House's dead
+link as "404 Not Found". Such a page loses its name and keeps a verdict, and only a page
+with no product data at all can be judged that way. 403/429 → "That store blocks
+automated lookups", 404/410 → "That page is gone", 5xx → "failing right now… try again
+later", DNS → "Couldn't reach that site", non-HTML → "paste the product page's URL";
+failures now render as errors, not the same grey as "Filled name, weight." 329 tests.
+
+**Found during production verification — the fetch feature's real reach is much
+narrower than a laptop suggests.** From Cloudflare Workers egress, Shopify-hosted stores
+refuse us: Stone Glacier, Peak Refuel, Exo, HMG, Mathews, Hoyt, TRU-Ball, Lancaster,
+Argali, Aziak, Garage Grown Gear all answered "blocked" from production while every one
+of them answered a `wrangler pages dev` run on Lawrence's Mac minutes earlier. Kifaru
+and Spot Hogg (BigCommerce) got through. This is pre-existing — the shipping commit
+changed no fetch header, UA, or redirect behaviour — and it was invisible until the
+first signed-in production test. The catalog softens it (captured facts still answer,
+and a blocked re-scrape falls back to the stored copy), but new lookups mostly fail.
+**Open decision:** the outbound UA is `PackOutBot/1.0`, an explicit robot declaration —
+a browser UA got 200 from Garage Grown Gear where PackOutBot got 403. Changing it is an
+identity call, Lawrence's to make, not a silent fix.
+
 2026-07-28 (shipped): **Google Sheet import (issue #26)** — LIVE at build 95bd7df.
 Paste a link-shared Google Sheet on the dashboard ("Bring your own list" → `#/import`):
 `/api/sheet` (session-gated, fixed docs.google.com export host — no SSRF surface,
