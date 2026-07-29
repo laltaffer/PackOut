@@ -3,7 +3,7 @@
 // verifier. The thin files under functions/api/ wire these to Pages routes.
 
 import { createSession, verifySession, sessionCookie, clearedCookie, readCookie, COOKIE_NAME } from './session.js'
-import { extractProduct } from '../../js/extract.js'
+import { extractProduct, SANE_MIN_OZ, SANE_MAX_OZ, MAX_WEIGHT_OPTIONS } from '../../js/extract.js'
 import { lookupPlace } from './place.js'
 import { validateImport } from '../../js/engine.js'
 
@@ -277,6 +277,72 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
     } catch { /* the user still gets their scrape */ }
   }
   return json({ found, ...product })
+}
+
+// ---------- the catalog grows from browser reads too (2026-07-29) ----------
+// Lawrence: "if the product is coming from a URL i think it should go into the
+// shared library." It has to, now: the Worker is refused by most storefronts,
+// so if only Worker reads could publish, the shared catalog would stop growing
+// the day the blocks started.
+//
+// The difference from the scrape path is trust. A browser is a client, and a
+// client can send anything, so nothing it says is taken on faith: only these
+// fields exist, only inside the ranges the extractor itself enforces, and only
+// from a signed-in session. Nothing about WHO sent it is stored — the record is
+// shared, and objective facts about a product need no author.
+const num = (v, min, max) =>
+  typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : null
+const str = (v, max) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null
+
+export function cleanProduct(p) {
+  if (!p || typeof p !== 'object') return null
+  // A page the extractor called a bot wall or a dead link is not a product, and
+  // must not become one for everybody.
+  if (p.problem) return null
+  const out = {
+    name: str(p.name, 200),
+    brand: str(p.brand, 60),
+    kcal: num(p.kcal, 1, 20_000),
+    proteinG: num(p.proteinG, 0, 2000),
+    carbsG: num(p.carbsG, 0, 2000),
+    fatG: num(p.fatG, 0, 2000),
+    weightOz: num(p.weightOz, SANE_MIN_OZ, SANE_MAX_OZ),
+    weightOptions: Array.isArray(p.weightOptions)
+      ? p.weightOptions.map(w => num(w, SANE_MIN_OZ, SANE_MAX_OZ)).filter(w => w !== null).slice(0, MAX_WEIGHT_OPTIONS)
+      : [],
+    perServing: p.perServing === true,
+  }
+  // Worth sharing only if it tells the next person something.
+  if (!out.name && out.weightOz === null && !out.weightOptions.length) return null
+  return out
+}
+
+export async function handleCatalogPut({ request, env, now = Date.now() }) {
+  const s = await session(request, env, now)
+  if (!s) return json({ error: 'Signed out.' }, 401)
+  let body
+  try { body = await request.json() } catch { return json({ error: 'Bad request.' }, 400) }
+  let target
+  try { target = new URL(String(body?.url ?? '')) } catch { return json({ error: 'Not a valid URL.' }, 400) }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') return json({ error: 'Only http(s) URLs.' }, 400)
+  if (blockedHost(target.hostname) || blockedPort(target)) return json({ error: 'That host is not allowed.' }, 400)
+  const clean = cleanProduct(body?.product)
+  if (!clean) return json({ error: 'Nothing worth sharing.' }, 422)
+  if (!env.PACKOUT_KV) return json({ ok: true, stored: false })
+
+  const key = `catalog:${normalizeProductUrl(target)}`
+  try {
+    // A captured weight outranks one that has none: two people reading the same
+    // page must never trade a real number for a blank.
+    const existing = await env.PACKOUT_KV.get(key, 'json')
+    if (existing && publishableWeight(existing.weightOz) && !publishableWeight(clean.weightOz)) {
+      return json({ ok: true, stored: false })
+    }
+    await env.PACKOUT_KV.put(key, JSON.stringify({ ...clean, sourceUrl: target.href, at: now, via: 'browser' }))
+  } catch {
+    return json({ ok: true, stored: false })   // a full catalog is not the user's problem
+  }
+  return json({ ok: true, stored: true })
 }
 
 // A pasted Google Sheets link names only an id and a tab — the fetch URL is

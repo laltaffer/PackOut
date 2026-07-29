@@ -108,6 +108,29 @@ export async function fetchProductInBrowser(url) {
   }
 }
 
+// A product read here joins the shared catalog, so the next person to paste
+// that link gets it without anyone fetching anything (Lawrence 2026-07-29: "if
+// the product is coming from a URL I think it should go into the shared
+// library"). It has to work this way now — the Worker is refused by most
+// storefronts, so if only Worker reads could publish, the catalog would have
+// stopped growing the day the blocks started.
+//
+// Fire and forget, deliberately: the lookup has already succeeded and the user
+// is looking at their answer. A catalog that is full, down, or unreachable is
+// not their problem, and must never turn a good lookup into a red message.
+export function shareToCatalog(url, product) {
+  const { ok, found, catalog, viaBrowser, ...facts } = product
+  try {
+    fetch('/api/catalog', {
+      method: 'POST',
+      credentials: 'same-origin',
+      keepalive: true,          // survives the user navigating away mid-flight
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url, product: facts }),
+    }).catch(() => {})
+  } catch { /* no network, no share */ }
+}
+
 const PRODUCT_FIELDS = ['name', 'brand', 'kcal', 'proteinG', 'carbsG', 'fatG', 'weightOz']
 
 // Everything the server found, plus what it left blank and the browser could
@@ -143,15 +166,21 @@ const answered = r => r.weightOz !== null || r.weightOptions?.length > 0
 // the egress blocks, is most storefronts. When both fail the server's message
 // is what the user sees, because it is the one that knows whether the page was
 // blocked, gone, or simply not a product page.
-export async function lookupProduct(url, { server = fetchProduct, browser = fetchProductInBrowser, onRetry } = {}) {
+export async function lookupProduct(url, {
+  server = fetchProduct, browser = fetchProductInBrowser, share = shareToCatalog, onRetry,
+} = {}) {
   const first = await server(url)
-  // A catalog hit only exists because a real weight was captured once, so it
-  // is already the best answer available, and free.
-  if (first.ok && first.catalog) return first
+  // Catalog hits are not automatically terminal any more: now that a browser
+  // read can publish a name and brand without a weight, a hit may be the
+  // partial one somebody else filed, and the second look is what upgrades it.
   if (first.ok && first.found && answered(first)) return first
   onRetry?.()
   const second = await browser(url)
   if (!second) return first
+  // What this browser just read is what the next person gets for free. Guarded
+  // here rather than trusted to the callee: fire-and-forget is the intent of
+  // this call, so a broken share must not cost the user the answer they have.
+  try { share(url, second) } catch { /* the catalog can wait */ }
   if (!first.ok || !first.found) return second
   return fillBlanks(first, second)
 }

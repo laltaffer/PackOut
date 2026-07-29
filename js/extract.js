@@ -313,8 +313,8 @@ const WEIGHT_LABEL = /\b(?:trail|packed|minimum|min|total|item|product|carry|dry
 const WEIGHT_VALUE = /(\d[\d.,]*)\s*(oz|ounces?|lbs?|pounds?|kg|g|grams?)\b(?:[\s,]*(\d[\d.,]*)\s*(oz|ounces?)\b)?/i
 // A backcountry item under a twentieth of an ounce or over 125 lb is a parse
 // error, not a product.
-const SANE_MIN_OZ = 0.05
-const SANE_MAX_OZ = 2000
+export const SANE_MIN_OZ = 0.05
+export const SANE_MAX_OZ = 2000
 
 // Every distinct weight the page states, in the order it states them. Plural
 // on purpose: a tripod page lists its long and short columns, a pack page
@@ -322,7 +322,7 @@ const SANE_MAX_OZ = 2000
 // says which one is on your back. Picking the first would be confidently
 // wrong — the same silent-error failure as trusting shipping weight — so the
 // caller is handed the choice instead.
-const MAX_WEIGHT_OPTIONS = 6
+export const MAX_WEIGHT_OPTIONS = 6
 
 export function labelledWeights(text) {
   const found = []

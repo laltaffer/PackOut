@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { handleScrape, normalizeProductUrl } from '../functions/lib/handlers.js'
+import { handleScrape, handleCatalogPut, cleanProduct, normalizeProductUrl } from '../functions/lib/handlers.js'
 import { createSession, COOKIE_NAME } from '../functions/lib/session.js'
 
 const SECRET = 'test-secret-0123456789abcdef0123456789abcdef'
@@ -239,4 +239,144 @@ test('captured facts still win over a bot wall', async () => {
   const body = await res.json()
   assert.equal(body.weightOz, 40)
   assert.equal(body.catalog, true)
+})
+
+// ---------- the catalog grows from browser reads (2026-07-29) ----------
+// Lawrence: "if the product is coming from a URL i think it should go into the
+// shared library." It has to: the Worker is refused by most storefronts, so a
+// catalog only the Worker can write is a catalog that stopped growing. The
+// difference is trust — a browser is a client, and a client can send anything.
+
+const catalogReq = async (body, { authed = true } = {}) => {
+  const headers = { 'content-type': 'application/json' }
+  if (authed) {
+    const token = await createSession({ sub: 'g-123', name: 'Lawrence' }, SECRET, NOW)
+    headers.cookie = `${COOKIE_NAME}=${token}`
+  }
+  return new Request('https://packout.pages.dev/api/catalog', {
+    method: 'POST', headers, body: JSON.stringify(body),
+  })
+}
+
+const BROWSER_FACTS = {
+  name: 'Stone Glacier R3 7000', brand: 'Stone Glacier', kcal: null, proteinG: null,
+  carbsG: null, fatG: null, weightOz: null, weightOptions: [32, 80], perServing: false, problem: null,
+}
+
+test('catalog: a browser read publishes under the canonical key', async () => {
+  const kv = fakeKV()
+  const res = await handleCatalogPut({
+    request: await catalogReq({ url: 'https://www.stoneglacier.com/products/r3-7000?utm_source=x', product: BROWSER_FACTS }),
+    env: env(kv), now: NOW,
+  })
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).stored, true)
+  const key = 'catalog:' + normalizeProductUrl(new URL('https://www.stoneglacier.com/products/r3-7000'))
+  const stored = JSON.parse(kv.store.get(key))
+  assert.equal(stored.name, 'Stone Glacier R3 7000')
+  assert.deepEqual(stored.weightOptions, [32, 80])
+  assert.equal(stored.via, 'browser', 'provenance is recorded')
+  assert.equal(stored.at, NOW)
+  assert.equal('sub' in stored, false, 'a shared record names no author')
+})
+
+test('catalog: signed out cannot write', async () => {
+  const kv = fakeKV()
+  const res = await handleCatalogPut({
+    request: await catalogReq({ url: 'https://example.com/p', product: BROWSER_FACTS }, { authed: false }),
+    env: env(kv), now: NOW,
+  })
+  assert.equal(res.status, 401)
+  assert.equal(kv.store.size, 0)
+})
+
+test('catalog: nothing a client sends is taken on faith', () => {
+  // Only known fields, only in the extractor's own ranges.
+  const clean = cleanProduct({
+    name: 'x'.repeat(500), brand: 'y'.repeat(500), kcal: -5, proteinG: 'lots',
+    weightOz: 99_999, weightOptions: [12, 'nope', -1, 5000, 18.9], perServing: 'yes',
+    admin: true, id: 'gc-hijack', favorite: true,
+  })
+  assert.equal(clean.name.length, 200)
+  assert.equal(clean.brand.length, 60)
+  assert.equal(clean.kcal, null, 'a negative calorie count is not a fact')
+  assert.equal(clean.proteinG, null)
+  assert.equal(clean.weightOz, null, '99,999 oz is not a backcountry item')
+  assert.deepEqual(clean.weightOptions, [12, 18.9], 'junk and out-of-range weights drop out')
+  assert.equal(clean.perServing, false, 'a truthy string is not true')
+  assert.equal('admin' in clean, false)
+  assert.equal('id' in clean, false, 'a client cannot choose a catalog id')
+  assert.equal('favorite' in clean, false)
+})
+
+test('catalog: a bot wall cannot be published as a product', async () => {
+  const kv = fakeKV()
+  const res = await handleCatalogPut({
+    request: await catalogReq({
+      url: 'https://lancasterarchery.com/products/x',
+      product: { ...BROWSER_FACTS, problem: 'blocked', weightOz: 18.9 },
+    }),
+    env: env(kv), now: NOW,
+  })
+  assert.equal(res.status, 422)
+  assert.equal(kv.store.size, 0, 'an interstitial must not become everyone’s idea of that product')
+})
+
+test('catalog: an empty read is not worth sharing', async () => {
+  const kv = fakeKV()
+  const res = await handleCatalogPut({
+    request: await catalogReq({ url: 'https://example.com/p', product: { name: null, weightOz: null, weightOptions: [] } }),
+    env: env(kv), now: NOW,
+  })
+  assert.equal(res.status, 422)
+  assert.equal(kv.store.size, 0)
+})
+
+test('catalog: a weightless read never overwrites a captured weight', async () => {
+  // Two people read the same page; one of them got the spec table and one did
+  // not. The number must survive.
+  const key = 'catalog:' + normalizeProductUrl(new URL('https://kifaru.net/products/woobie'))
+  const kv = fakeKV({ [key]: JSON.stringify({ name: 'Kifaru Intl WOOBIE', brand: 'Kifaru Intl', weightOz: 21, at: NOW - 5000 }) })
+  const res = await handleCatalogPut({
+    request: await catalogReq({ url: 'https://kifaru.net/products/woobie', product: { name: 'Kifaru Intl WOOBIE', brand: 'Kifaru Intl', weightOz: null, weightOptions: [] } }),
+    env: env(kv), now: NOW,
+  })
+  assert.equal((await res.json()).stored, false)
+  assert.equal(JSON.parse(kv.store.get(key)).weightOz, 21)
+})
+
+test('catalog: a private or malformed URL is refused', async () => {
+  for (const url of ['http://localhost/p', 'https://127.0.0.1/p', 'not-a-url', 'ftp://example.com/p']) {
+    const kv = fakeKV()
+    const res = await handleCatalogPut({ request: await catalogReq({ url, product: BROWSER_FACTS }), env: env(kv), now: NOW })
+    assert.equal(res.status, 400, url)
+    assert.equal(kv.store.size, 0, url)
+  }
+})
+
+test('catalog: a KV failure is never the user’s problem', async () => {
+  const kv = { async get() { throw new Error('kv down') }, async put() { throw new Error('kv down') } }
+  const res = await handleCatalogPut({ request: await catalogReq({ url: 'https://example.com/p', product: BROWSER_FACTS }), env: env(kv), now: NOW })
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).stored, false)
+})
+
+test('catalog: a published browser read answers the next lookup without a fetch', async () => {
+  // The whole point, end to end: publish, then scrape the same URL and see the
+  // catalog answer it while the fetcher stays untouched.
+  const kv = fakeKV()
+  await handleCatalogPut({
+    request: await catalogReq({ url: 'https://www.stoneglacier.com/products/r3-7000', product: { ...BROWSER_FACTS, weightOz: 32, weightOptions: [] } }),
+    env: env(kv), now: NOW,
+  })
+  let fetched = 0
+  const res = await handleScrape({
+    request: await scrapeReq('https://www.stoneglacier.com/products/r3-7000'),
+    env: env(kv), fetcher: async () => { fetched++; throw new Error('should not fetch') }, now: NOW + 1000,
+  })
+  const body = await res.json()
+  assert.equal(fetched, 0)
+  assert.equal(body.catalog, true)
+  assert.equal(body.name, 'Stone Glacier R3 7000')
+  assert.equal(body.weightOz, 32)
 })

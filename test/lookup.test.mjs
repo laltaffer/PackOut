@@ -8,6 +8,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { lookupProduct, fetchProductInBrowser } from '../js/api.js'
 
+// Tests never touch the real catalog: sharing is injected everywhere below.
+const noShare = () => {}
+
 const SERVER_HIT = { ok: true, found: true, name: 'Kifaru Intl WOOBIE', brand: 'Kifaru Intl', weightOz: 21 }
 const BLOCKED = { ok: false, error: 'That store blocks automated lookups — enter the item by hand.' }
 const NOTHING = { ok: true, found: false, name: null }
@@ -18,7 +21,7 @@ const never = () => { throw new Error('must not be called') }
 test('a server answer ends it — the browser leg never runs', async () => {
   const got = await lookupProduct('https://kifaru.net/products/woobie', {
     server: async () => SERVER_HIT,
-    browser: never,
+    browser: never, share: noShare,
   })
   assert.equal(got.name, 'Kifaru Intl WOOBIE')
   assert.equal(got.viaBrowser, undefined)
@@ -28,7 +31,7 @@ test('a blocked store falls through to the browser', async () => {
   let retried = false
   const got = await lookupProduct('https://www.stoneglacier.com/products/r3-7000', {
     server: async () => BLOCKED,
-    browser: async () => BROWSER_HIT,
+    browser: async () => BROWSER_HIT, share: noShare,
     onRetry: () => { retried = true },
   })
   assert.equal(got.name, 'Stone Glacier R3 7000')
@@ -41,7 +44,7 @@ test('a page the server read but found nothing on still gets the second look', a
   // it, which is indistinguishable from a bare storefront until we look again.
   const got = await lookupProduct('https://example.com/p', {
     server: async () => NOTHING,
-    browser: async () => BROWSER_HIT,
+    browser: async () => BROWSER_HIT, share: noShare,
   })
   assert.equal(got.viaBrowser, true)
 })
@@ -51,7 +54,7 @@ test('when both fail the server’s message survives', async () => {
   // the page was blocked, gone, or not a product page. Its sentence wins.
   const got = await lookupProduct('https://www.rei.com/product/1', {
     server: async () => BLOCKED,
-    browser: async () => null,
+    browser: async () => null, share: noShare,
   })
   assert.equal(got.ok, false)
   assert.equal(got.error, BLOCKED.error)
@@ -169,7 +172,7 @@ test('a server hit with a name but no weight still gets the second look', async 
   let tried = false
   const got = await lookupProduct('https://example.com/p', {
     server: async () => ({ ok: true, found: true, name: 'Trail Tent', weightOz: null, weightOptions: [] }),
-    browser: async () => { tried = true; return { ok: true, found: true, name: 'Trail Tent', weightOz: 42, viaBrowser: true } },
+    browser: async () => { tried = true; return { ok: true, found: true, name: 'Trail Tent', weightOz: 42, viaBrowser: true } }, share: noShare,
   })
   assert.equal(tried, true, 'the browser must get a turn')
   assert.equal(got.weightOz, 42)
@@ -181,7 +184,7 @@ test('several stated weights ARE an answer — no second fetch', async () => {
   // same page would narrow them identically, so it would be pure waste.
   const got = await lookupProduct('https://kifaru.net/products/woobie', {
     server: async () => ({ ok: true, found: true, name: 'Kifaru Intl WOOBIE', weightOz: null, weightOptions: [14, 31, 43] }),
-    browser: never,
+    browser: never, share: noShare,
   })
   assert.deepEqual(got.weightOptions, [14, 31, 43])
 })
@@ -189,7 +192,7 @@ test('several stated weights ARE an answer — no second fetch', async () => {
 test('a catalog hit is terminal even without a fresh read', async () => {
   const got = await lookupProduct('https://kifaru.net/products/woobie', {
     server: async () => ({ ok: true, found: true, catalog: true, name: 'Old Name', weightOz: 21 }),
-    browser: never,
+    browser: never, share: noShare,
   })
   assert.equal(got.catalog, true)
 })
@@ -197,7 +200,7 @@ test('a catalog hit is terminal even without a fresh read', async () => {
 test('a partial server answer keeps its own fields and borrows the blanks', async () => {
   const got = await lookupProduct('https://peakrefuel.com/products/x', {
     server: async () => ({ ok: true, found: true, name: 'Beef Stroganoff', brand: null, kcal: null, weightOz: null, weightOptions: [], perServing: false }),
-    browser: async () => ({ ok: true, found: true, name: 'IGNORED', brand: 'Peak Refuel', kcal: 830, weightOz: 5, perServing: true, viaBrowser: true }),
+    browser: async () => ({ ok: true, found: true, name: 'IGNORED', brand: 'Peak Refuel', kcal: 830, weightOz: 5, perServing: true, viaBrowser: true }), share: noShare,
   })
   assert.equal(got.name, 'Beef Stroganoff', 'the server’s own value is not overwritten')
   assert.equal(got.brand, 'Peak Refuel')
@@ -229,4 +232,58 @@ test('three-byte characters cannot overshoot the cap', async () => {
   await withFetch(async () => new Response(body, { headers: { 'content-type': 'text/html' } }),
     () => fetchProductInBrowser('https://example.com/p'))
   assert.ok(delivered <= 1_800_000, `read ${delivered} bytes against a 1,500,000 cap`)
+})
+
+// ---------- publishing what the browser read (2026-07-29) ----------
+
+test('a browser read is shared, and the server’s own answer is not', async () => {
+  const shared = []
+  await lookupProduct('https://www.stoneglacier.com/products/r3-7000', {
+    server: async () => BLOCKED,
+    browser: async () => BROWSER_HIT,
+    share: (url, product) => shared.push({ url, product }),
+  })
+  assert.equal(shared.length, 1)
+  assert.equal(shared[0].product.name, 'Stone Glacier R3 7000')
+
+  // The server publishes its own reads server-side; a second copy from here
+  // would be pure noise.
+  const already = []
+  await lookupProduct('https://kifaru.net/products/woobie', {
+    server: async () => SERVER_HIT,
+    browser: never,
+    share: (...a) => already.push(a),
+  })
+  assert.equal(already.length, 0)
+})
+
+test('a weightless catalog hit no longer ends the lookup', async () => {
+  // Browser reads can now publish a name and brand with no weight, so a hit may
+  // be somebody else's partial entry — and the second look is what upgrades it.
+  let tried = false
+  const got = await lookupProduct('https://kifaru.net/products/woobie', {
+    server: async () => ({ ok: true, found: true, catalog: true, name: 'Kifaru Intl WOOBIE', brand: 'Kifaru Intl', weightOz: null, weightOptions: [] }),
+    browser: async () => { tried = true; return { ok: true, found: true, name: 'Kifaru Intl WOOBIE', weightOz: null, weightOptions: [14, 31, 43], viaBrowser: true } },
+    share: noShare,
+  })
+  assert.equal(tried, true)
+  assert.deepEqual(got.weightOptions, [14, 31, 43], 'the partial entry got upgraded')
+})
+
+test('a catalog hit that already has the weight still ends it', async () => {
+  const got = await lookupProduct('https://kifaru.net/products/woobie', {
+    server: async () => ({ ok: true, found: true, catalog: true, name: 'Kifaru Intl WOOBIE', weightOz: 21, weightOptions: [] }),
+    browser: never,
+    share: noShare,
+  })
+  assert.equal(got.weightOz, 21)
+})
+
+test('a share that blows up cannot cost the user their answer', async () => {
+  const got = await lookupProduct('https://www.stoneglacier.com/products/r3-7000', {
+    server: async () => BLOCKED,
+    browser: async () => BROWSER_HIT,
+    share: () => { throw new Error('catalog on fire') },
+  }).catch(e => ({ threw: e.message }))
+  assert.equal(got.name, 'Stone Glacier R3 7000', `lookup must survive a broken share (${got.threw ?? ''})`)
 })
