@@ -219,7 +219,8 @@ test('the cap holds against a single oversized chunk', async () => {
 
 test('three-byte characters cannot overshoot the cap', async () => {
   // 界 is three bytes and one UTF-16 unit, so a character-counted cap reads
-  // ~3x what it promised — Codex measured 1.86 MB against a 600 KB cap.
+  // ~3x what it promised: Codex measured 1.86 MB against what was then a
+  // 600 KB cap. At today's cap the same defect would pull about 4.5 MB.
   let delivered = 0
   const chunk = new TextEncoder().encode('界'.repeat(50_000))   // 150 KB per chunk
   const body = new ReadableStream({
@@ -227,5 +228,5 @@ test('three-byte characters cannot overshoot the cap', async () => {
   })
   await withFetch(async () => new Response(body, { headers: { 'content-type': 'text/html' } }),
     () => fetchProductInBrowser('https://example.com/p'))
-  assert.ok(delivered <= 750_000, `read ${delivered} bytes against a 600,000 cap`)
+  assert.ok(delivered <= 1_800_000, `read ${delivered} bytes against a 1,500,000 cap`)
 })

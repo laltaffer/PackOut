@@ -40,10 +40,13 @@ export async function fetchProduct(url) {
 // cookies are never sent (credentials: 'omit'), so nothing is fetched as them,
 // and the HTML is only ever string-matched — never parsed into the document.
 
-// A product page's facts live in its <head>; a megabyte of body markup is
-// someone's phone data. The read stops at the cap instead of paying for the
-// rest (HMG's page is 1.2 MB).
-const MAX_BROWSER_BYTES = 600_000
+// Enough to reach the weight, which is not in the <head>. A 600 KB cap looked
+// thrifty and cost HMG's quilt every one of its six stated weights — they sit
+// past 900 KB of its 1.2 MB page, and a lookup that returns a name without a
+// weight has failed at the only job that matters. Matches the server's own cap.
+// The page was already downloaded once by the person who copied the URL out of
+// it, so this is a second copy, not a surprise.
+const MAX_BROWSER_BYTES = 1_500_000
 
 async function readCapped(res, max) {
   const reader = res.body?.getReader()
