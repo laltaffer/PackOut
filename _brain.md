@@ -183,6 +183,13 @@ worse than a stale cache.
 ## Status
 
 ### Where things stand (2026-07-29)
+2026-07-29 (shipped): **Per-day custom calorie target (issue #27)** — LIVE at build
+3501b75. Effort select gains Custom… seeding a kcal input with the day's current
+target; the override collapses the effort band in dailyTargets, macro ranges keep the
+V2P shares, protein floor stays weight-based, effort choice clears it, no-override days
+byte-identical (pinned). Codex round: a dinner main that can't fit the day's +50
+ceiling sits out (customKcal 500 no longer drafts 1,085). 371 tests; production
+verified both brands at 390px.
 2026-07-29 (shipped): **URL import carries the brand, and a failed fetch names its
 failure** — LIVE at build c4a01e6. Lawrence: "we are dropping the brand name most of
 the time." The brand is read from the ITEM, never the site — REI sells Osprey packs and
