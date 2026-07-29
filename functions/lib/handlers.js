@@ -114,6 +114,25 @@ export async function handleStatePut({ request, env, now = Date.now() }) {
 // real product page's <head> or a packing spreadsheet.
 const MAX_FETCH_BYTES = 1_500_000
 
+// How PackOut introduces itself when it fetches someone else's page.
+//
+// The bare "PackOutBot/1.0" this replaced was refused outright by storefronts
+// that pattern-match a UA with no Mozilla prefix — Garage Grown Gear answered
+// 403 to it and 200 to this, from the same machine, seconds apart. This is the
+// Googlebot/bingbot shape: browser-prefixed so naive filters pass it, and
+// still saying exactly who is calling and where to complain. A full Chrome
+// impersonation tested no better (both 200), so there is nothing to buy by
+// lying about it.
+//
+// What keeps this defensible is the traffic, not the string: one GET per link
+// a signed-in person pastes, for a page they are already looking at, deduped
+// through the shared catalog. No crawling, no bulk, no CAPTCHA solving. These
+// stores' own robots.txt allows /products/ — checked 2026-07-29 on Stone
+// Glacier, Garage Grown Gear, Kifaru and Lancaster, where the disallow lists
+// cover cart, checkout, search and account, not the page we read. If that ever
+// stops being true, this changes.
+const USER_AGENT = 'Mozilla/5.0 (compatible; PackOutBot/1.0; +https://packout.pages.dev)'
+
 // Session-gated so the endpoint can't be used as an open fetch proxy, and
 // host-guarded so it can't reach anything private (SSRF). IP-literal hosts
 // are refused wholesale — no real product page lives at a bare IP. Hostname
@@ -209,7 +228,11 @@ export async function handleScrape({ request, env, fetcher = fetch, now = Date.n
       res = await fetcher(href, {
         redirect: 'manual',
         signal: AbortSignal.timeout(8000),
-        headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)', accept: 'text/html' },
+        headers: {
+          'user-agent': USER_AGENT,
+          accept: 'text/html,application/xhtml+xml',
+          'accept-language': 'en-US,en;q=0.9',
+        },
       })
     } catch {
       return fallback(json({ error: 'Couldn’t reach that site — check the link.' }, 502))
@@ -282,7 +305,7 @@ export async function handleSheet({ request, env, fetcher = fetch, now = Date.no
   try {
     res = await fetcher(exportUrl, {
       signal: AbortSignal.timeout(8000),
-      headers: { 'user-agent': 'PackOutBot/1.0 (+https://packout.pages.dev)' },
+      headers: { 'user-agent': USER_AGENT },
     })
   } catch {
     return json({ error: 'Could not reach Google Sheets.' }, 502)
