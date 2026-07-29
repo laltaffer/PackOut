@@ -75,7 +75,7 @@ function draftAllHTML(trip) {
 }
 
 function dayColumn(trip, day, i, openDay) {
-  const t = dailyTargets(trip.weightLbs, day.intensity, day.customKcal ?? null)
+  const t = dailyTargets(trip.weightLbs, day.intensity, day.customKcal)
   const planned = dayTotals(day, state.library)
   const hasPlan = planned.kcal > 0
   const v = hasPlan ? dayVerdict(day, trip.weightLbs, state.library) : null
@@ -118,7 +118,7 @@ function fillBoard(trip, i, { focus = true } = {}) {
   // Every inline control carries a stable id so a qty tap keeps its button.
   const refocusId = !focus && board.contains(document.activeElement) ? document.activeElement.id : null
   day.meals ??= emptyMeals()
-  const t = dailyTargets(trip.weightLbs, day.intensity, day.customKcal ?? null)
+  const t = dailyTargets(trip.weightLbs, day.intensity, day.customKcal)
   const st = slotTargets(t)
   const planned = dayTotals(day, state.library)
   const hasPlan = planned.kcal > 0

@@ -59,6 +59,10 @@ test('customKcal imports as a positive number or not at all (issue #27)', () => 
   assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: '3000' })).ok, false)
   assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: -100 })).ok, false)
   assert.equal(validateImport(withDay({ intensity: 'medium', customKcal: 0 })).ok, false)
+  // NaN can't ride JSON (withDay round-trips it to null), so inject it raw —
+  // the gate also guards hand-built objects on the sync path.
+  const nanDay = { ...GOOD, trips: [{ ...GOOD.trips[0], days: [{ intensity: 'medium', customKcal: NaN }] }] }
+  assert.equal(validateImport(nanDay).ok, false)
 })
 
 test('rejects non-string food urls (objects would crash the edit form)', () => {

@@ -18,8 +18,16 @@ One calendar day of a Trip. Each Day has an Intensity and its own meal plan.
 ## Intensity
 The V2P activity rating for a Day: Easy (little elevation change and/or <5 mi),
 Medium (moderate elevation and/or 5–10 mi), Hard (significant elevation and/or >10 mi).
-Drives the Day's nutrition targets. Displayed in the UI as **Effort** (Lawrence,
-2026-07-20); Intensity remains the internal/code term.
+Drives the Day's nutrition targets unless a Custom Target overrides them. Displayed
+in the UI as **Effort** (Lawrence, 2026-07-20); Intensity remains the internal/code term.
+
+## Custom Target
+An optional per-Day kcal number (`customKcal`, issue #27) that replaces the
+weight × Intensity band as the Day's kcal target. Macro ranges keep the V2P
+shares (carbs 40–60%, protein 10–15%, fat 25–50%) computed from it; the protein
+floor stays a property of the body (0.6 g/lb). The Day's Intensity is retained
+as the fallback — picking an effort level clears the override. UI: the Effort
+select's **Custom…** option.
 
 ## Meal
 A Breakfast, Lunch, or Dinner slot's contents. A meal is at least 300 kcal

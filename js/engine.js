@@ -85,7 +85,7 @@ const HEAVY_KCAL_PCT = 1.15
 const PROTEIN_FLOOR_GRACE_G = 5
 
 export function dayVerdict(day, weightLbs, library) {
-  const targets = dailyTargets(weightLbs, day.intensity, day.customKcal ?? null)
+  const targets = dailyTargets(weightLbs, day.intensity, day.customKcal)
   const totals = dayTotals(day, library)
   // Status compares RAW values (a 0.4 kcal deficit is still a deficit); only
   // the reported gap is rounded, and always up — a real shortfall never
@@ -418,7 +418,7 @@ function buildDraft(trip, dayIndex, fullLibrary, staples, strategy, avoidMains, 
   const declined = declinedIds(trip)
   const library = declined.size ? fullLibrary.filter(f => !declined.has(f.id)) : fullLibrary
   if (library.length === 0) return meals
-  const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium', trip.days[dayIndex]?.customKcal ?? null)
+  const targets = dailyTargets(trip.weightLbs, trip.days[dayIndex]?.intensity ?? 'medium', trip.days[dayIndex]?.customKcal)
   const target = targets.kcal.target
   const dayCeil = target + DAY_KCAL_TOL
   const st = slotTargets(targets)
