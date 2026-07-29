@@ -72,6 +72,18 @@ test('a drafted day lands within ±50 kcal of a custom target (issue #27)', () =
   assert.ok(Math.abs(t.kcal - 3000) <= TOL, `|${t.kcal} - 3000| <= ${TOL}`)
 })
 
+test('a tiny custom target never drafts past its ceiling — the dinner main sits out (Codex, issue #27)', () => {
+  // Codex 2026-07-29: customKcal 500 drafted 1,085 because the one big meal
+  // was added unconditionally. A main that can't fit the day's +50 ceiling
+  // is skipped; the fills compose what the window can afford.
+  const trip = mkTrip()
+  trip.days[0].customKcal = 500
+  const meals = draftDay(trip, 0, LIB, STAPLES, 'usual')
+  const t = dayTotals({ intensity: 'medium', meals }, LIB)
+  assert.ok(t.kcal <= 550, `never past the ceiling: ${t.kcal}`)
+  assert.equal(meals.dinner.length, 0, 'no 850 kcal main on a 500 kcal day')
+})
+
 test('drafting is deterministic: same inputs, identical output', () => {
   const a = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')
   const b = draftDay(mkTrip(), 0, LIB, STAPLES, 'usual')

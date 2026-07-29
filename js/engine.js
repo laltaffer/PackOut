@@ -450,10 +450,13 @@ function buildDraft(trip, dayIndex, fullLibrary, staples, strategy, avoidMains, 
     }
   }
 
-  // Dinner: the one big meal. Rotation/avoidance is the caller's job.
+  // Dinner: the one big meal. Rotation/avoidance is the caller's job. A main
+  // that can't fit the day's ceiling (only reachable with a tiny custom
+  // target — every effort band affords the largest main) sits out rather
+  // than blowing the ±50 contract by itself (Codex, issue #27).
   const mains = mainsOverride ?? mainsFor(trip, library, staples, strategy)
   const main = pickMain(mains, avoidMains)
-  if (main) add('dinner', main)
+  if (main && kcal + main.kcal <= dayCeil) add('dinner', main)
 
   // Breakfast fills toward 400; a sit-down breakfast may take one big hot
   // item up to the dinner share (Lawrence: the Skillet can land — the ±50 day
@@ -470,7 +473,7 @@ function buildDraft(trip, dayIndex, fullLibrary, staples, strategy, avoidMains, 
     lunch: { goal: lunchGrow, max: lunchGrow * 1.5 },
   }
   const fillSlots = ['breakfast', 'lunch']
-  if (!main && style.dinner === 'mobile') {
+  if (!meals.dinner.length && style.dinner === 'mobile') {
     fillSlots.push('dinner')
     windows.dinner = { goal: st.dinner.kcal, max: st.dinner.kcal * 1.5 }
   }

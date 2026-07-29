@@ -147,7 +147,7 @@ function fillBoard(trip, i, { focus = true } = {}) {
         </label>
         ${day.customKcal != null ? `
         <label class="intensity"><span class="intensity-label">Target</span>
-          <input id="board-custom-kcal" type="number" inputmode="numeric" min="1" step="50"
+          <input id="board-custom-kcal" type="number" inputmode="numeric" min="1"
                  value="${day.customKcal}" aria-label="Custom calorie target for day ${i + 1}"> kcal
         </label>` : ''}
       </div>
