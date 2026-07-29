@@ -227,7 +227,26 @@ is refusing Cloudflare Workers egress IPs. Keep the new UA (honest, standard, an
 does clear UA-only filters like Garage Grown Gear's off a non-blocked network), but it
 is not the fix.
 
-**The honest fix, unbuilt:** `extractProduct` is pure and takes a string, so it can run
+**BUILT AND LIVE (build b70edd6).** `extractProduct` is pure and takes a string, so it runs
+CLIENT-SIDE on the page the user's own browser fetches — and the assumption that a browser
+cannot read another site's HTML was wrong for exactly the stores that block us: Shopify
+serves storefront pages with permissive CORS. Verified with a negative control (example.com
+and Wikipedia are refused in the same browser, same code). `js/extract.js` is now shared by
+the Worker and the page; `lookupProduct` tries the server first (the shared catalog answers
+free) and falls back to `fetchProductInBrowser` — credentials omitted so nothing is fetched
+as the user, http(s) only, byte-capped stream, null on every failure, HTML only ever
+string-matched. Live results: HMG's six weights, Kifaru 14/31/43, Exo 93/26/73/81, Argali,
+Aziak, Hoyt, Lancaster/STAN, Mathews. REI and Backcountry stay walled both ways.
+
+Codex review found three real defects (bot wall with a stray weight returning as a product;
+any partial server answer suppressing the fallback; the cap counting UTF-16 units not
+bytes) and one it ranked Low that was the worst of the lot: quadratic regex backtracking,
+70 SECONDS on 600 KB of malformed markup, in FOUR places (markup stripper, JSON-LD block
+matcher, metaContent, <title>). All four scan forward now. Production verification then
+caught what no test could: a 600 KB read cap returned HMG named but weightless, because its
+weights sit past 900 KB — the cap matches the server's 1.5 MB.
+
+**Superseded — the old note, kept for the reasoning:** `extractProduct` is pure and takes a string, so it can run
 CLIENT-SIDE on HTML the user's own browser already loaded — a bookmarklet or a
 paste-the-page affordance would sidestep bot walls entirely, because the person really
 is a person on a residential connection looking at the page. No evasion, no proxy fees,
