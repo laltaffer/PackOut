@@ -238,6 +238,23 @@ as the user, http(s) only, byte-capped stream, null on every failure, HTML only 
 string-matched. Live results: HMG's six weights, Kifaru 14/31/43, Exo 93/26/73/81, Argali,
 Aziak, Hoyt, Lancaster/STAN, Mathews. REI and Backcountry stay walled both ways.
 
+**Catalog growth changed (build 1ef54e0, Lawrence's call):** a browser read publishes to the
+shared catalog via session-gated `POST /api/catalog`. It had to — a catalog only the Worker
+can write is one that stopped growing the day the blocks started. The endpoint trusts nothing
+a client sends: known fields only, inside the extractor's own SANE_MIN_OZ/SANE_MAX_OZ/
+MAX_WEIGHT_OPTIONS bounds (those now have one home in js/extract.js and are imported), bot
+walls and dead links refused, and a weightless read can never overwrite a captured weight. No
+author is stored — shared record, objective facts. Knock-on: a catalog hit is no longer
+automatically terminal (it may be someone's partial entry), so it ends a lookup only when it
+carries a weight or an honest list of weights.
+
+**Seeded GEAR_CATALOG brands (same build):** ten names branded from the maker's or seller's own
+page. Two page-stated brands were rejected by curation because the PAGE is wrong — Helinox's
+JSON-LD declares the Chair Zero's brand as "Outdoor", and reseller Mountain Partisan records
+itself as the vendor of a Katadyn filter. There is no signal on either page that contradicts
+it, so the extractor will keep reporting it; the mitigation is that prefill is reviewed in a
+form before anything saves. Four entries stay unbranded (generic spork, stakes, pole, cover).
+
 Codex review found three real defects (bot wall with a stray weight returning as a product;
 any partial server answer suppressing the fallback; the cap counting UTF-16 units not
 bytes) and one it ranked Low that was the worst of the lot: quadratic regex backtracking,
