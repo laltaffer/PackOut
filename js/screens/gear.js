@@ -52,11 +52,11 @@ function renderGear(trip) {
       ${stats.carriedOz || food.weightOz ? `
       <dl class="carry-split">
         <div><dt>Gear in your pack</dt><dd>${fmtOz(stats.weightOz)}</dd></div>
-        ${food.weightOz ? `<div><dt>Food · ${trip.days.length} day${trip.days.length > 1 ? 's' : ''}</dt><dd>${fmtOz(food.weightOz)}${food.missingWeightCount ? ` <span class="floor">+${food.missingWeightCount} unweighed</span>` : ''}</dd></div>` : ''}
-        <div class="carry-total"><dt>Total pack</dt><dd>${fmtOz(Math.round((stats.weightOz + food.weightOz) * 100) / 100)}</dd></div>
+        ${food.weightOz || food.missingWeightCount ? `<div><dt>Food · ${trip.days.length} day${trip.days.length > 1 ? 's' : ''}</dt><dd>${fmtOz(food.weightOz)}${food.missingWeightCount ? ` <span class="floor">+${food.missingWeightCount} unweighed</span>` : ''}</dd></div>` : ''}
+        <div class="carry-total"><dt>Total pack</dt><dd>${fmtOz(stats.weightOz + food.weightOz)}</dd></div>
         ${stats.harnessOz ? `<div><dt>On your harness</dt><dd>${fmtOz(stats.harnessOz)}</dd></div>` : ''}
         ${stats.wornOz ? `<div><dt>Worn</dt><dd>${fmtOz(stats.wornOz)}</dd></div>` : ''}
-        <div class="carry-total"><dt>Total carried</dt><dd>${fmtOz(Math.round((stats.carriedOz + food.weightOz) * 100) / 100)}</dd></div>
+        <div class="carry-total"><dt>Total carried</dt><dd>${fmtOz(stats.carriedOz + food.weightOz)}</dd></div>
       </dl>` : ''}` : `
       <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
       <label class="fly-toggle">

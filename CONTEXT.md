@@ -63,8 +63,14 @@ are shown as grams plus their share of the Day's planned calories (issue #28; At
 
 ## Packed
 The per-item checkbox state: this planned thing is physically in the pack. Applies to
-food items (per Day) and, in Milestone 2, gear. There is no pantry/on-hand inventory
-concept — readiness is about what's packed, not what's owned.
+food items (per Day) and gear. There is no pantry/on-hand inventory concept —
+readiness is about what's packed, not what's owned.
+
+## Total Pack
+Gear riding in the pack plus every Day's planned food weight (issue #29) — all the
+food packs in at once. Harness and worn gear stay outside it per the carry-mode rules;
+Total Carried is everything moving down the trail, food included. Shown on the trip's
+Gear screen.
 
 ## Readiness
 The Trip-level "am I ready?" view: every Day Fueled, every planned item Packed (food
