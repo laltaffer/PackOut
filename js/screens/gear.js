@@ -1,7 +1,7 @@
 // The trip's gear world: the gear screen, the kit questions that build it,
 // the gear picker, and the airline-restriction notes.
 
-import { gearStats, carryModeOf, flyIssues } from '../engine.js'
+import { gearStats, carryModeOf, flyIssues, tripFoodWeight } from '../engine.js'
 import { tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, gearCatalogMatches, TRIP_TYPES, GEAR_CATEGORIES } from '../seed.js'
 import { newId } from '../store.js'
 import { state, persist, commit, rerender } from '../state.js'
@@ -34,6 +34,7 @@ function renderGear(trip) {
   gearEditId = null
   const byId = new Map(state.gearLibrary.map(g => [g.id, g]))
   const stats = gearStats(trip, state.gearLibrary)
+  const food = tripFoodWeight(trip, state.library)
   const inKit = new Set(trip.gear.map(e => e.gearId))
   const otherTrips = state.trips.filter(t => t.id !== trip.id && (t.gear?.length ?? 0) > 0)
   const grouped = GEAR_CATEGORIES
@@ -48,12 +49,14 @@ function renderGear(trip) {
       </div>
       ${trip.gear.length ? `
       <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>
-      ${stats.carriedOz ? `
+      ${stats.carriedOz || food.weightOz ? `
       <dl class="carry-split">
-        <div><dt>On your back</dt><dd>${fmtOz(stats.weightOz)}</dd></div>
+        <div><dt>Gear in your pack</dt><dd>${fmtOz(stats.weightOz)}</dd></div>
+        ${food.weightOz ? `<div><dt>Food · ${trip.days.length} day${trip.days.length > 1 ? 's' : ''}</dt><dd>${fmtOz(food.weightOz)}${food.missingWeightCount ? ` <span class="floor">+${food.missingWeightCount} unweighed</span>` : ''}</dd></div>` : ''}
+        <div class="carry-total"><dt>Total pack</dt><dd>${fmtOz(Math.round((stats.weightOz + food.weightOz) * 100) / 100)}</dd></div>
         ${stats.harnessOz ? `<div><dt>On your harness</dt><dd>${fmtOz(stats.harnessOz)}</dd></div>` : ''}
         ${stats.wornOz ? `<div><dt>Worn</dt><dd>${fmtOz(stats.wornOz)}</dd></div>` : ''}
-        <div class="carry-total"><dt>Total carried</dt><dd>${fmtOz(stats.carriedOz)}</dd></div>
+        <div class="carry-total"><dt>Total carried</dt><dd>${fmtOz(Math.round((stats.carriedOz + food.weightOz) * 100) / 100)}</dd></div>
       </dl>` : ''}` : `
       <p class="empty">No gear on this trip yet. Start from your standard kit, or add items one by one.</p>`}
       <label class="fly-toggle">

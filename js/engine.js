@@ -226,6 +226,20 @@ export function gearStats(trip, gearLibrary) {
   return stats
 }
 
+// The trip's whole food load (issue #29). All days sum together because the
+// food packs in at once (Lawrence: "usually people will be packing in all of
+// the food at once") — it joins the gear pack number as Total pack.
+export function tripFoodWeight(trip, library) {
+  let weightOz = 0
+  let missingWeightCount = 0
+  for (const day of trip.days) {
+    const t = dayTotals(day, library)
+    weightOz += t.weightOz
+    missingWeightCount += t.missingWeightCount
+  }
+  return { weightOz: Math.round(weightOz * 100) / 100, missingWeightCount }
+}
+
 // Flying (Lawrence 2026-07-27: "call out what you will not be able to fly
 // with"). Rules match the gear item's NAME, not an id, so they catch both the
 // question rows ("Stove fuel") and whatever the user renamed them to ("MSR

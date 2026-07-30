@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { gearStats, readiness, emptyMeals, carryModeOf, CARRY_MODES, validateImport } from '../js/engine.js'
+import { gearStats, readiness, emptyMeals, carryModeOf, CARRY_MODES, validateImport, tripFoodWeight } from '../js/engine.js'
 import { GEAR_SEED, applySeedMigrations } from '../js/seed.js'
 
 const GEAR_LIB = [
@@ -18,6 +18,28 @@ function fueledDay() {
   meals.dinner.push({ foodId: 'meal', qty: 5 }) // 4000 kcal ≥ 90% of 3700, 200 g protein
   return { intensity: 'medium', meals, packed: { meal: 5 } }
 }
+
+// Total pack weight (issue #29): all days' food packs in at once, so the
+// trip's food weight joins the gear pack number.
+test('tripFoodWeight sums every day and admits what it cannot weigh', () => {
+  const lib = [
+    ...FOOD_LIB,
+    { id: 'bar', name: 'Bar', kcal: 400, carbsG: 44, fatG: 8, proteinG: 12, weightOz: 2.33, favorite: false },
+    { id: 'mystery', name: 'Mystery', kcal: 300, carbsG: 10, fatG: 10, proteinG: 10, weightOz: null, favorite: false },
+  ]
+  const d1 = emptyMeals(); d1.dinner.push({ foodId: 'meal', qty: 2 }); d1.snacks.push({ foodId: 'bar', qty: 3 })
+  const d2 = emptyMeals(); d2.lunch.push({ foodId: 'mystery', qty: 2 }); d2.snacks.push({ foodId: 'bar', qty: 1 })
+  const trip = { weightLbs: 200, days: [{ intensity: 'medium', meals: d1 }, { intensity: 'medium', meals: d2 }, { intensity: 'medium' }] }
+  const w = tripFoodWeight(trip, lib)
+  // 2×6 + 3×2.33 + 1×2.33 = 21.32; the two mystery units count as missing.
+  assert.equal(w.weightOz, 21.32)
+  assert.equal(w.missingWeightCount, 2)
+})
+
+test('tripFoodWeight is zero on an unplanned trip', () => {
+  const trip = { weightLbs: 200, days: [{ intensity: 'medium' }] }
+  assert.deepEqual(tripFoodWeight(trip, FOOD_LIB), { weightOz: 0, missingWeightCount: 0 })
+})
 
 test('gearStats counts packed vs total, names unpacked items, sums known weights', () => {
   const trip = {
