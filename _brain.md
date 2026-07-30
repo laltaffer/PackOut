@@ -183,6 +183,14 @@ worse than a stale cache.
 ## Status
 
 ### Where things stand (2026-07-29)
+2026-07-29 (shipped): **Total pack weight (issue #29)** — LIVE at build d9d571e. Gear
+screen carry split: Gear in your pack / Food · N days / Total pack (all food packs in
+at once); Total carried includes food; harness/worn stay separate. Engine seam
+tripFoodWeight. Review rounds closed two all-unweighed honesty gaps. 375 tests.
+2026-07-29 (shipped): **Seed v14** — LIVE at build 6d224a6. Six null macros filled from
+the products' own labels (Stroganoff 46 g F, Chicken & Rice 37 g, Muffin 20 g, Waffle
+7 g, gel/chews 0); Jambalaya stays null — Stowaway publishes no panel, a blank beats a
+guess. Migration fills only still-null fields; user values win.
 2026-07-29 (shipped): **Day macros read grams + share of planned calories (issue #28)**
 — LIVE at build 38a767b. Gram target ranges replaced by "285 g · 30%" (Atwater 4/4/9
 over planned kcal; shares may not sum to 100 — labels round); protein gains a share.
