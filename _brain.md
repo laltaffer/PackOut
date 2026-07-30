@@ -696,7 +696,11 @@ from past trip. 53 engine tests green. Lawrence dogfooding for Alaska 2026-08-01
 Alaska gear adjustments are his content edits in-app.
 
 ## Open
-- **UI/UX pass (issue #11):** real issues he wants solved — his list, to be captured.
+- **UI/UX pass (issue #11) — CLOSED 2026-07-30** at Lawrence's call ("if any of these
+  are still annoying, I'll open them back up"), along with #17 (assistant verbs).
+  Carried out un-built, reopen on annoyance: outputs buttons reading as filters not
+  nav; gap-size-aware draft suggestions (engine `suggestions()`); swap-in-place;
+  global never-suggest (per-trip declines may already cover it). History below stands.
   - Design critique run 2026-07-24 (dual-agent /impeccable): 29/40, 0 P0 / 3 P1 —
     snapshot in `.impeccable/critique/`, PRODUCT.md written at repo root. Top P1s:
     desktop is a stretched phone layout (roster-table fix), day-builder verdict
