@@ -111,6 +111,46 @@ test('v11 is additive: a v9 state gains the FATTY stick and nothing else changes
   assert.equal(s.seedVersion, SEED.version)
 })
 
+test('v14 fills null macros from labels; user-entered values and honest nulls survive', () => {
+  const s = applySeedMigrations({
+    schemaVersion: 1, seedVersion: 13, trips: [],
+    library: [
+      // Untouched null → fills from the label read (46 g fat per pouch).
+      { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, favorite: false, slotHint: 'dinner' },
+      // User already entered their own fat number — a fill must not clobber it.
+      { id: 'honey-stinger-waffle', name: 'Honey Stinger Waffle', kcal: 150, carbsG: 19, fatG: 6, proteinG: 1, weightOz: 1.0, favorite: false, slotHint: 'snack' },
+      // Jambalaya has no published panel — the seed itself is null, so it stays null.
+      { id: 'stowaway-andouille-shrimp-jambalaya', name: 'Stowaway Gourmet Andouille and Shrimp Jambalaya', kcal: 633, carbsG: null, fatG: null, proteinG: 30, weightOz: 4.51, favorite: false, slotHint: 'dinner' },
+      // User food with a null macro — not in the seed, never touched.
+      { id: 'custom-1', name: 'My Special Bar', kcal: 500, carbsG: 5, fatG: null, proteinG: 45, weightOz: 4, favorite: true, slotHint: 'snack' },
+    ],
+  })
+  const by = id => s.library.find(f => f.id === id)
+  assert.equal(by('peak-beef-stroganoff').fatG, 46)
+  assert.equal(by('honey-stinger-waffle').fatG, 6, 'user value wins')
+  assert.equal(by('stowaway-andouille-shrimp-jambalaya').carbsG, null)
+  assert.equal(by('stowaway-andouille-shrimp-jambalaya').fatG, null)
+  assert.equal(by('custom-1').fatG, null)
+  assert.equal(s.seedVersion, SEED.version)
+})
+
+test('seed v14: every filled macro squares with its label kcal (Atwater sanity)', () => {
+  // Per-pouch/per-bar label reads, 2026-07-29: Stroganoff 46 F, Chicken &
+  // Rice 37 F, Muffin 20 F, Waffle 7 F, gel and chews 0. Bolt Chews' stated
+  // 90 kcal vs C23 is the V2P sheet's own basis — zeros hold at any basis.
+  const CHECK = ['peak-beef-stroganoff', 'peak-homestyle-chicken-rice', 'probar-blueberry-muffin', 'honey-stinger-waffle']
+  for (const id of CHECK) {
+    const f = SEED.foods.find(x => x.id === id)
+    assert.ok(f.fatG !== null, `${id} has fat filled`)
+    const fromMacros = f.carbsG * 4 + f.proteinG * 4 + f.fatG * 9
+    assert.ok(Math.abs(fromMacros - f.kcal) <= f.kcal * 0.1, `${id}: macros imply ${fromMacros} kcal against a stated ${f.kcal}`)
+  }
+  assert.equal(SEED.foods.find(x => x.id === 'gu-energy-gel').fatG, 0)
+  assert.deepEqual(
+    [SEED.foods.find(x => x.id === 'pro-bolt-chews').fatG, SEED.foods.find(x => x.id === 'pro-bolt-chews').proteinG],
+    [0, 0])
+})
+
 test('the short-lived Jack Link\'s entry (v10) retires by sweep on a v10 state; FATTY arrives', () => {
   // v10 shipped for ~an hour on 2026-07-21 before Lawrence picked his brand.
   const s = applySeedMigrations({
@@ -192,7 +232,11 @@ test('ordered Peak Refuel meals carry their published nutrition', () => {
 test('sheet-recorded staples keep the sheet values verbatim', () => {
   const strog = SEED.foods.find(f => f.id === 'peak-beef-stroganoff')
   assert.equal(strog.kcal, 810)
-  assert.equal(strog.fatG, null) // sheet leaves fat blank — never invented
+  // The sheet left fat blank; v14 filled it from the pouch's own Nutrition
+  // Facts (46 g per package) — a label beats a blank, never a guess. The
+  // never-invented rule lives on where no label exists:
+  assert.equal(strog.fatG, 46)
+  assert.equal(SEED.foods.find(f => f.id === 'stowaway-andouille-shrimp-jambalaya').fatG, null)
   const granola = SEED.foods.find(f => f.id === 'peak-strawberry-granola')
   assert.deepEqual([granola.kcal, granola.carbsG, granola.fatG, granola.proteinG], [530, 87, 9, 23])
 })

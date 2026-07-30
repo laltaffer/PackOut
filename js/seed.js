@@ -10,7 +10,7 @@
 // (reference/alaska-food-order.md) — his core meals, pre-starred so a fresh
 // state drafts from them with zero setup.
 export const SEED = {
-  version: 13,
+  version: 14,
   foods: [
     // Electrolytes / fluids
     { id: 'liquid-iv-white-peach', name: 'Liquid IV White Peach', kcal: 15, carbsG: 5, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'electrolytes' },
@@ -23,8 +23,8 @@ export const SEED = {
     { id: 'justins-honey-pb', name: "Justin's Honey Peanut Butter", kcal: 210, carbsG: 6, fatG: 17, proteinG: 7, weightOz: null, slotHint: 'breakfast' },
 
     // Mains (lunch/dinner)
-    { id: 'peak-homestyle-chicken-rice', name: 'Peak Refuel Homestyle Chicken & Rice', kcal: 740, carbsG: 61, fatG: null, proteinG: 40, weightOz: null, slotHint: 'dinner', prep: 'cook', favorite: true },
-    { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: null, proteinG: 41, weightOz: null, slotHint: 'dinner', prep: 'cook', favorite: true },
+    { id: 'peak-homestyle-chicken-rice', name: 'Peak Refuel Homestyle Chicken & Rice', kcal: 740, carbsG: 61, fatG: 37, proteinG: 40, weightOz: null, slotHint: 'dinner', prep: 'cook', favorite: true },
+    { id: 'peak-beef-stroganoff', name: 'Peak Refuel Beef Stroganoff', kcal: 810, carbsG: 50, fatG: 46, proteinG: 41, weightOz: null, slotHint: 'dinner', prep: 'cook', favorite: true },
     { id: 'peak-chicken-coconut-curry', name: 'Peak Refuel Chicken Coconut Curry', kcal: 850, carbsG: 66, fatG: 44, proteinG: 44, weightOz: 5.36, slotHint: 'dinner', prep: 'cook', favorite: true },
     { id: 'peak-beef-pasta-marinara', name: 'Peak Refuel Beef Pasta Marinara', kcal: 1040, carbsG: 56, fatG: 55, proteinG: 49, weightOz: 6.35, slotHint: 'dinner', prep: 'cook', favorite: true },
     { id: 'peak-chicken-pesto-pasta', name: 'Peak Refuel Chicken Pesto Pasta', kcal: 920, carbsG: 42, fatG: 64, proteinG: 43, weightOz: 5.71, slotHint: 'dinner', prep: 'cook', favorite: true },
@@ -105,11 +105,11 @@ export const SEED = {
     { id: 'packit-west-memphis-grits-souffle', name: 'Packit Gourmet West Memphis Grits Soufflé', kcal: 440, carbsG: 56, fatG: 18, proteinG: 16, weightOz: 3.5, slotHint: 'breakfast', prep: 'cook' },
 
     // Snacks
-    { id: 'pro-bolt-chews', name: 'ProBar Bolt Chews', kcal: 90, carbsG: 23, fatG: null, proteinG: null, weightOz: null, slotHint: 'snack' },
+    { id: 'pro-bolt-chews', name: 'ProBar Bolt Chews', kcal: 90, carbsG: 23, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'snack' },
     { id: 'probar-peanut-butter', name: 'ProBar Peanut Butter', kcal: 390, carbsG: 43, fatG: 8, proteinG: 12, weightOz: null, slotHint: 'snack' },
-    { id: 'probar-blueberry-muffin', name: 'ProBar Blueberry Muffin', kcal: 400, carbsG: 44, fatG: null, proteinG: 10, weightOz: null, slotHint: 'snack' },
-    { id: 'gu-energy-gel', name: 'GU Energy Gel', kcal: 100, carbsG: 22, fatG: null, proteinG: 0, weightOz: null, slotHint: 'snack' },
-    { id: 'honey-stinger-waffle', name: 'Honey Stinger Waffle', kcal: 150, carbsG: 19, fatG: null, proteinG: 1, weightOz: null, slotHint: 'snack' },
+    { id: 'probar-blueberry-muffin', name: 'ProBar Blueberry Muffin', kcal: 400, carbsG: 44, fatG: 20, proteinG: 10, weightOz: null, slotHint: 'snack' },
+    { id: 'gu-energy-gel', name: 'GU Energy Gel', kcal: 100, carbsG: 22, fatG: 0, proteinG: 0, weightOz: null, slotHint: 'snack' },
+    { id: 'honey-stinger-waffle', name: 'Honey Stinger Waffle', kcal: 150, carbsG: 19, fatG: 7, proteinG: 1, weightOz: null, slotHint: 'snack' },
     { id: 'packaroon', name: 'Packaroon', kcal: 160, carbsG: 12, fatG: 12, proteinG: 2, weightOz: null, slotHint: 'snack' },
     // Skratch Labs (label image, 2026-07-20): 80 kcal/25g serving, 2 servings/packet
     { id: 'skratch-energy-chews', name: 'Skratch Labs Energy Chews (packet)', kcal: 160, carbsG: 38, fatG: 0, proteinG: 0, weightOz: 1.76, slotHint: 'snack' },
@@ -904,6 +904,20 @@ export function applySeedMigrations(state) {
     const have = new Set(state.library.map(f => f.id))
     for (const f of SEED.foods) {
       if (f.id.startsWith('chomps-') && !have.has(f.id)) state.library.push({ ...f, favorite: false })
+    }
+  }
+  if (from < 14) {
+    // Label fills (2026-07-29): six seeded foods carried null macros, which
+    // the percentage readout (issue #28) counts as zero. Values read off each
+    // product's own Nutrition Facts, per pouch/bar. Only a still-null field
+    // fills — a user-entered value wins (v8 precedent). Jambalaya stays null:
+    // Stowaway publishes no panel for it (reference/stowaway-gourmet-catalog.md).
+    for (const f of state.library) {
+      const seeded = SEED.foods.find(x => x.id === f.id)
+      if (!seeded) continue
+      for (const k of ['carbsG', 'fatG', 'proteinG']) {
+        if (f[k] == null && seeded[k] != null) f[k] = seeded[k]
+      }
     }
   }
   return sweepRetired(state, () => { state.seedVersion = SEED.version })
