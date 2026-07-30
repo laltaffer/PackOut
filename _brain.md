@@ -183,6 +183,11 @@ worse than a stale cache.
 ## Status
 
 ### Where things stand (2026-07-29)
+2026-07-29 (shipped): **Day macros read grams + share of planned calories (issue #28)**
+— LIVE at build 38a767b. Gram target ranges replaced by "285 g · 30%" (Atwater 4/4/9
+over planned kcal; shares may not sum to 100 — labels round); protein gains a share.
+macroPct in format.js; CONTEXT.md Verdict entry updated. Codex retry clean (first run
+hung 40 min, dead process; watchdog pattern worked). 371 tests; production verified.
 2026-07-29 (shipped): **Per-day custom calorie target (issue #27)** — LIVE at build
 3501b75. Effort select gains Custom… seeding a kcal input with the day's current
 target; the override collapses the effort band in dailyTargets, macro ranges keep the
