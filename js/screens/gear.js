@@ -49,7 +49,7 @@ function renderGear(trip) {
       </div>
       ${trip.gear.length ? `
       <p class="gear-stats mono">${stats.packed} / ${stats.total} packed${stats.missingWeightCount ? ` · ${stats.missingWeightCount} unweighed` : ''}</p>
-      ${stats.carriedOz || food.weightOz ? `
+      ${stats.carriedOz || food.weightOz || food.missingWeightCount ? `
       <dl class="carry-split">
         <div><dt>Gear in your pack</dt><dd>${fmtOz(stats.weightOz)}</dd></div>
         ${food.weightOz || food.missingWeightCount ? `<div><dt>Food · ${trip.days.length} day${trip.days.length > 1 ? 's' : ''}</dt><dd>${fmtOz(food.weightOz)}${food.missingWeightCount ? ` <span class="floor">+${food.missingWeightCount} unweighed</span>` : ''}</dd></div>` : ''}
