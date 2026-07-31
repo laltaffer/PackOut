@@ -3,7 +3,7 @@
 import { groceryList, dayPackList, readiness } from '../engine.js'
 import { newId } from '../store.js'
 import { state, commit } from '../state.js'
-import { app, el, esc, wirePrint } from '../dom.js'
+import { app, el, esc, wirePrint, checkAllHTML, wireCheckAll } from '../dom.js'
 import { dayDate } from '../format.js'
 import { flyBlockHTML } from './gear.js'
 
@@ -20,6 +20,7 @@ export function renderGrocery(trip) {
         <button class="btn" id="print">Print</button>
       </div>
       ${rows.length === 0 ? '<p class="empty">Nothing planned yet — build some days first.</p>' : `
+      ${checkAllHTML(rows.every(r => trip.groceryChecked[r.foodId] === r.count))}
       <ul class="check-list">
         ${rows.map(r => `
           <li>
@@ -33,6 +34,13 @@ export function renderGrocery(trip) {
     </section>
   `))
   wirePrint()
+  wireCheckAll(rows.some(r => trip.groceryChecked[r.foodId] === r.count), checked => {
+    for (const r of rows) {
+      if (checked) trip.groceryChecked[r.foodId] = r.count
+      else delete trip.groceryChecked[r.foodId]
+    }
+    commit()
+  })
   app.querySelectorAll('[data-check]').forEach(cb => cb.addEventListener('change', () => {
     // Stamp the count so the mark goes stale if the plan grows.
     if (cb.checked) trip.groceryChecked[cb.dataset.check] = Number(cb.dataset.count)
@@ -42,15 +50,18 @@ export function renderGrocery(trip) {
 }
 
 export function renderPack(trip) {
+  const dayItems = trip.days.map(day => dayPackList(day, state.library))
+  const all = trip.days.flatMap((day, i) => dayItems[i].map(it => ({ day, it })))
   app.replaceChildren(el(`
     <section class="output">
       <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
       <div class="dashboard-head">
-        <h1>Pack Plan</h1>
+        <h1>Pack Food Plan</h1>
         <button class="btn" id="print">Print</button>
       </div>
+      ${all.length ? checkAllHTML(all.every(x => x.day.packed?.[x.it.foodId] === x.it.qty)) : ''}
       ${trip.days.map((day, i) => {
-        const items = dayPackList(day, state.library)
+        const items = dayItems[i]
         return `
         <section class="pack-day">
           <h2>Day ${i + 1} <span class="day-date">${dayDate(trip, i)}</span></h2>
@@ -70,6 +81,14 @@ export function renderPack(trip) {
     </section>
   `))
   wirePrint()
+  wireCheckAll(all.some(x => x.day.packed?.[x.it.foodId] === x.it.qty), checked => {
+    for (const { day, it } of all) {
+      day.packed ??= {}
+      if (checked) day.packed[it.foodId] = it.qty
+      else delete day.packed[it.foodId]
+    }
+    commit()
+  })
   app.querySelectorAll('[data-pack]').forEach(cb => cb.addEventListener('change', () => {
     const [i, foodId] = cb.dataset.pack.split(':')
     const day = trip.days[Number(i)]

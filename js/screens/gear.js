@@ -5,7 +5,7 @@ import { gearStats, carryModeOf, flyIssues, tripFoodWeight } from '../engine.js'
 import { tripGearQuestions, tripTypes, kitRows, applyTripKit, copyKit, gearCatalogMatches, TRIP_TYPES, GEAR_CATEGORIES } from '../seed.js'
 import { newId } from '../store.js'
 import { state, persist, commit, rerender } from '../state.js'
-import { app, el, esc, wirePrint } from '../dom.js'
+import { app, el, esc, wirePrint, checkAllHTML, wireCheckAll } from '../dom.js'
 import { TRIP_TYPE_LABELS, fmtOz, conditionsLine } from '../format.js'
 import { lookupProduct, wireScrape } from '../api.js'
 import { isBlankSlot, gearEditorFields, gearEditorValues, deleteGearFromLibrary } from './gear-editor.js'
@@ -40,6 +40,9 @@ function renderGear(trip) {
   const grouped = GEAR_CATEGORIES
     .map(cat => ({ cat, entries: trip.gear.filter(e => byId.get(e.gearId)?.category === cat) }))
     .filter(g => g.entries.length > 0)
+  // Every row with a checkbox, blanks included — a select-all that leaves a
+  // visible box unchecked reads as broken.
+  const packable = trip.gear.filter(e => byId.get(e.gearId))
   app.replaceChildren(el(`
     <section class="output">
       <a href="#/trip/${trip.id}" class="back">&larr; ${esc(trip.name)}</a>
@@ -76,6 +79,7 @@ function renderGear(trip) {
         <button class="btn" id="gear-import">Import</button>` : ''}
       </div>
       ${flyBlockHTML(trip)}
+      ${packable.length ? checkAllHTML(packable.every(e => e.packed)) : ''}
       ${grouped.map(g => `
         <section class="pack-day">
           <h2>${esc(g.cat)}</h2>
@@ -87,6 +91,10 @@ function renderGear(trip) {
     </section>
   `))
   wirePrint()
+  wireCheckAll(packable.some(e => e.packed), checked => {
+    packable.forEach(e => { e.packed = checked })
+    commit()
+  })
   wireGearRows(trip)
   // Section CTAs open the picker scoped to their category: the search
   // prefilters the library and the new-item form starts on that category.

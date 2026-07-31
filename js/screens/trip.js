@@ -34,7 +34,7 @@ export function renderTrip(trip, openDay = null) {
       <nav class="trip-outputs">
         <a class="btn" href="#/trip/${trip.id}/gear">Gear</a>
         <a class="btn" href="#/trip/${trip.id}/grocery">Grocery</a>
-        <a class="btn" href="#/trip/${trip.id}/pack">Pack Plan</a>
+        <a class="btn" href="#/trip/${trip.id}/pack">Pack Food Plan</a>
         <a class="btn" href="#/trip/${trip.id}/ready">Readiness</a>
       </nav>
       <div id="draft-all-slot">${draftAllHTML(trip)}</div>

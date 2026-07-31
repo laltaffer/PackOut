@@ -759,6 +759,10 @@ main:has(.kit-foot) { padding-bottom: 0.75rem; }
   color: var(--soft); font-size: var(--text-min); font-family: "Chivo Mono", monospace;
   min-width: 2.6rem; font-weight: 600;
 }
+/* The select-all row commands the list below it — heavier weight and rule so
+   it reads as a control, not the first item. */
+.check-all { font-weight: 600; border-bottom: 2px solid var(--head); }
+
 .check-name { flex: 1; cursor: pointer; }
 .check-name.is-done { text-decoration: line-through; color: var(--soft); }
 .check-meta, .check-qty { color: var(--soft); font-size: var(--text-min); font-family: "Chivo Mono", monospace; }
@@ -899,7 +903,7 @@ main:has(.kit-foot) { padding-bottom: 0.75rem; }
     --data: #000; --bg: #fff; --panel: #fff;
   }
   .masthead, .back, .btn, .btn-quiet, .btn-add, .topo, .brand-dock,
-  .fav, .intensity, .fly-toggle,
+  .fav, .intensity, .fly-toggle, .check-all,
   .day-transfer, .gear-inline, .entry-ctl, .kit-foot { display: none !important; }
   body { background: #fff; color: #000; }
   h1, h2, h3, .check-name { color: #000; }
